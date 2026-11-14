@@ -31,12 +31,13 @@ worktrees and `desktop` for the desktop app. Each original case keeps its name
 and assertions. The agent tests run the real loop against a scripted fake server
 (`tests/FakeServer.h`), and the sandbox tests run real commands through bubblewrap. Tests
 that need something missing here skip themselves: bwrap, ripgrep, or docker with the ubi9
-images for the container tests.
+images for the container tests. CI (`.github/workflows/ci.yml`) builds and runs them against
+Qt 5.15 (terminal app only) and Qt 6.8 (both apps) on every push.
 
 There are two applications, `smith` (the terminal app) and `smith-desktop`, over shared
 libraries. Each builds on its own: `-DSMITH_BUILD_DESKTOP=OFF` builds only the terminal app,
 `-DSMITH_BUILD_TUI=OFF` only the desktop app, and `-DSMITH_BUILD_TESTS=OFF` skips the tests.
-At run time they need bash, and `bubblewrap` for the default sandbox (`--sandbox off` runs without one); `ripgrep`, `fd` and `jq` are used when present.
+Linux only: the terminal app uses termios and `/proc`, and the sandbox is bubblewrap. At run time they need bash, and `bubblewrap` for the default sandbox (`--sandbox off` runs without one); `ripgrep`, `fd` and `jq` are used when present.
 
 ## Trying it without a model
 
@@ -143,11 +144,15 @@ libs/frontend/            what both apps share: Runtime (server, model, sandbox,
                           session and agents from the flags and config), the frontend hooks,
                           transcript entries and session replay, commands and completion,
                           task worktrees (git), greetings, spinner frames, durations
-apps/smith/               the terminal app: App (screen, keys, turns), session commands,
+apps/smith/               the terminal app: App (screen and turns in App.cpp, drawing and agent
+                          events in AppRender.cpp, keys, approvals and questions in
+                          AppInput.cpp, slash commands in AppCommands.cpp), session commands,
                           endpoint/model switching, entry rendering, status line; main.cpp
                           has the flags and the headless (-p) mode
-apps/smith-desktop/       the desktop app: Backend (the QML-facing controller), the transcript
-                          model, palette, Markdown to rich text, the rain item, qml/
+apps/smith-desktop/       the desktop app: Backend (the QML-facing controller: startup, agent
+                          events and turns in Backend.cpp, then BackendProperties.cpp,
+                          BackendCommands.cpp, BackendSessions.cpp, BackendWorktrees.cpp), the
+                          transcript model, palette, Markdown to rich text, the rain item, qml/
 tests/                    QtTest suites; FakeServer.h is a scripted streaming server
 ```
 
@@ -177,3 +182,7 @@ apps never include each other.
   Endpoints in the config file still keep the order the file lists them in.
 - **Deployment.** The binary links Qt dynamically. To run it on another machine, ship the Qt
   libraries with it (or build against a static Qt) instead of the Node single-binary builds.
+
+## License
+
+MIT; see [LICENSE](LICENSE).

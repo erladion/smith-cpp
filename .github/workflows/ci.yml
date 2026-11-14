@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The terminal app alone, against the distribution's Qt 5.
+          - name: Qt 5.15
+            qt: 5
+          # Both apps.
+          - name: Qt 6.8
+            qt: 6
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build bubblewrap ripgrep
+
+      - name: Install Qt 5
+        if: matrix.qt == 5
+        run: sudo apt-get install -y qtbase5-dev
+
+      - name: Install Qt 6
+        if: matrix.qt == 6
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.*'
+          cache: true
+
+      - name: Install what Qt 6 links to
+        if: matrix.qt == 6
+        run: sudo apt-get install -y libgl1-mesa-dev libxkbcommon-dev libfontconfig1 fonts-dejavu-core
+
+      # Ubuntu 24.04 keeps unprivileged user namespaces from bubblewrap; the sandbox tests need them.
+      - name: Let bubblewrap make namespaces
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
+
+      - name: Build
+        run: cmake --build build
+
+      # CMake leaves the desktop app out quietly when Qt Quick isn't found.
+      - name: Check the desktop app was built
+        if: matrix.qt == 6
+        run: test -x build/apps/smith-desktop/smith-desktop
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
