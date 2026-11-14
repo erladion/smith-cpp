@@ -7,7 +7,7 @@
 #include "TestUtil.h"
 
 #include "core/Sandbox.h"
-#include "desktop/Backend.h"
+#include "Backend.h"
 
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>

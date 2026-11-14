@@ -1,0 +1,40 @@
+# The agent: the loop, tools, sandbox, sessions and the server client. No UI.
+add_library(smith_core STATIC
+  Agent.cpp
+  Config.cpp
+  ContainerSandbox.cpp
+  Context.cpp
+  Diff.cpp
+  Dirs.cpp
+  Errors.cpp
+  Glob.cpp
+  History.cpp
+  Http.cpp
+  Instructions.cpp
+  Jobs.cpp
+  Json.cpp
+  Paths.cpp
+  Preferences.cpp
+  Process.cpp
+  Prompt.cpp
+  Reasoning.cpp
+  RunLater.cpp
+  Sandbox.cpp
+  Server.cpp
+  Session.cpp
+  Skills.cpp
+  Think.cpp
+  Tool.cpp
+  ToolLog.cpp
+  Toolchain.cpp
+  Undo.cpp
+  tools/AskTool.cpp
+  tools/BashTool.cpp
+  tools/FileTools.cpp
+  tools/JobTools.cpp
+  tools/SearchTools.cpp
+  tools/SkillTool.cpp
+  tools/TaskTool.cpp
+  tools/TodoTool.cpp
+)
+target_link_libraries(smith_core PUBLIC smith_settings Qt6::Core Qt6::Network)

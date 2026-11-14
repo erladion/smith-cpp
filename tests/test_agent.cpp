@@ -726,7 +726,7 @@ void TestAgent::runLaterFilesAskAndAreReported() {
   auto h = make(ApprovalDecision::Allow, [&](AgentOptions& options, Harness&) {
     options.cwd = project.path();
     options.alwaysAllowed = std::make_shared<AllowedTools>();
-    for (const QString& tool : {"write_file", "edit_file", "bash"}) {
+    for (const QString tool : {"write_file", "edit_file", "bash"}) {
       options.alwaysAllowed->insert(tool);
     }
     options.approve = [&](const ApprovalRequest& request) {

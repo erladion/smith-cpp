@@ -11,15 +11,15 @@ commands and security apply unchanged. Both versions read and write the same
 
 ## Building
 
-Needs CMake 3.21+, a C++20 compiler and Qt 6.5+ (Core, Network; Test for the tests;
+Needs CMake 3.21+, a C++20 compiler and Qt 6.6+ (Core, Network; Test for the tests;
 Quick and Quick Controls 2 for the desktop app, which is skipped when they're missing).
 
 ```sh
 cmake -S . -B build -G Ninja -DCMAKE_PREFIX_PATH=~/Qt/6.11.2/gcc_64
 cmake --build build
 ctest --test-dir build
-./build/smith --help
-./build/smith-desktop       # the desktop app
+./build/apps/smith/smith --help
+./build/apps/smith-desktop/smith-desktop
 ```
 
 The tests are a port of the original TypeScript suite, one QtTest suite per original file
@@ -30,8 +30,10 @@ and assertions. The agent tests run the real loop against a scripted fake server
 that need something missing here skip themselves: bwrap, ripgrep, or docker with the ubi9
 images for the container tests.
 
-`-DSMITH_BUILD_TESTS=OFF` skips the tests, `-DSMITH_BUILD_DESKTOP=OFF` the desktop app. At run time it needs bash, and `bubblewrap` for
-the default sandbox (`--sandbox off` runs without one); `ripgrep`, `fd` and `jq` are used when present.
+There are two applications, `smith` (the terminal app) and `smith-desktop`, over shared
+libraries. Each builds on its own: `-DSMITH_BUILD_DESKTOP=OFF` builds only the terminal app,
+`-DSMITH_BUILD_TUI=OFF` only the desktop app, and `-DSMITH_BUILD_TESTS=OFF` skips the tests.
+At run time they need bash, and `bubblewrap` for the default sandbox (`--sandbox off` runs without one); `ripgrep`, `fd` and `jq` are used when present.
 
 ## Trying it without a model
 
@@ -41,7 +43,7 @@ sandbox are all real; only the model is scripted.
 
 ```sh
 python3 scripts/fake_llm.py &                 # listens on 127.0.0.1:18090
-./build/smith --base-url http://127.0.0.1:18090/v1
+./build/apps/smith/smith --base-url http://127.0.0.1:18090/v1
 ```
 
 Ask it to "fix the greeting bug" in a folder with the `greet.py` shown at the top of
@@ -80,31 +82,36 @@ runs a whole turn through it; with `SMITH_SHOTS_DIR=<dir>` it saves screenshots 
 ## Layout
 
 ```
-src/core/Agent.*          the loop: stream, run tools (read-only ones in parallel), feed results back; compaction
-src/core/Http.*           blocking HTTP and SSE streaming on QNetworkAccessManager, cancellable
-src/core/Server.*         one server: model listing, context-size detection
-src/core/Context.*        token estimates, trimming, summary prompt, overflow detection
-src/core/Session.*        JSONL session logs        src/core/ToolLog.*   per-session tool-call log
-src/core/Config.*         config file               src/core/Preferences.*
-src/core/Sandbox.*        bubblewrap and "no sandbox"; ContainerSandbox.* for podman/docker
-src/core/Process.*        QProcess runs in their own process group, with timeout and cancel
-src/core/Jobs.*           background jobs, on a thread of their own
-src/core/Tool.*           tool definitions, JSON Schema validation, output truncation
-src/core/tools/           read_file, write_file, edit_file, list_files, grep, glob, bash,
+libs/core/                the agent, no UI. Agent.* is the loop: stream, run tools (read-only
+                          ones in parallel), feed results back; compaction
+  Http.*                  blocking HTTP and SSE streaming on QNetworkAccessManager, cancellable
+  Server.*                one server: model listing, context-size detection
+  Context.*               token estimates, trimming, summary prompt, overflow detection
+  Session.*, ToolLog.*    JSONL session logs, per-session tool-call log
+  Config.*, Preferences.* config file and remembered choices
+  Sandbox.*               bubblewrap and "no sandbox"; ContainerSandbox.* for podman/docker
+  Process.*, Jobs.*       QProcess runs in their own process group; background jobs
+  Tool.*                  tool definitions, JSON Schema validation, output truncation
+  tools/                  read_file, write_file, edit_file, list_files, grep, glob, bash,
                           bash_output, bash_kill, skill, task, todo_write, ask_user
-src/core/...              think-tag parser, diff (Myers), undo checkpoints, run-later files,
+  ...                     think-tag parser, diff (Myers), undo checkpoints, run-later files,
                           glob, skills, AGENTS.md loading, system prompt
-src/tui/                  terminal toolkit: raw mode and signals, inline renderer, keys,
-                          line editor, Markdown, pickers, digital rain. Doesn't include src/core.
-src/ui/                   the agent's TUI: App (screen, keys, turns), commands, sessions,
-                          endpoint/model switching, transcript entries, status line
-src/app/                  what every frontend shares: Runtime (server, model, sandbox, project,
-                          session and agents from the flags and config) and the frontend hooks
-src/desktop/              the desktop app: Backend (the QML-facing controller), the transcript
+libs/tui/                 terminal toolkit: raw mode and signals, inline renderer, keys, line
+                          editor, Markdown, pickers, digital rain. Includes nothing else.
+libs/frontend/            what both apps share: Runtime (server, model, sandbox, project,
+                          session and agents from the flags and config), the frontend hooks,
+                          transcript entries and session replay, commands and completion,
+                          greetings, spinner frames, durations
+apps/smith/               the terminal app: App (screen, keys, turns), session commands,
+                          endpoint/model switching, entry rendering, status line; main.cpp
+                          has the flags and the headless (-p) mode
+apps/smith-desktop/       the desktop app: Backend (the QML-facing controller), the transcript
                           model, palette, Markdown to rich text, the rain item, qml/
-src/main.cpp              flags, the TUI or headless (-p) mode
 tests/                    QtTest suites; FakeServer.h is a scripted streaming server
 ```
+
+The `tools` suite checks the boundaries: the libraries never include the apps, and the two
+apps never include each other.
 
 ## How the port is put together
 

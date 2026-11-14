@@ -60,6 +60,8 @@ private Q_SLOTS:
 
   // boundaries
   void tuiIncludesOnlyItself();
+  void librariesDontIncludeApps();
+  void appsDontIncludeEachOther();
 
   // config file
   void configMissingFile();
@@ -173,7 +175,7 @@ void TestTools::globListsAndSkipsNodeModules() {
 }
 
 void TestTools::globPatternsCantLeave() {
-  for (const QString& pattern : {"../*", "src/../../*", "/etc/*"}) {
+  for (const QString pattern : {"../*", "src/../../*", "/etc/*"}) {
     QVERIFY2(call(globTool(), {{"pattern", pattern}}).isError, qPrintable(pattern));
   }
 }
@@ -247,7 +249,7 @@ void TestTools::bashKillsTimeouts() {
 
 void TestTools::listFilesTree() {
   const QString base = m_pDir->file("tree");
-  for (const QString& rel : {"README.md", "src/main.ts", "src/lib/a.ts", "src/lib/deep/b.ts", "node_modules/x/index.js"}) {
+  for (const QString rel : {"README.md", "src/main.ts", "src/lib/a.ts", "src/lib/deep/b.ts", "node_modules/x/index.js"}) {
     write(base + "/" + rel, "");
   }
   for (int i = 0; i < 45; i++) {
@@ -331,25 +333,57 @@ void TestTools::jobsClearRestartsNumbering() {
   m_pJobs->clear();
 }
 
-void TestTools::tuiIncludesOnlyItself() {
-  // src/tui is a general terminal toolkit: it must not know about the agent.
-  const QString tui = QString(SMITH_SOURCE_DIR) + "/src/tui";
+namespace {
+
+// The quoted includes of a folder's sources that aren't allowed: each must
+// start with one of `prefixes`, or (with `local`) name a file in that folder.
+QStringList includeOffenders(const QString& folder, const QStringList& prefixes, bool local, int& files) {
+  const QString dir = QString(SMITH_SOURCE_DIR) + "/" + folder;
   QStringList offenders;
-  int files = 0;
-  QDirIterator it(tui, {"*.h", "*.cpp"}, QDir::Files);
+  QDirIterator it(dir, {"*.h", "*.cpp"}, QDir::Files, QDirIterator::Subdirectories);
   while (it.hasNext()) {
     const QString file = it.next();
     files++;
     auto includes = QRegularExpression("^#include \"([^\"]+)\"", QRegularExpression::MultilineOption).globalMatch(read(file));
     while (includes.hasNext()) {
       const QString spec = includes.next().captured(1);
-      if (!spec.startsWith("tui/")) {
-        offenders << QFileInfo(file).fileName() + ": " + spec;
+      const bool allowed = std::any_of(prefixes.begin(), prefixes.end(), [&](const QString& prefix) { return spec.startsWith(prefix); }) ||
+                           (local && !spec.contains('/') && QFileInfo::exists(dir + "/" + spec));
+      if (!allowed) {
+        offenders << QDir(dir).relativeFilePath(file) + ": " + spec;
       }
     }
   }
+  return offenders;
+}
+
+} // namespace
+
+void TestTools::tuiIncludesOnlyItself() {
+  // libs/tui is a general terminal toolkit: it must not know about the agent or the apps.
+  int files = 0;
+  const QStringList offenders = includeOffenders("libs/tui", {"tui/"}, false, files);
   QVERIFY(files > 0);
-  QVERIFY2(offenders.isEmpty(), qPrintable("src/tui must not include core/ or ui/: " + offenders.join(", ")));
+  QVERIFY2(offenders.isEmpty(), qPrintable("libs/tui must include only itself: " + offenders.join(", ")));
+}
+
+void TestTools::librariesDontIncludeApps() {
+  // The agent knows no frontend; what the apps share knows the agent, not the apps.
+  int files = 0;
+  QStringList offenders = includeOffenders("libs/core", {"core/"}, false, files);
+  offenders << includeOffenders("libs/frontend", {"core/", "frontend/"}, false, files);
+  QVERIFY(files > 0);
+  QVERIFY2(offenders.isEmpty(), qPrintable("libs/ must not include the apps: " + offenders.join(", ")));
+}
+
+void TestTools::appsDontIncludeEachOther() {
+  // Each app is built from the libraries and its own files only.
+  const QStringList libraries = {"core/", "tui/", "frontend/"};
+  int files = 0;
+  QStringList offenders = includeOffenders("apps/smith", libraries, true, files);
+  offenders << includeOffenders("apps/smith-desktop", libraries, true, files);
+  QVERIFY(files > 0);
+  QVERIFY2(offenders.isEmpty(), qPrintable("an app includes something that isn't its own or a library: " + offenders.join(", ")));
 }
 
 namespace {

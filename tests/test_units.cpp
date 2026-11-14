@@ -404,12 +404,12 @@ void TestUnits::deleteAsksFirst() {
 }
 
 void TestUnits::runLaterRecognisedByNameAndPlace() {
-  for (const QString& rel : {".envrc", "package.json", "web/package.json", ".vscode/tasks.json", ".husky/pre-commit", ".github/workflows/ci.yml", "Makefile",
+  for (const QString rel : {".envrc", "package.json", "web/package.json", ".vscode/tasks.json", ".husky/pre-commit", ".github/workflows/ci.yml", "Makefile",
                              "lib/foo.mk", "CMakeLists.txt", "pyproject.toml", "requirements-dev.txt", "gradle/wrapper/gradle-wrapper.properties",
                              "Dockerfile", "compose.yaml", ".devcontainer/devcontainer.json", ".pre-commit-config.yaml", ".gitmodules", ".npmrc"}) {
     QVERIFY2(!runLaterReason(rel).isEmpty(), qPrintable(rel));
   }
-  for (const QString& rel : {"src/main.ts", "README.md", "package-lock.json", "docs/Makefile.md", "src/github/workflows.ts"}) {
+  for (const QString rel : {"src/main.ts", "README.md", "package-lock.json", "docs/Makefile.md", "src/github/workflows.ts"}) {
     QVERIFY2(runLaterReason(rel).isEmpty(), qPrintable(rel));
   }
 }

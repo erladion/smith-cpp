@@ -11,13 +11,13 @@
 #include "tui/Renderer.h"
 #include "tui/Style.h"
 #include "tui/Text.h"
-#include "ui/Commands.h"
-#include "ui/Duration.h"
-#include "ui/Entries.h"
-#include "ui/Folders.h"
-#include "ui/Greetings.h"
-#include "ui/Replay.h"
-#include "ui/View.h"
+#include "frontend/Commands.h"
+#include "frontend/Duration.h"
+#include "Entries.h"
+#include "frontend/Folders.h"
+#include "frontend/Greetings.h"
+#include "frontend/Replay.h"
+#include "View.h"
 
 using namespace Smith;
 using namespace Smith::Tui;
@@ -408,15 +408,15 @@ void TestUi::pickerActionAsksFirst() {
 
 void TestUi::folderListing() {
   TempDir dir(QDir::tempPath(), "agent-folders-");
-  for (const QString& folder : {"beta", "Alpha", ".hidden", "repo/.git"}) {
+  for (const QString folder : {"beta", "Alpha", ".hidden", "repo/.git"}) {
     QDir().mkpath(dir.file(folder));
   }
   write(dir.file("file.txt"), "");
   QVERIFY(QFile::link(dir.file("beta"), dir.file("link")));
-  QCOMPARE(Ui::listFolders(dir.path()).names, QStringList({"Alpha", "beta", "link", "repo"}));
-  QVERIFY(Ui::isGitRepo(dir.file("repo")));
-  QVERIFY(!Ui::isGitRepo(dir.file("beta")));
-  QVERIFY(QRegularExpression("ENOENT|no such", QRegularExpression::CaseInsensitiveOption).match(Ui::listFolders(dir.file("missing")).error).hasMatch());
+  QCOMPARE(listFolders(dir.path()).names, QStringList({"Alpha", "beta", "link", "repo"}));
+  QVERIFY(isGitRepo(dir.file("repo")));
+  QVERIFY(!isGitRepo(dir.file("beta")));
+  QVERIFY(QRegularExpression("ENOENT|no such", QRegularExpression::CaseInsensitiveOption).match(listFolders(dir.file("missing")).error).hasMatch());
 }
 
 void TestUi::boxPadsLines() {
@@ -460,58 +460,58 @@ void TestUi::rendererReset() {
 void TestUi::greetingsFitTheStart() {
   const QDateTime now = QDateTime::fromString("2026-11-07T12:00:00Z", Qt::ISODate);
   auto ago = [&](qint64 ms) { return now.addMSecs(-ms); };
-  auto make = [](bool resumed, bool newFolder, std::optional<QDateTime> lastUsed) { return Ui::GreetingContext{resumed, newFolder, lastUsed}; };
+  auto make = [](bool resumed, bool newFolder, std::optional<QDateTime> lastUsed) { return GreetingContext{resumed, newFolder, lastUsed}; };
   for (double r : {0.0, 0.5, 0.999}) {
-    for (const Ui::GreetingContext& context : {make(false, false, {}), make(false, true, {}), make(true, false, {}), make(true, false, ago(60000)),
+    for (const GreetingContext& context : {make(false, false, {}), make(false, true, {}), make(true, false, {}), make(true, false, ago(60000)),
                                                make(true, false, ago(40LL * 86400000))}) {
-      QVERIFY_MATCH(Ui::greeting(context, [r]() { return r; }, now), "Mr\\. Anderson");
+      QVERIFY_MATCH(greeting(context, [r]() { return r; }, now), "Mr\\. Anderson");
     }
   }
   auto zero = []() { return 0.0; };
-  QCOMPARE(Ui::greeting(make(true, false, {}), zero, now), QString("We meet again, Mr. Anderson."));
-  QCOMPARE(Ui::greeting(make(true, false, ago(3 * 3600000)), zero, now), QString("We meet again, Mr. Anderson."));
-  QCOMPARE(Ui::greeting(make(true, false, ago(5 * 60000)), zero, now), QString("Back so soon, Mr. Anderson?"));
-  QVERIFY_MATCH(Ui::greeting(make(true, false, ago(30LL * 86400000)), zero, now), "long time");
-  QVERIFY_MATCH(Ui::greeting(make(false, true, {}), zero, now), "new place");
+  QCOMPARE(greeting(make(true, false, {}), zero, now), QString("We meet again, Mr. Anderson."));
+  QCOMPARE(greeting(make(true, false, ago(3 * 3600000)), zero, now), QString("We meet again, Mr. Anderson."));
+  QCOMPARE(greeting(make(true, false, ago(5 * 60000)), zero, now), QString("Back so soon, Mr. Anderson?"));
+  QVERIFY_MATCH(greeting(make(true, false, ago(30LL * 86400000)), zero, now), "long time");
+  QVERIFY_MATCH(greeting(make(false, true, {}), zero, now), "new place");
 }
 
 void TestUi::farewellCountsLongRuns() {
-  QCOMPARE(Ui::farewell(20 * 60000), QString("Goodbye, Mr. Anderson."));
-  QCOMPARE(Ui::farewell(70 * 60000), QString("An hour, Mr. Anderson. It is inevitable. Goodbye."));
-  QCOMPARE(Ui::farewell(qint64(3.5 * 3600000)), QString("Three hours, Mr. Anderson. It is inevitable. Goodbye."));
-  QCOMPARE(Ui::farewell(30LL * 3600000), QString("30 hours, Mr. Anderson. It is inevitable. Goodbye."));
+  QCOMPARE(farewell(20 * 60000), QString("Goodbye, Mr. Anderson."));
+  QCOMPARE(farewell(70 * 60000), QString("An hour, Mr. Anderson. It is inevitable. Goodbye."));
+  QCOMPARE(farewell(qint64(3.5 * 3600000)), QString("Three hours, Mr. Anderson. It is inevitable. Goodbye."));
+  QCOMPARE(farewell(30LL * 3600000), QString("30 hours, Mr. Anderson. It is inevitable. Goodbye."));
 }
 
 void TestUi::durationsAndSummaries() {
   QStringList formatted;
   for (qint64 ms : {38LL, 4200LL, 42900LL, 65000LL, 3725000LL}) {
-    formatted << Ui::formatDuration(ms);
+    formatted << formatDuration(ms);
   }
   QCOMPARE(formatted, QStringList({"38ms", "4.2s", "42s", "1m 05s", "1h 02m"}));
-  QCOMPARE(Ui::turnSummary("stop", 83000, 7), QString("Done in 1m 23s · 7 tool calls"));
-  QCOMPARE(Ui::turnSummary("stop", 2500, 1), QString("Done in 2.5s · 1 tool call"));
-  QCOMPARE(Ui::turnSummary("stop", 2500, 0), QString("Done in 2.5s"));
-  QCOMPARE(Ui::turnSummary("interrupted", 12000, 2), QString("Interrupted after 12s · 2 tool calls"));
-  QCOMPARE(Ui::turnSummary("max_steps", 600000, 50), QString("Stopped at the step limit after 10m 00s · 50 tool calls"));
-  QCOMPARE(Ui::turnSummary({}, 3000, 0), QString("Stopped after 3.0s"));
+  QCOMPARE(turnSummary("stop", 83000, 7), QString("Done in 1m 23s · 7 tool calls"));
+  QCOMPARE(turnSummary("stop", 2500, 1), QString("Done in 2.5s · 1 tool call"));
+  QCOMPARE(turnSummary("stop", 2500, 0), QString("Done in 2.5s"));
+  QCOMPARE(turnSummary("interrupted", 12000, 2), QString("Interrupted after 12s · 2 tool calls"));
+  QCOMPARE(turnSummary("max_steps", 600000, 50), QString("Stopped at the step limit after 10m 00s · 50 tool calls"));
+  QCOMPARE(turnSummary({}, 3000, 0), QString("Stopped after 3.0s"));
 }
 
 void TestUi::longPathsKeepTheirEnd() {
-  QCOMPARE(Ui::shortPath("/srv/projects/work/webapp", 40), QString("/srv/projects/work/webapp"));
-  QCOMPARE(Ui::shortPath("/very/long/path/to/some/deep/folder/work/webapp", 20), QString("…/folder/work/webapp"));
-  QCOMPARE(Ui::shortPath(QDir::homePath() + "/git/agent", 40), QString("~/git/agent"));
-  QVERIFY2(Ui::shortPath("/x/an-extremely-long-folder-name-that-does-not-fit", 12) == "…oes-not-fit", "a single name too long to fit keeps its end");
+  QCOMPARE(shortPath("/srv/projects/work/webapp", 40), QString("/srv/projects/work/webapp"));
+  QCOMPARE(shortPath("/very/long/path/to/some/deep/folder/work/webapp", 20), QString("…/folder/work/webapp"));
+  QCOMPARE(shortPath(QDir::homePath() + "/git/agent", 40), QString("~/git/agent"));
+  QVERIFY2(shortPath("/x/an-extremely-long-folder-name-that-does-not-fit", 12) == "…oes-not-fit", "a single name too long to fit keeps its end");
 }
 
 namespace {
 
-Ui::CompletionContext completion(const QString& cwd = QDir::tempPath()) {
-  return Ui::CompletionContext{cwd, {"local", "gpu-box"}, {"qwen3-coder-30b", "gpt-oss-20b"}};
+CompletionContext completion(const QString& cwd = QDir::tempPath()) {
+  return CompletionContext{cwd, {"local", "gpu-box"}, {"qwen3-coder-30b", "gpt-oss-20b"}};
 }
 
-QStringList texts(const QString& input, const Ui::CompletionContext& ctx = completion()) {
+QStringList texts(const QString& input, const CompletionContext& ctx = completion()) {
   QStringList out;
-  for (const Ui::Suggestion& suggestion : Ui::suggest(input, ctx)) {
+  for (const Suggestion& suggestion : suggest(input, ctx)) {
     out << suggestion.text;
   }
   return out;
@@ -520,7 +520,7 @@ QStringList texts(const QString& input, const Ui::CompletionContext& ctx = compl
 } // namespace
 
 void TestUi::slashListsAndNarrows() {
-  QCOMPARE(texts("/").size(), Ui::commands().size());
+  QCOMPARE(texts("/").size(), commands().size());
   QCOMPARE(texts("/h"), QStringList({"/help"}));
   QCOMPARE(texts("/n").mid(0, 3), QStringList({"/name", "/new", "/network"}));
   QCOMPARE(texts("/net").first(), QString("/network"));
@@ -539,14 +539,14 @@ void TestUi::argumentsComplete() {
 
 void TestUi::newCompletesFolders() {
   TempDir dir(QDir::tempPath(), "agent-complete-");
-  for (const QString& folder : {"webapp/src", "web-old", "billing", ".hidden"}) {
+  for (const QString folder : {"webapp/src", "web-old", "billing", ".hidden"}) {
     QDir().mkpath(dir.file(folder));
   }
-  const Ui::CompletionContext at = completion(dir.path());
+  const CompletionContext at = completion(dir.path());
   QCOMPARE(texts("/new we", at), QStringList({"/new web-old/", "/new webapp/"}));
   QCOMPARE(texts("/new webapp/", at), QStringList({"/new webapp/src/"}));
   QVERIFY2(texts("/new .h", at) == QStringList({"/new .hidden/"}), "hidden folders when the name starts with a dot");
-  QVERIFY(Ui::suggest("/new we", at).first().takesArgument);
+  QVERIFY(suggest("/new we", at).first().takesArgument);
   for (const QString& suggestion : texts("/new ~/", at)) {
     QVERIFY(suggestion.startsWith("/new ~/"));
   }
@@ -555,8 +555,8 @@ void TestUi::newCompletesFolders() {
 void TestUi::ordinaryMessagesGetNoSuggestions() {
   QVERIFY(texts("fix the bug").isEmpty());
   QVERIFY(texts("/help\nmore").isEmpty());
-  for (const Ui::CommandSpec& command : Ui::commands()) {
-    QVERIFY(Ui::helpText().contains(command.name));
+  for (const CommandSpec& command : commands()) {
+    QVERIFY(commandHelp().contains(command.name));
   }
 }
 
@@ -656,7 +656,7 @@ void TestUi::resumedSessionShowsChecklists() {
       {"id", "t1"},
       {"type", "function"},
       {"function", QJsonObject{{"name", "todo_write"}, {"arguments", QString::fromUtf8(QJsonDocument(QJsonObject{{"todos", todos}}).toJson(QJsonDocument::Compact))}}}}};
-  const QList<Ui::Entry> entries = Ui::historyToEntries(
+  const QList<Entry> entries = historyToEntries(
       {
           userMessage("go"),
           Message{{"role", "assistant"}, {"content", QJsonValue::Null}, {"tool_calls", calls}},
@@ -664,11 +664,11 @@ void TestUi::resumedSessionShowsChecklists() {
           userMessage(TODO_REMINDER + "\n[ ] Ship it"),
       },
       {});
-  QList<Ui::Entry::Kind> kinds;
-  for (const Ui::Entry& entry : entries) {
+  QList<Entry::Kind> kinds;
+  for (const Entry& entry : entries) {
     kinds << entry.kind;
   }
-  QCOMPARE(kinds, QList<Ui::Entry::Kind>({Ui::Entry::Kind::User, Ui::Entry::Kind::Todos, Ui::Entry::Kind::Notice}));
+  QCOMPARE(kinds, QList<Entry::Kind>({Entry::Kind::User, Entry::Kind::Todos, Entry::Kind::Notice}));
 }
 
 #endif
