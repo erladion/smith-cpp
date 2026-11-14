@@ -37,7 +37,9 @@ struct Start {
 // The interactive terminal UI: a transcript above, a live region below. This
 // class runs the screen, the keys and agent turns; the commands that switch
 // session, project, endpoint or model are in SessionCommands and
-// ConnectionCommands, and work through its public part.
+// ConnectionCommands, and work through its public part. Its own code is
+// split by what it does: App.cpp (startup, terminal, turns), AppRender.cpp,
+// AppInput.cpp and AppCommands.cpp.
 class App : public QObject {
   Q_OBJECT
 

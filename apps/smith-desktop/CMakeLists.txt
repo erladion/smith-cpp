@@ -2,6 +2,10 @@
 # with the QML module, for the tests.
 add_library(smith_desktop_app STATIC
   Backend.cpp
+  BackendCommands.cpp
+  BackendProperties.cpp
+  BackendSessions.cpp
+  BackendWorktrees.cpp
   Backend.h
   MarkdownHtml.cpp
   MarkdownHtml.h

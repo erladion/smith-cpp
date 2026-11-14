@@ -1,6 +1,9 @@
 # smith: the terminal app. Everything but main() is a library, for the tests.
 add_library(smith_tui_app STATIC
   App.cpp
+  AppCommands.cpp
+  AppInput.cpp
+  AppRender.cpp
   Connection.cpp
   Entries.cpp
   SessionCommands.cpp

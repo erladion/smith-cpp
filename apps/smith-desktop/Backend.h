@@ -26,7 +26,9 @@ namespace Smith::Desktop {
 // What the QML window works with: startup, the conversation, agent turns,
 // approvals and questions, and the session, project, endpoint and model
 // controls. Agent turns run on worker threads, as in the TUI; everything
-// here is called and changed on the GUI thread.
+// here is called and changed on the GUI thread. The code is split by section:
+// Backend.cpp, BackendProperties.cpp, BackendCommands.cpp, BackendSessions.cpp
+// and BackendWorktrees.cpp.
 class Backend : public QObject {
   Q_OBJECT
   QML_NAMED_ELEMENT(Backend)
