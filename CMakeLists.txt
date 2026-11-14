@@ -59,6 +59,17 @@ set(SMITH_CORE_SOURCES
   src/tui/Style.cpp
   src/tui/Terminal.cpp
   src/tui/Text.cpp
+  src/ui/App.cpp
+  src/ui/Commands.cpp
+  src/ui/Connection.cpp
+  src/ui/Duration.cpp
+  src/ui/Entries.cpp
+  src/ui/Folders.cpp
+  src/ui/Greetings.cpp
+  src/ui/Replay.cpp
+  src/ui/SessionCommands.cpp
+  src/ui/Suggestions.cpp
+  src/ui/View.cpp
 )
 
 # Everything but main(), so the tests link against the same code.
@@ -70,3 +81,8 @@ target_compile_definitions(smithcore PUBLIC
   QT_NO_KEYWORDS
 )
 target_compile_options(smithcore PUBLIC -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers)
+
+add_executable(smith src/main.cpp)
+target_link_libraries(smith PRIVATE smithcore)
+
+install(TARGETS smith RUNTIME DESTINATION bin)
