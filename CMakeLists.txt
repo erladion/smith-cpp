@@ -14,6 +14,7 @@ endif()
 find_package(Qt6 6.5 REQUIRED COMPONENTS Core Network)
 
 set(SMITH_CORE_SOURCES
+  src/app/Runtime.cpp
   src/core/Agent.cpp
   src/core/Config.cpp
   src/core/Context.cpp

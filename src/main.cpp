@@ -1,3 +1,4 @@
+#include "app/Runtime.h"
 #include "core/Agent.h"
 #include "core/Config.h"
 #include "core/Dirs.h"
@@ -39,8 +40,6 @@
 using namespace Smith;
 
 namespace {
-
-const QString DEFAULT_BASE_URL = "http://localhost:8080/v1";
 
 QString helpText() {
   return QString(R"(Usage: smith [options] [folder]
@@ -91,144 +90,6 @@ void out(const QString& text) {
 void err(const QString& text) {
   std::fputs(text.toUtf8().constData(), stderr);
   std::fflush(stderr);
-}
-
-// Everything that depends on the folder being worked in.
-struct Project {
-  QString cwd;
-  QList<InstructionFile> instructions;
-  QList<Skill> skills;
-  ToolList tools;
-  QStringList warnings;
-};
-
-Project loadProject(const QString& cwd, const std::shared_ptr<BackgroundJobs>& jobs) {
-  Project project;
-  project.cwd = cwd;
-  project.instructions = loadInstructions(cwd);
-  const QString repo = findRepoRoot(cwd);
-  const LoadedSkills loaded = loadSkills(skillRoots(repo.isEmpty() ? cwd : repo));
-  project.skills = loaded.skills;
-  project.warnings = loaded.warnings;
-  project.tools = defaultTools(jobs);
-  if (!project.skills.isEmpty()) {
-    project.tools.append(skillTool(project.skills));
-  }
-  return project;
-}
-
-// Folders outside the project that sandboxed commands may read: skill
-// folders (their scripts run from there), and the repository the project is
-// in, for a project that's a submodule or a subfolder.
-QStringList visibleFolders(const Project& project) {
-  QStringList folders;
-  for (const Skill& skill : project.skills) {
-    folders << skill.dir;
-  }
-  const QString repo = findRepoRoot(project.cwd);
-  if (!repo.isEmpty() && repo != project.cwd) {
-    folders << repo;
-  }
-  return folders;
-}
-
-// A short path for display: relative to the project when nearby, else with ~ for the home folder.
-QString displayPath(const QString& file, const QString& cwd) {
-  const QString rel = QDir(cwd).relativeFilePath(file);
-  if (!rel.startsWith("../..")) {
-    return rel;
-  }
-  return tildify(file);
-}
-
-Ui::ProjectView projectView(const Project& project, const QString& cwd) {
-  Ui::ProjectView view;
-  view.cwd = project.cwd;
-  for (const InstructionFile& file : project.instructions) {
-    view.instructions << displayPath(file.path, cwd);
-  }
-  view.skills = project.skills;
-  view.tools = project.tools;
-  view.warnings = project.warnings;
-  return view;
-}
-
-// An existing folder, given relative to `base`, absolute, or with ~/.
-QString resolveFolder(const QString& folder, const QString& base) {
-  const QString dir = QDir::cleanPath(QDir(base).absoluteFilePath(expandHome(folder)));
-  if (!QFileInfo(dir).isDir()) {
-    throw SmithError("Not a folder: " + folder);
-  }
-  return dir;
-}
-
-std::optional<double> parseNumber(const QString& raw, const QString& flag) {
-  if (raw.isEmpty()) {
-    return std::nullopt;
-  }
-  bool ok = false;
-  const double n = raw.toDouble(&ok);
-  if (!ok) {
-    throw SmithError(flag + " must be a number");
-  }
-  return n;
-}
-
-QString resolveReasoning(const QString& flag, const QString& saved) {
-  if (flag.isEmpty()) {
-    return saved.isEmpty() ? QString("default") : saved;
-  }
-  if (!isReasoningLevel(flag)) {
-    throw SmithError("--reasoning must be one of: " + REASONING_LEVELS.join(", "));
-  }
-  return flag;
-}
-
-QString firstEnv(const QStringList& names) {
-  for (const QString& name : names) {
-    const QString value = qEnvironmentVariable(name.toUtf8().constData());
-    if (!value.isEmpty()) {
-      return value;
-    }
-  }
-  return {};
-}
-
-// Which server to start on: --endpoint, then an explicit URL (--base-url or
-// SMITH_BASE_URL), then the resumed session's endpoint, the last one used,
-// the config's default, the first configured, and finally localhost:8080.
-ServerPtr chooseServer(const QString& endpointFlag, const QString& baseUrlFlag, const QString& keyFlag, const Config& config, const Preferences& prefs,
-                       const QString& sessionEndpoint) {
-  if (!endpointFlag.isEmpty()) {
-    const Endpoint* endpoint = config.findEndpoint(endpointFlag);
-    if (!endpoint) {
-      QStringList known;
-      for (const Endpoint& e : config.endpoints) {
-        known << e.name;
-      }
-      throw SmithError(QString("Unknown endpoint \"%1\". Configured in %2: %3.").arg(endpointFlag, config.file, known.isEmpty() ? "none" : known.join(", ")));
-    }
-    return Server::fromEndpoint(*endpoint, keyFlag);
-  }
-  const QString url = !baseUrlFlag.isEmpty() ? baseUrlFlag : firstEnv({"SMITH_BASE_URL", "AGENT_BASE_URL"});
-  QString envKey = !keyFlag.isEmpty() ? keyFlag : firstEnv({"SMITH_API_KEY", "AGENT_API_KEY", "OPENAI_API_KEY"});
-  if (envKey.isEmpty()) {
-    envKey = "no-key";
-  }
-  if (!url.isEmpty()) {
-    return std::make_shared<Server>(url, envKey);
-  }
-  const Endpoint* endpoint = config.findEndpoint(sessionEndpoint);
-  if (!endpoint) {
-    endpoint = config.findEndpoint(prefs.endpoint);
-  }
-  if (!endpoint) {
-    endpoint = config.findEndpoint(config.defaultEndpoint);
-  }
-  if (!endpoint && !config.endpoints.isEmpty()) {
-    endpoint = &config.endpoints.first();
-  }
-  return endpoint ? Server::fromEndpoint(*endpoint, keyFlag) : std::make_shared<Server>(DEFAULT_BASE_URL, envKey);
 }
 
 void printEndpoints(const Config& config) {
@@ -329,7 +190,7 @@ void onHeadlessInterrupt(int) {
   }
 }
 
-int runHeadless(const std::function<std::shared_ptr<Agent>(const Ui::AgentHooks&)>& createAgent, const QString& prompt, bool allowAll,
+int runHeadless(const std::function<std::shared_ptr<Agent>(const AgentHooks&)>& createAgent, const QString& prompt, bool allowAll,
                 const QString& baseUrl) {
   g_headlessCancel = makeCancel();
   std::signal(SIGINT, onHeadlessInterrupt);
@@ -337,7 +198,7 @@ int runHeadless(const std::function<std::shared_ptr<Agent>(const Ui::AgentHooks&
   auto lock = std::make_shared<QMutex>();
   int toolCalls = 0;
   QString reason;
-  Ui::AgentHooks hooks;
+  AgentHooks hooks;
   hooks.onEvent = [&, lock](const AgentEvent& event) {
     QMutexLocker guard(lock.get());
     switch (event.type) {
@@ -397,265 +258,79 @@ int run(QCoreApplication& app) {
   secureSessions();
 
   QCommandLineParser parser;
-  const QCommandLineOption endpoint(QStringList{"e", "endpoint"}, "", "name");
-  const QCommandLineOption endpoints("endpoints");
-  const QCommandLineOption baseUrl("base-url", "", "url");
-  const QCommandLineOption apiKey("api-key", "", "key");
-  const QCommandLineOption model("model", "", "name");
-  const QCommandLineOption reasoning("reasoning", "", "level");
-  const QCommandLineOption contextSize("context-size", "", "n");
-  const QCommandLineOption temperature("temperature", "", "n");
-  const QCommandLineOption maxSteps("max-steps", "", "n");
-  const QCommandLineOption sandboxFlag("sandbox", "", "type");
-  const QCommandLineOption network("network");
-  const QCommandLineOption continueFlag(QStringList{"c", "continue"});
-  const QCommandLineOption resume(QStringList{"r", "resume"}, "", "id");
-  const QCommandLineOption sessionsFlag("sessions");
-  const QCommandLineOption deleteFlag("delete", "", "id");
-  const QCommandLineOption print(QStringList{"p", "print"}, "", "prompt");
-  const QCommandLineOption yes(QStringList{"y", "yes"});
-  const QCommandLineOption help(QStringList{"h", "help"});
-  const QCommandLineOption version(QStringList{"v", "version"});
-  parser.addOptions({endpoint, endpoints, baseUrl, apiKey, model, reasoning, contextSize, temperature, maxSteps, sandboxFlag, network, continueFlag, resume,
-                     sessionsFlag, deleteFlag, print, yes, help, version});
+  addLaunchOptions(parser);
+  parser.addOptions({
+      QCommandLineOption("endpoints"),
+      QCommandLineOption("sessions"),
+      QCommandLineOption("delete", "", "id"),
+      QCommandLineOption(QStringList{"p", "print"}, "", "prompt"),
+      QCommandLineOption(QStringList{"y", "yes"}),
+      QCommandLineOption(QStringList{"h", "help"}),
+      QCommandLineOption(QStringList{"v", "version"}),
+  });
   if (!parser.parse(app.arguments())) {
     throw SmithError(parser.errorText());
   }
-  if (parser.isSet(help)) {
+  if (parser.isSet("help")) {
     out(helpText());
     return 0;
   }
-  if (parser.isSet(version)) {
+  if (parser.isSet("version")) {
     out(QString("smith %1").arg(SMITH_VERSION));
     return 0;
   }
-
-  const QStringList positionals = parser.positionalArguments();
-  if (positionals.size() > 1) {
-    throw SmithError("Give at most one folder to work in.");
-  }
-  if (!positionals.isEmpty()) {
-    QDir::setCurrent(resolveFolder(positionals.first(), QDir::currentPath()));
-  }
-  if (parser.isSet(sessionsFlag)) {
-    printSessions(positionals.isEmpty() ? QString() : QDir::currentPath());
+  const LaunchOptions launch = readLaunchOptions(parser);
+  if (parser.isSet("sessions")) {
+    printSessions(launch.folder.isEmpty() ? QString() : resolveFolder(launch.folder, QDir::currentPath()));
     return 0;
   }
-  if (parser.isSet(deleteFlag)) {
-    deleteFromCommandLine(parser.value(deleteFlag), parser.isSet(yes));
+  if (parser.isSet("delete")) {
+    deleteFromCommandLine(parser.value("delete"), parser.isSet("yes"));
     return 0;
   }
-
-  // Resume first: a resumed session suggests which model to use, and where to work.
-  std::optional<Session::Opened> resumed;
-  if (parser.isSet(resume)) {
-    resumed = Session::open(findSession(parser.value(resume)));
-    // Work where the session happened, unless a folder was given.
-    if (positionals.isEmpty() && pathExists(resumed->session->cwd())) {
-      QDir::setCurrent(resumed->session->cwd());
-    }
-  } else if (parser.isSet(continueFlag)) {
-    const QList<SessionInfo> latest = listSessions(QDir::currentPath(), 1);
-    if (latest.isEmpty()) {
-      throw SmithError("No saved session for this directory.");
-    }
-    resumed = Session::open(latest.first().id);
-  }
-
-  const QString cwd = QDir::currentPath();
-  const Config config = loadConfig();
-  if (parser.isSet(endpoints)) {
-    printEndpoints(config);
+  if (parser.isSet("endpoints")) {
+    printEndpoints(loadConfig());
     return 0;
   }
-
-  const Preferences prefs = loadPreferences();
-  const ServerPtr server = chooseServer(parser.value(endpoint), parser.value(baseUrl), parser.value(apiKey), config, prefs,
-                                        resumed ? resumed->session->endpoint() : QString());
-
-  const std::optional<double> temperatureValue = parseNumber(parser.value(temperature), "--temperature");
-  const std::optional<double> maxStepsFlag = parseNumber(parser.value(maxSteps), "--max-steps");
-  const double maxStepsValue = maxStepsFlag.value_or(config.maxSteps.value_or(50));
-  if (maxStepsValue < 1 || maxStepsValue != std::floor(maxStepsValue)) {
-    throw SmithError("--max-steps must be a whole number of at least 1");
-  }
-  const QString reasoningLevel = resolveReasoning(parser.value(reasoning), prefs.reasoning);
-  QString modelId = parser.value(model);
-  if (modelId.isEmpty()) {
-    // The AGENT_ name is from before the rename.
-    modelId = firstEnv({"SMITH_MODEL", "AGENT_MODEL"});
-  }
-  if (modelId.isEmpty()) {
-    modelId = server->chooseModel({resumed ? resumed->session->model() : QString(), prefs.models.value(server->baseUrl())});
-  }
-  std::optional<int> contextSizeValue;
-  if (const auto flag = parseNumber(parser.value(contextSize), "--context-size")) {
-    contextSizeValue = int(*flag);
-  } else {
-    contextSizeValue = server->contextSize(modelId);
-  }
-
-  QString sandboxName = parser.isSet(sandboxFlag) ? parser.value(sandboxFlag) : sandboxTypeName(config.sandbox.type);
-  if (sandboxName == "on") {
-    sandboxName = "bwrap";
-  }
-  if (sandboxName != "bwrap" && sandboxName != "container" && sandboxName != "off") {
-    throw SmithError("--sandbox must be bwrap, container or off");
-  }
-  SandboxOptions sandboxOptions;
-  sandboxOptions.type = sandboxName == "container" ? SandboxType::Container : sandboxName == "off" ? SandboxType::Off : SandboxType::Bwrap;
-  sandboxOptions.network = parser.isSet(network) || config.sandbox.network;
-  sandboxOptions.env = config.sandbox.env;
-  sandboxOptions.limits = config.sandbox.limits;
-  sandboxOptions.home = config.sandbox.home;
-  sandboxOptions.container = config.sandbox.container;
-  const std::shared_ptr<Sandbox> sandbox = Sandbox::create(sandboxOptions);
-
-  // Commands the agent runs in the background; they're stopped when Smith exits.
-  const auto jobs = std::make_shared<BackgroundJobs>();
-
-  // What can change while the TUI runs: the project (/new <folder>) and the session (/sessions, /new).
-  struct State {
-    Project project;
-    std::shared_ptr<Session> session;
-  };
-  auto state = std::make_shared<State>();
-  state->project = loadProject(cwd, jobs);
-  sandbox->setReadOnlyPaths(visibleFolders(state->project));
-  const QStringList warnings = config.warnings + sandbox->warnings() + state->project.warnings;
-
-  state->session = resumed ? resumed->session : Session::create(cwd, modelId, server->name());
-  state->session->recordModel(modelId, server->name());
-  const Messages history = resumed ? resumed->messages : Messages{};
-  std::shared_ptr<ToolLog> toolLog;
-  if (config.toolLog) {
-    toolLog = std::make_shared<ToolLog>([state]() { return state->session->id(); }, [state]() { return state->project.cwd; });
-  }
-
-  // An agent for the current project. The first one continues the resumed
-  // conversation with the startup settings; later ones (a new project) start
-  // empty with the settings in use at that moment.
-  auto createAgent = [=](const Ui::AgentHooks& hooks, const std::optional<Ui::AgentSettings>& current) {
-    const Project& project = state->project;
-    PromptExtras extras;
-    extras.instructions = project.instructions;
-    extras.skills = project.skills;
-    extras.fastTools = fastTools();
-    extras.canAsk = bool(hooks.ask);
-    extras.sandbox = sandbox->promptNotes(project.cwd);
-    PromptExtras subagentExtras;
-    subagentExtras.instructions = project.instructions;
-    subagentExtras.skills = project.skills;
-
-    AgentOptions options;
-    options.server = current ? current->server : server;
-    options.model = current ? current->model : modelId;
-    options.reasoning = current ? current->reasoning : reasoningLevel;
-    options.contextSize = current ? current->contextSize : contextSizeValue;
-    options.history = current ? Messages{} : history;
-    options.cwd = project.cwd;
-    options.temperature = temperatureValue;
-    options.maxSteps = int(maxStepsValue);
-    options.sandbox = sandbox;
-    options.tools = project.tools;
-    options.systemPrompt = buildSystemPrompt(project.cwd, extras);
-    if (config.subagents) {
-      options.subagentPrompt = buildSubagentPrompt(project.cwd, subagentExtras);
-    }
-    options.onHistory = [state](const HistoryChange& change) { state->session->record(change); };
-    options.protectRunLater = config.protectRunLater;
-    if (toolLog) {
-      options.onToolRun = [toolLog](const ToolRun& run) { toolLog->write(run); };
-    }
-    options.onEvent = hooks.onEvent;
-    options.approve = hooks.approve;
-    options.ask = hooks.ask;
-    return std::make_shared<Agent>(options);
-  };
-
-  int code = 0;
-  if (parser.isSet(print)) {
-    for (const QString& warning : warnings) {
-      err("[warn] " + warning + "\n");
-    }
-    err(QString("[%1 · %2 · %3]\n").arg(server->label(), modelId, sandbox->describe(state->project.cwd)));
-    code = runHeadless([&](const Ui::AgentHooks& hooks) { return createAgent(hooks, std::nullopt); }, parser.value(print), parser.isSet(yes),
-                       server->baseUrl());
-    // Their open output pipes would keep the process alive.
-    jobs->stopAll();
-    err(QString("[session %1]\n").arg(state->session->id()));
-    sandbox->dispose();
-    return code;
-  }
-
-  if (!Tui::Terminal::isInteractive()) {
+  const bool headless = parser.isSet("print");
+  if (!headless && !Tui::Terminal::isInteractive()) {
     throw SmithError("The interactive UI needs a terminal. Use -p <prompt> for non-interactive runs.");
   }
 
+  const std::shared_ptr<Runtime> runtime = Runtime::start(launch);
+  const Config& config = runtime->config();
+  const ServerPtr server = runtime->server();
+
+  if (headless) {
+    for (const QString& warning : runtime->warnings()) {
+      err("[warn] " + warning + "\n");
+    }
+    err(QString("[%1 · %2 · %3]\n").arg(server->label(), runtime->model(), runtime->sandbox()->describe(runtime->projectCwd())));
+    const int code = runHeadless([&](const AgentHooks& hooks) { return runtime->createAgent(hooks); }, parser.value("print"), parser.isSet("yes"),
+                                 server->baseUrl());
+    // Their open output pipes would keep the process alive.
+    runtime->shutdown();
+    err(QString("[session %1]\n").arg(runtime->session()->id()));
+    return code;
+  }
+
   Ui::TuiOptions options;
-  options.createAgent = createAgent;
+  options.createAgent = [runtime](const AgentHooks& hooks, const std::optional<AgentSettings>& current) { return runtime->createAgent(hooks, current); };
   options.server = server;
   options.endpoints = config.endpoints;
-  options.project = projectView(state->project, cwd);
-  options.switchProject = [state, sandbox, jobs](const QString& folder) {
-    const QString dir = resolveFolder(folder, state->project.cwd);
-    state->project = loadProject(dir, jobs);
-    sandbox->setReadOnlyPaths(visibleFolders(state->project));
-    return projectView(state->project, dir);
-  };
+  options.project = runtime->project();
+  options.switchProject = [runtime](const QString& folder) { return runtime->switchProject(folder); };
   options.configFile = config.file;
-  options.warnings = warnings;
-  options.rememberedModel = [](const QString& url) { return loadPreferences().models.value(url); };
-  options.sandbox = sandbox;
-  options.sessions.currentId = [state]() { return state->session->id(); };
-  options.sessions.currentName = [state]() { return state->session->name(); };
-  options.sessions.list = [state](bool everywhere) { return listSessions(everywhere ? QString() : state->project.cwd, 50); };
-  options.sessions.open = [state](const QString& id) {
-    const Session::Opened opened = Session::open(id);
-    state->session = opened.session;
-    return Ui::OpenedSession{opened.messages, opened.session->model(), opened.session->endpoint(), opened.session->cwd(), opened.session->lastUsed()};
-  };
-  options.sessions.rename = [state](const QString& name) { state->session->rename(name); };
-  options.sessions.remove = [state](const QString& id) {
-    if (id == state->session->id()) {
-      throw SmithError("That's the current session.");
-    }
-    deleteSession(id);
-  };
-  options.sessions.startNew = [state](const QString& model, const QString& endpointName) {
-    state->session = Session::create(state->project.cwd, model, endpointName);
-  };
-  options.sessions.recentProjects = []() {
-    QList<Ui::RecentProject> projects;
-    QMap<QString, int> index;
-    for (const SessionInfo& info : listSessions({}, 200)) {
-      if (index.contains(info.cwd)) {
-        projects[index.value(info.cwd)].sessions++;
-      } else {
-        index.insert(info.cwd, projects.size());
-        projects.append(Ui::RecentProject{info.cwd, 1, info.updated});
-      }
-    }
-    return projects;
-  };
-  options.resumed = history;
-  options.resumedLastUsed = resumed ? resumed->session->lastUsed() : std::nullopt;
+  options.warnings = runtime->warnings();
+  options.rememberedModel = &Runtime::rememberedModel;
+  options.sandbox = runtime->sandbox();
+  options.sessions = runtime->sessions();
+  options.resumed = runtime->resumedHistory();
+  options.resumedLastUsed = runtime->resumedLastUsed();
   options.theme = config.theme;
   options.codeStream = config.codeStream;
-  options.jobs = jobs;
-  options.savePreferences = [state](const Ui::PreferenceUpdate& update) {
-    if (!update.model.isEmpty()) {
-      state->session->recordModel(update.model, update.server->name());
-    }
-    PreferenceChange change;
-    change.reasoning = update.reasoning;
-    if (!update.model.isEmpty()) {
-      change.endpoint = update.server->name();
-      change.modelBaseUrl = update.server->baseUrl();
-      change.modelId = update.model;
-    }
-    savePreferences(change);
-  };
+  options.jobs = runtime->jobs();
+  options.savePreferences = [runtime](const PreferenceUpdate& update) { runtime->savePreferences(update); };
 
   QElapsedTimer started;
   started.start();
@@ -665,14 +340,14 @@ int run(QCoreApplication& app) {
     tui.run();
     app.exec();
   }
-  jobs->stopAll();
-  sandbox->dispose();
-  const QString name = state->session->name();
+  runtime->shutdown();
+  const std::shared_ptr<Session> session = runtime->session();
+  const QString name = session->name();
   static const QRegularExpression whitespace(R"(\s)");
-  const QString resumeWith = !name.isEmpty() && !whitespace.match(name).hasMatch() ? name : state->session->id();
+  const QString resumeWith = !name.isEmpty() && !whitespace.match(name).hasMatch() ? name : session->id();
   const QString goodbye = config.theme == Theme::Matrix ? Ui::farewell(started.elapsed()) + "\n" : QString();
-  out(QString("%1Session %2%3. Resume with: smith --resume %4").arg(goodbye, name.isEmpty() ? QString() : "\"" + name + "\" ", state->session->id(), resumeWith));
-  return code;
+  out(QString("%1Session %2%3. Resume with: smith --resume %4").arg(goodbye, name.isEmpty() ? QString() : "\"" + name + "\" ", session->id(), resumeWith));
+  return 0;
 }
 
 } // namespace
