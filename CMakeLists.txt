@@ -85,4 +85,21 @@ target_compile_options(smithcore PUBLIC -Wall -Wextra -Wno-unused-parameter -Wno
 add_executable(smith src/main.cpp)
 target_link_libraries(smith PRIVATE smithcore)
 
+option(SMITH_BUILD_TESTS "Build the unit tests" ON)
+if(SMITH_BUILD_TESTS)
+  find_package(Qt6 REQUIRED COMPONENTS Test)
+  enable_testing()
+  # One suite per file of the original TypeScript tests.
+  foreach(name units tools sandbox features agent ui)
+    add_executable(test_${name} tests/test_${name}.cpp tests/TestUtil.h tests/FakeServer.h)
+    target_link_libraries(test_${name} PRIVATE smithcore Qt6::Test)
+    target_compile_definitions(test_${name} PRIVATE
+      SMITH_BINARY="$<TARGET_FILE:smith>"
+      SMITH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+    )
+    add_dependencies(test_${name} smith)
+    add_test(NAME ${name} COMMAND test_${name})
+  endforeach()
+endif()
+
 install(TARGETS smith RUNTIME DESTINATION bin)
