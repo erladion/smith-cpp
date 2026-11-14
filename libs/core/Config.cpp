@@ -1,4 +1,5 @@
 #include "core/Config.h"
+#include "compat/Utf8.h"
 
 #include "core/Dirs.h"
 #include "core/Errors.h"
@@ -273,7 +274,7 @@ Config loadConfig(const QString& file) {
   if (!handle.open(QIODevice::ReadOnly)) {
     throw SmithError(QString("Could not read %1: %2").arg(file, handle.errorString()));
   }
-  const QString text = QString::fromUtf8(handle.readAll());
+  const QString text = utf8(handle.readAll());
   QJsonValue json;
   try {
     json = Json::parse(text);

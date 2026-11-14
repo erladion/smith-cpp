@@ -1,4 +1,5 @@
 #include "core/ContainerSandbox.h"
+#include "compat/Utf8.h"
 
 #include "core/Dirs.h"
 #include "core/Errors.h"
@@ -31,7 +32,7 @@ bool dockerIsRootless() {
   RunOptions options;
   options.timeoutMs = 10000;
   const ProcessResult result = runProcess(spec, options);
-  return QString::fromUtf8(result.out).contains("rootless");
+  return utf8(result.out).contains("rootless");
 }
 
 } // namespace
@@ -54,7 +55,7 @@ ContainerSandbox::ContainerSandbox(const ContainerSettings& settings, bool netwo
   options.timeoutMs = 10000;
   const ProcessResult result = runProcess(probe, options);
   if (!result.started || result.exitCode != 0) {
-    const QString why = result.started ? QString::fromUtf8(result.err).trimmed() : result.startError;
+    const QString why = result.started ? utf8(result.err).trimmed() : result.startError;
     throw SmithError(QString("The sandbox is set to use containers, but %1 can't run: %2\n"
                              "On RHEL: sudo dnf install podman. Or set sandbox.type to \"bwrap\" in the config file.")
                          .arg(settings.runtime, why));
@@ -134,9 +135,9 @@ QString ContainerSandbox::readFile(const QString& file, const QString& project) 
   }
   const ProcessResult result = runProcess(programSpec("cat", {"--", file}, project));
   if (!result.started || result.exitCode != 0) {
-    throw fileError(result.started ? QString::fromUtf8(result.err) : result.startError, file, "open");
+    throw fileError(result.started ? utf8(result.err) : result.startError, file, "open");
   }
-  return QString::fromUtf8(result.out);
+  return utf8(result.out);
 }
 
 void ContainerSandbox::writeFile(const QString& file, const QString& content, const QString& project) {
@@ -151,7 +152,7 @@ void ContainerSandbox::writeFile(const QString& file, const QString& content, co
   options.input = content.toUtf8();
   const ProcessResult result = runProcess(spec, options);
   if (!result.started || result.exitCode != 0) {
-    throw fileError(result.started ? QString::fromUtf8(result.err) : result.startError, file, "write");
+    throw fileError(result.started ? utf8(result.err) : result.startError, file, "write");
   }
 }
 
@@ -335,7 +336,7 @@ QString ContainerSandbox::start(const QString& project) {
 
   const ProcessResult result = runProcess(SpawnSpec{runtime, args, hostEnv(), {}, {}});
   if (!result.started || result.exitCode != 0) {
-    QString why = result.started ? QString::fromUtf8(result.err).trimmed() : result.startError;
+    QString why = result.started ? utf8(result.err).trimmed() : result.startError;
     if (why.isEmpty()) {
       why = QString("exit code %1").arg(result.exitCode);
     }

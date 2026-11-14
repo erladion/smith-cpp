@@ -1,4 +1,5 @@
 #include "core/Sandbox.h"
+#include "compat/Utf8.h"
 
 #include "core/ContainerSandbox.h"
 #include "core/Dirs.h"
@@ -182,7 +183,7 @@ QString probeBwrap() {
     return result.missing ? QString("bubblewrap (bwrap) is not installed") : result.startError;
   }
   if (result.exitCode != 0) {
-    QString detail = QString::fromUtf8(result.err).trimmed();
+    QString detail = utf8(result.err).trimmed();
     if (detail.isEmpty()) {
       detail = QString("exit code %1").arg(result.exitCode);
     }
@@ -221,7 +222,7 @@ public:
     if (!handle.open(QIODevice::ReadOnly)) {
       throw SmithError(QString("EACCES: permission denied, open '%1'").arg(file), "EACCES");
     }
-    return QString::fromUtf8(handle.readAll());
+    return utf8(handle.readAll());
   }
 
   void writeFile(const QString& file, const QString& content, const QString&) override {
@@ -311,9 +312,9 @@ public:
   QString readFile(const QString& file, const QString& project) override {
     const ProcessResult result = runProcess(programSpec("cat", {"--", file}, project, {}));
     if (result.started && result.exitCode == 0) {
-      return QString::fromUtf8(result.out);
+      return utf8(result.out);
     }
-    const QString stderrText = result.started ? QString::fromUtf8(result.err) : result.startError;
+    const QString stderrText = result.started ? utf8(result.err) : result.startError;
     SmithError error = fileError(stderrText, file, "open");
     if (error.code() == "ENOENT" && hiddenHomePath(file, project)) {
       throw SmithError(error.message() + " (the home folder is hidden in the sandbox, apart from the project and the folders in sandbox.home.show)",
@@ -328,7 +329,7 @@ public:
     options.input = content.toUtf8();
     const ProcessResult result = runProcess(programSpec("bash", {"-c", script, "bash", file}, project, {}), options);
     if (!result.started || result.exitCode != 0) {
-      throw fileError(result.started ? QString::fromUtf8(result.err) : result.startError, file, "write");
+      throw fileError(result.started ? utf8(result.err) : result.startError, file, "write");
     }
   }
 

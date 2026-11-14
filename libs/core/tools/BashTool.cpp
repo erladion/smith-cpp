@@ -1,4 +1,5 @@
 #include "core/tools/Tools.h"
+#include "compat/Utf8.h"
 
 #include "core/Errors.h"
 #include "core/Jobs.h"
@@ -50,7 +51,7 @@ ToolResult runCommand(const QJsonObject& input, const ToolContext& ctx) {
   if (!result.started) {
     return ToolResult::error(QString("Failed to start %1: %2").arg(spec.file, result.startError));
   }
-  const QString output = QString::fromUtf8(result.out);
+  const QString output = utf8(result.out);
   QString body = truncateLog(trimEnd(output), MAX_OUTPUT_CHARS);
   if (body.isEmpty()) {
     body = "(no output)";

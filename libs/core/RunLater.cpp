@@ -1,4 +1,5 @@
 #include "core/RunLater.h"
+#include "compat/Utf8.h"
 
 #include "core/Process.h"
 #include "core/Sandbox.h"
@@ -75,7 +76,7 @@ QStringList projectFiles(const QString& cwd) {
     QStringList files;
     for (const QByteArray& name : git.out.split('\0')) {
       if (!name.isEmpty()) {
-        files << QString::fromUtf8(name);
+        files << utf8(name);
       }
       if (files.size() >= MAX_FILES) {
         break;

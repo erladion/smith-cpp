@@ -1,4 +1,5 @@
 #include "core/Server.h"
+#include "compat/Utf8.h"
 
 #include "core/Errors.h"
 #include "core/Http.h"
@@ -110,7 +111,7 @@ std::optional<int> Server::contextSize(const QString& model) {
   QString root = m_baseUrl;
   root.remove(QRegularExpression("/v1/?$"));
   try {
-    const QJsonValue props = Http::getJson(QString("%1/props?model=%2").arg(root, QString::fromUtf8(QUrl::toPercentEncoding(model))), m_apiKey, 3000);
+    const QJsonValue props = Http::getJson(QString("%1/props?model=%2").arg(root, utf8(QUrl::toPercentEncoding(model))), m_apiKey, 3000);
     const QJsonObject object = props.toObject();
     QJsonValue n = object.value("default_generation_settings").toObject().value("n_ctx");
     if (!n.isDouble()) {

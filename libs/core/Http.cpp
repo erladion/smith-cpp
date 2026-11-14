@@ -1,4 +1,5 @@
 #include "core/Http.h"
+#include "compat/Utf8.h"
 
 #include "core/Errors.h"
 #include "core/Json.h"
@@ -125,7 +126,7 @@ QString connectionCode(QNetworkReply::NetworkError error) {
   }
   QString message = error.value("message").toString();
   if (message.isEmpty()) {
-    message = QString::fromUtf8(body).trimmed();
+    message = utf8(body).trimmed();
   }
   if (message.isEmpty()) {
     message = QString("status code %1 (no body)").arg(status);

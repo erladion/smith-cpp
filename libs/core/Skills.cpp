@@ -1,4 +1,5 @@
 #include "core/Skills.h"
+#include "compat/Utf8.h"
 
 #include "core/Dirs.h"
 
@@ -43,7 +44,7 @@ LoadedSkills loadSkills(const QStringList& roots) {
       if (!handle.open(QIODevice::ReadOnly)) {
         continue;
       }
-      const Frontmatter parsed = parseFrontmatter(QString::fromUtf8(handle.readAll()));
+      const Frontmatter parsed = parseFrontmatter(utf8(handle.readAll()));
       QString skillName = parsed.data.value("name").trimmed();
       if (skillName.isEmpty()) {
         skillName = name;

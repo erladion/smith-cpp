@@ -1,4 +1,5 @@
 #include "core/tools/Tools.h"
+#include "compat/Utf8.h"
 
 #include "core/Errors.h"
 #include "core/Paths.h"
@@ -70,7 +71,7 @@ ToolDef skillTool(const QList<Skill>& skills) {
       if (!handle.open(QIODevice::ReadOnly)) {
         throw SmithError(QString("ENOENT: no such file or directory, open '%1'").arg(target), "ENOENT");
       }
-      return ToolResult{truncateText(QString::fromUtf8(handle.readAll()), MAX_CHARS)};
+      return ToolResult{truncateText(utf8(handle.readAll()), MAX_CHARS)};
     }
     QStringList others = listSkillFiles(skill->dir);
     others.removeAll("SKILL.md");

@@ -1,4 +1,5 @@
 #include "core/Undo.h"
+#include "compat/Utf8.h"
 
 #include <QFile>
 #include <QFileInfo>
@@ -11,7 +12,7 @@ std::optional<QString> readOrNull(const QString& file) {
   if (!handle.exists() || !handle.open(QIODevice::ReadOnly)) {
     return std::nullopt;
   }
-  return QString::fromUtf8(handle.readAll());
+  return utf8(handle.readAll());
 }
 
 void Checkpoint::beforeWrite(const QString& file) {

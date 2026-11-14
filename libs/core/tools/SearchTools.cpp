@@ -1,4 +1,5 @@
 #include "core/tools/Tools.h"
+#include "compat/Utf8.h"
 
 #include "core/Errors.h"
 #include "core/Glob.h"
@@ -116,7 +117,7 @@ QList<FileEntry> listFiles(const SpawnSpec& spec, const QString& base, const Can
     if (raw.isEmpty()) {
       continue;
     }
-    QString rel = QString::fromUtf8(raw);
+    QString rel = utf8(raw);
     if (rel.startsWith("./")) {
       rel = rel.mid(2);
     }
@@ -208,7 +209,7 @@ SearchResult runSearch(const SpawnSpec& spec, const QString& cwd, const CancelPt
   if (!result.started) {
     return SearchResult{result.startError, -1, result.missing};
   }
-  const QString output = QString::fromUtf8(result.out);
+  const QString output = utf8(result.out);
   return SearchResult{output, result.exitCode, notInstalled(spec.file, result.exitCode, output)};
 }
 

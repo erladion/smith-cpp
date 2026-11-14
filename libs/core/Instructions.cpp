@@ -1,4 +1,5 @@
 #include "core/Instructions.h"
+#include "compat/Utf8.h"
 
 #include "core/Dirs.h"
 
@@ -31,7 +32,7 @@ QList<InstructionFile> loadInstructions(const QString& cwd) {
     if (!QFileInfo(file).isFile() || !handle.open(QIODevice::ReadOnly)) {
       return false;
     }
-    QString content = QString::fromUtf8(handle.readAll()).trimmed();
+    QString content = utf8(handle.readAll()).trimmed();
     if (content.size() > MAX_CHARS) {
       content = content.left(MAX_CHARS) + QString("\n\n[Truncated: the file is longer than %1 characters.]").arg(MAX_CHARS);
     }

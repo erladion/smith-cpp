@@ -25,6 +25,7 @@ private Q_SLOTS:
 
   // file tools
   void writeThenReadNumberedLines();
+  void readFileRefusesBinary();
   void editFileRequiresUniqueMatch();
   void writesStayInsideEvenThroughSymlink();
   void readsOutsideAskForApproval();
@@ -106,6 +107,17 @@ void TestTools::writeThenReadNumberedLines() {
   QVERIFY(!res.isError);
   QVERIFY_MATCH(res.content, "^2\\ttwo");
   QVERIFY_MATCH(res.content, "Showing lines 2-2 of 3");
+}
+
+void TestTools::readFileRefusesBinary() {
+  // A NUL early on, with text after it: Qt 5 would decode only up to the NUL and miss it.
+  QFile file(m_pDir->file("image.png"));
+  QVERIFY(file.open(QIODevice::WriteOnly));
+  file.write(QByteArray("\x89PNG\r\n\x1a\n\0\0\0\rIHDR then more bytes", 30));
+  file.close();
+  const ToolResult res = call(readFileTool(), {{"path", "image.png"}});
+  QVERIFY(res.isError);
+  QVERIFY_MATCH(res.content, "image\\.png looks like a binary file");
 }
 
 void TestTools::editFileRequiresUniqueMatch() {

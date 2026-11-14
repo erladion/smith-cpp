@@ -1,4 +1,5 @@
 #include "core/Json.h"
+#include "compat/Utf8.h"
 
 #include <stdexcept>
 
@@ -20,11 +21,11 @@ QString stringify(const QJsonValue& value) {
 }
 
 QString stringify(const QJsonObject& object) {
-  return QString::fromUtf8(QJsonDocument(object).toJson(QJsonDocument::Compact));
+  return utf8(QJsonDocument(object).toJson(QJsonDocument::Compact));
 }
 
 QString stringify(const QJsonArray& array) {
-  return QString::fromUtf8(QJsonDocument(array).toJson(QJsonDocument::Compact));
+  return utf8(QJsonDocument(array).toJson(QJsonDocument::Compact));
 }
 
 QJsonValue parse(const QString& text) {
