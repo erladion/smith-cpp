@@ -41,6 +41,16 @@ QList<Completion> completeFolder(const QString& typed, const QString& cwd) {
   return out;
 }
 
+QList<Completion> completeTask(const QString& typed, const CompletionContext& ctx) {
+  QList<Completion> out;
+  for (const QString& task : ctx.tasks) {
+    if (task.startsWith(typed)) {
+      out.append(Completion{task, "smith/" + task});
+    }
+  }
+  return out;
+}
+
 } // namespace
 
 const QList<CommandSpec>& commands() {
@@ -79,6 +89,10 @@ const QList<CommandSpec>& commands() {
         {"/new", "[folder]", "start a new session, here or in another folder",
          [](const QString& typed, const CompletionContext& ctx) { return completeFolder(typed, ctx.cwd); }},
         {"/clear", {}, "start a new session (same as /new)", {}},
+        {"/worktree", "<task>", "give a task its own worktree: the agent works on a smith/<task> branch beside your checkout", completeTask},
+        {"/worktrees", {}, "list the task worktrees: switch to one, land it or drop it", {}},
+        {"/land", "[task]", "commit a task's changes and bring them to your branch (cherry-pick or merge)", completeTask},
+        {"/drop", "[task]", "remove a task's worktree and branch, discarding what isn't landed", completeTask},
         {"/undo", {}, "undo the last turn: restore files it changed and edit your message again", {}},
         {"/skills", {}, "list the available skills", {}},
         {"/network", "on|off", "allow or block network access for sandboxed commands",

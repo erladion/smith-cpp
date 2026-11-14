@@ -12,6 +12,8 @@ struct CompletionContext {
   QString cwd;
   QStringList endpoints;
   QStringList models;
+  // The repository's task worktrees, for /worktree, /land and /drop.
+  QStringList tasks;
 };
 
 struct Completion {

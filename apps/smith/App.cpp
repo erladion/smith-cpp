@@ -11,6 +11,8 @@
 #include "frontend/Greetings.h"
 #include "frontend/Replay.h"
 #include "SessionCommands.h"
+#include "WorktreeCommands.h"
+#include "frontend/Worktrees.h"
 #include "View.h"
 
 #include <QCoreApplication>
@@ -57,6 +59,7 @@ App::App(TuiOptions options, QObject* parent)
   m_pAgent = m_options.createAgent(m_hooks, std::nullopt);
   m_pConnection = std::make_unique<ConnectionCommands>(*this);
   m_pSessions = std::make_unique<SessionCommands>(*this, *m_pConnection);
+  m_pWorktrees = std::make_unique<WorktreeCommands>(*this);
   if (m_options.jobs) {
     connect(m_options.jobs.get(), &BackgroundJobs::changed, this, &App::requestRender, Qt::QueuedConnection);
   }
@@ -115,6 +118,7 @@ void App::run() {
       print(entry);
     }
     refreshModels();
+    refreshTasks();
     render();
   };
   if (matrix() && Tui::colorsEnabled()) {
@@ -171,6 +175,38 @@ void App::startOver(const Start& start, const QList<Entry>& entries) {
   for (const Entry& entry : all) {
     print(entry);
   }
+  // The project may be another repository now.
+  refreshTasks();
+}
+
+void App::refreshTasks() {
+  const QString cwd = m_project.cwd;
+  auto* thread = QThread::create([this, cwd]() {
+    QStringList tasks;
+    try {
+      for (const Worktree& worktree : listWorktrees(cwd)) {
+        if (!worktree.task.isEmpty()) {
+          tasks << worktree.task;
+        }
+      }
+    } catch (const std::exception&) {
+      // Not a repository: nothing to complete.
+    }
+    QMetaObject::invokeMethod(this, [this, tasks]() { m_suggestions.tasks = tasks; }, Qt::QueuedConnection);
+  });
+  m_workers << thread;
+  connect(thread, &QThread::finished, this, [this, thread]() {
+    m_workers.removeAll(thread);
+    thread->deleteLater();
+  });
+  thread->start();
+}
+
+void App::promptText(const QString& title, const QString& initial, std::function<void(const QString&)> onSubmit) {
+  m_textPrompt = TextPrompt{title, std::move(onSubmit), m_editor.value()};
+  m_editor.setValue(initial);
+  m_suggestions.reset();
+  requestRender();
 }
 
 void App::openPicker(std::unique_ptr<Tui::Picker> picker, std::function<void(const QString&)> onPick, std::function<void(const QString&)> onAction) {
@@ -422,6 +458,11 @@ QList<Line> App::liveLines() {
   } else if (m_picker) {
     lines.append(Line{});
     lines.append(box(m_picker->picker->lines(), Color::Cyan, w));
+  } else if (m_textPrompt && !m_busy) {
+    lines.append(Line{});
+    lines.append(truncate(Line{Span{m_textPrompt->title, Style{.bold = true}}, Span{"  enter to confirm · esc cancels", DIM}}, w));
+    const QList<Line> prompt = prefixed(Line{Span{"› ", fg(Color::Yellow)}}, Line{Span{"  ", {}}}, m_editor.render({}), w - 4);
+    lines.append(box(prompt, Color::Yellow, w, true));
   } else if (!m_busy || agentRunning()) {
     const QStringList queued = m_pAgent->queuedMessages();
     if (!queued.isEmpty()) {
@@ -449,6 +490,7 @@ QList<Line> App::liveLines() {
   status.busy = m_busy;
   status.queueing = agentRunning();
   status.jobs = m_options.jobs ? m_options.jobs->running() : 0;
+  status.worktreeBranch = m_project.worktreeBranch;
   if (streaming()) {
     const int frame = m_frame;
     status.filler = [frame](int n) { return Tui::codeStream(frame / STREAM_EVERY, n); };
@@ -682,7 +724,7 @@ void App::onQuestionKey(const Key& key) {
 // ---- keys ----
 
 QList<Suggestion> App::currentSuggestions() const {
-  if (m_busy || prompting() || m_picker) {
+  if (m_busy || prompting() || m_picker || m_textPrompt) {
     return {};
   }
   QStringList endpoints;
@@ -737,6 +779,22 @@ void App::onKey(const Key& key) {
       } else if (onPick) {
         onPick(chosen.value);
       }
+    }
+    return;
+  }
+
+  if (m_textPrompt) {
+    if (key.name == KeyName::Escape) {
+      m_editor.setValue(m_textPrompt->stashed);
+      m_textPrompt.reset();
+      print(Entry::notice(NoticeLevel::Info, "Cancelled."));
+    } else if (m_editor.handle(key)) {
+      // Not committed: an answer like this doesn't belong in the ↑ history.
+      const QString value = m_editor.value();
+      const TextPrompt prompt = *m_textPrompt;
+      m_textPrompt.reset();
+      m_editor.setValue(prompt.stashed);
+      prompt.onSubmit(value);
     }
     return;
   }
@@ -837,6 +895,14 @@ void App::runCommand(const QString& text) {
     m_pSessions->nameSession(arg);
   } else if (command == "/open") {
     m_pSessions->openProjectPicker();
+  } else if (command == "/worktree") {
+    m_pWorktrees->create(arg);
+  } else if (command == "/worktrees") {
+    m_pWorktrees->openPicker();
+  } else if (command == "/land") {
+    m_pWorktrees->land(arg);
+  } else if (command == "/drop") {
+    m_pWorktrees->drop(arg);
   } else if (command == "/endpoint") {
     if (arg.isEmpty()) {
       m_pConnection->openEndpointPicker();

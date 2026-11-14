@@ -14,8 +14,10 @@ class SessionCommands {
 public:
   SessionCommands(App& app, ConnectionCommands& connection);
 
-  // Starts a new session, in another folder if one is given.
-  void newSession(const QString& folder = {});
+  // Starts a new session, in another folder if one is given; `extra` is shown after the notice.
+  void newSession(const QString& folder = {}, const QList<Entry>& extra = {});
+  // Continues the newest session in `folder`, or starts one there if it has none.
+  void resumeIn(const QString& folder, const QList<Entry>& extra = {});
   void nameSession(const QString& name);
   // /open: recent project folders, and a way into the folder browser.
   void openProjectPicker();
@@ -27,7 +29,7 @@ private:
   void browseFolder(const QString& dir);
   void pickFolder(const QString& value);
   void deleteSession(const QString& id, bool everywhere, const QString& name);
-  void switchSession(const QString& id, const QString& folder);
+  void switchSession(const QString& id, const QString& folder, const QList<Entry>& extra = {});
 
   App& m_app;
   ConnectionCommands& m_connection;

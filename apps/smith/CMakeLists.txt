@@ -6,6 +6,7 @@ add_library(smith_tui_app STATIC
   SessionCommands.cpp
   Suggestions.cpp
   View.cpp
+  WorktreeCommands.cpp
 )
 target_link_libraries(smith_tui_app PUBLIC smith_frontend smith_tui)
 target_include_directories(smith_tui_app PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

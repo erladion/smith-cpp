@@ -33,6 +33,8 @@ QString statusName(TodoStatus status) {
   return "pending";
 }
 
+} // namespace
+
 QVariantList diffRows(const Diff& diff) {
   QVariantList rows;
   for (const DiffLine& line : diff) {
@@ -59,8 +61,6 @@ QVariantList diffRows(const Diff& diff) {
   }
   return rows;
 }
-
-} // namespace
 
 QString entryKindName(Entry::Kind kind) {
   switch (kind) {

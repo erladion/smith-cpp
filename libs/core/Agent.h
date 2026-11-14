@@ -143,6 +143,9 @@ public:
   void send(const QString& text, const CancelPtr& cancel);
   // Summarizes the conversation now, regardless of how full the context is.
   void compactNow(const CancelPtr& cancel);
+  // One quick reply from the model, outside the conversation: no history, no
+  // tools. Think tags are stripped. Throws on API errors.
+  QString complete(const QString& instructions, const QString& input, const CancelPtr& cancel);
 
 private:
   struct ToolCall {

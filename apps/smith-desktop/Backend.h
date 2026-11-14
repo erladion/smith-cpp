@@ -1,6 +1,7 @@
 #pragma once
 
 #include "frontend/Runtime.h"
+#include "frontend/Worktrees.h"
 #include "Palette.h"
 #include "TranscriptModel.h"
 
@@ -75,6 +76,14 @@ class Backend : public QObject {
   Q_PROPERTY(QVariantList sessions READ sessions NOTIFY sessionsChanged)
   Q_PROPERTY(QVariantList recentProjects READ recentProjects NOTIFY sessionsChanged)
   Q_PROPERTY(bool canUndo READ canUndo NOTIFY changed)
+  // The branch, when the project is a task worktree.
+  Q_PROPERTY(QString worktreeBranch READ worktreeBranch NOTIFY changed)
+  // Whether the project is in a git repository (so task worktrees can be made).
+  Q_PROPERTY(bool inRepository READ inRepository NOTIFY worktreesChanged)
+  // [{path, label, hint, branch, task, main, current, openElsewhere, summary}], the main checkout first.
+  Q_PROPERTY(QVariantList worktrees READ worktrees NOTIFY worktreesChanged)
+  // The land panel: empty when closed; "stage" is "loading", "review", "landing" or "landed".
+  Q_PROPERTY(QVariantMap landing READ landing NOTIFY landingChanged)
 
 public:
   explicit Backend(const LaunchOptions& launch, QObject* parent = nullptr);
@@ -128,6 +137,10 @@ public:
   QVariantList sessions() const { return m_sessions; }
   QVariantList recentProjects() const;
   bool canUndo() const;
+  QString worktreeBranch() const { return m_project.worktreeBranch; }
+  bool inRepository() const { return m_inRepository; }
+  QVariantList worktrees() const { return m_worktrees; }
+  QVariantMap landing() const { return m_landing; }
 
   // Starts up on a worker thread: server, model, sandbox, session.
   Q_INVOKABLE void start();
@@ -154,6 +167,18 @@ public:
   // A folder from a dialog (file:// URL) or typed path; starts a new session there.
   Q_INVOKABLE void openProject(const QString& folder);
   Q_INVOKABLE void stopJob(const QString& id);
+  // Task worktrees, as /worktree, /worktrees, /land and /drop do in the terminal.
+  Q_INVOKABLE void refreshWorktrees();
+  Q_INVOKABLE void createWorktree(const QString& task);
+  // Continues its newest session, or starts one there.
+  Q_INVOKABLE void switchToWorktree(const QString& path);
+  // Opens the land panel: the worktree's changes and a suggested commit message.
+  Q_INVOKABLE void reviewLanding(const QString& path);
+  // "cherry-pick", "merge" or "branch" (commit on the task branch only).
+  Q_INVOKABLE void land(const QString& mode, const QString& message);
+  Q_INVOKABLE void closeLanding();
+  // Removes a worktree and its branch, leaving it first if it's the project; `discard` drops unlanded work.
+  Q_INVOKABLE void removeWorktree(const QString& path, bool discard);
   // Completions for a slash command being typed, as in the terminal: [{text, label, hint, takesArgument}].
   Q_INVOKABLE QVariantList suggest(const QString& input) const;
   // The idle stream of glyphs for the status bar.
@@ -171,6 +196,10 @@ Q_SIGNALS:
   void openPicker(const QString& kind);
   // /redpill.
   void redPill();
+  void worktreesChanged();
+  void landingChanged();
+  // /drop: the window asks before dropping the worktree at `path`.
+  void confirmDrop(const QString& path);
 
 private:
   struct PendingApproval {
@@ -198,6 +227,14 @@ private:
   void startOver(bool resumed, const std::optional<QDateTime>& lastUsed, const QList<Entry>& entries);
   QThread* launch(std::function<void()> work, std::function<void()> finished);
   void setCompacting(bool on);
+  void startNewSession(const QString& folder, const QList<Entry>& extra);
+  void openSessionIn(const QString& id, const QString& folder, const QList<Entry>& extra);
+  void resumeIn(const QString& folder, const QList<Entry>& extra = {});
+  // The task's worktree from the last listing (the project's own when `task` is empty); notes why not.
+  std::optional<Worktree> findTask(const QString& task);
+  std::optional<Worktree> worktreeAt(const QString& path) const;
+  bool isCurrent(const Worktree& worktree) const;
+  void setLanding(const QVariantMap& landing);
 
   static inline Backend* s_instance = nullptr;
 
@@ -232,6 +269,20 @@ private:
   int m_contextLimit = 0;
   bool m_allSessions = false;
   QVariantList m_sessions;
+  QList<Worktree> m_worktreeList;
+  QVariantList m_worktrees;
+  bool m_inRepository = false;
+  // Listings finish in any order; only the newest one counts.
+  int m_worktreesGeneration = 0;
+  // What the land panel is landing.
+  struct Landing {
+    Worktree worktree;
+    WorktreeChanges changes;
+    QString mainPath;
+    QString target;
+  };
+  std::optional<Landing> m_landingState;
+  QVariantMap m_landing;
   QList<QThread*> m_workers;
   bool m_closed = false;
   std::atomic<bool> m_closing{false};

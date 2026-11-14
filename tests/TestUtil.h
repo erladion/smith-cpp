@@ -11,6 +11,8 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QMap>
+#include <QProcess>
 #include <QRegularExpression>
 #include <QTemporaryDir>
 #include <QtTest>
@@ -127,6 +129,44 @@ inline Smith::ToolResult run(const Smith::ToolDef& tool, const QJsonObject& inpu
 
 inline std::optional<QString> reason(const Smith::ToolDef& tool, const QJsonObject& input, const Smith::ToolContext& ctx) {
   return tool.approvalReason ? tool.approvalReason(input, ctx) : std::nullopt;
+}
+
+// git as in a fresh account: no user or system config (no signing, hooks or
+// aliases of the user's), a fixed identity and "main" as the first branch.
+class IsolatedGit {
+public:
+  IsolatedGit() = default;
+
+private:
+  EnvGuard m_global{"GIT_CONFIG_GLOBAL", QString("/dev/null")};
+  EnvGuard m_system{"GIT_CONFIG_NOSYSTEM", QString("1")};
+  EnvGuard m_authorName{"GIT_AUTHOR_NAME", QString("Test")};
+  EnvGuard m_authorEmail{"GIT_AUTHOR_EMAIL", QString("test@example.com")};
+  EnvGuard m_committerName{"GIT_COMMITTER_NAME", QString("Test")};
+  EnvGuard m_committerEmail{"GIT_COMMITTER_EMAIL", QString("test@example.com")};
+};
+
+// Runs git in `dir` and returns its stdout; fails the test (by throwing) if git fails.
+inline QString git(const QString& dir, const QStringList& args) {
+  QProcess process;
+  process.setWorkingDirectory(dir);
+  process.start("git", args);
+  process.waitForFinished(30000);
+  if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
+    throw Smith::SmithError(QString("git %1 failed: %2").arg(args.join(' '), QString::fromUtf8(process.readAllStandardError())));
+  }
+  return QString::fromUtf8(process.readAllStandardOutput());
+}
+
+// A repository on "main" with one commit of `files` (path -> content).
+inline void makeRepo(const QString& dir, const QMap<QString, QString>& files) {
+  QDir().mkpath(dir);
+  git(dir, {"init", "-q", "-b", "main"});
+  for (auto it = files.begin(); it != files.end(); ++it) {
+    write(dir + "/" + it.key(), it.value());
+  }
+  git(dir, {"add", "-A"});
+  git(dir, {"commit", "-q", "-m", "Start"});
 }
 
 } // namespace TestUtil

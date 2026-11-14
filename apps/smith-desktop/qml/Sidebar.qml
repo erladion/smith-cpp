@@ -3,13 +3,23 @@ import QtQuick.Controls.Basic
 import QtQuick.Layouts
 import Smith.Desktop
 
-// The project and its sessions: start a new one, switch, rename the current
-// one (double-click), delete others; "all folders" lists every project's.
+// The project, its task worktrees and its sessions: start a new session,
+// switch, rename the current one (double-click), delete others; "all folders"
+// lists every project's.
 Rectangle {
     id: sidebar
 
     signal openFolder()
     signal openRecent()
+
+    // Asks before dropping the worktree at `path` (/drop, or "drop" in the list).
+    function askDrop(path) {
+        const item = Backend.worktrees.find(w => w.path === path)
+        if (item) {
+            dropConfirm.target = item
+            dropConfirm.open()
+        }
+    }
 
     color: Theme.surface
 
@@ -88,6 +98,12 @@ Rectangle {
                     SmithButton { text: "Recent"; enabled: Backend.recentProjects.length > 0; onClicked: sidebar.openRecent() }
                 }
             }
+        }
+
+        WorktreeList {
+            Layout.fillWidth: true
+            visible: Backend.inRepository
+            onDrop: item => sidebar.askDrop(item.path)
         }
 
         SmithButton {
@@ -242,6 +258,52 @@ Rectangle {
             font.pixelSize: Theme.tinySize
             elide: Text.ElideRight
             Layout.fillWidth: true
+        }
+    }
+
+    Popup {
+        id: dropConfirm
+        objectName: "dropConfirm"
+        property var target: ({})
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        modal: true
+        padding: 18
+        Overlay.modal: Rectangle { color: Qt.rgba(0, 0, 0, 0.55) }
+        background: Rectangle { color: Theme.surface; border.color: Theme.error; radius: Theme.radius }
+        contentItem: ColumnLayout {
+            spacing: 14
+            Text {
+                text: "Drop " + (dropConfirm.target.branch || "") + " and its worktree?"
+                color: Theme.text
+                font.family: Theme.textFamily
+                font.pixelSize: Theme.fontSize
+            }
+            Text {
+                text: (dropConfirm.target.summary || "") === "no changes" ? "Nothing in it is unlanded."
+                      : "This throws away what isn't landed: " + (dropConfirm.target.summary || "") + "."
+                color: (dropConfirm.target.summary || "") === "no changes" ? Theme.textDim : Theme.warn
+                font.family: Theme.textFamily
+                font.pixelSize: Theme.smallSize
+            }
+            Text {
+                text: dropConfirm.target.path || ""
+                color: Theme.textFaint
+                font.family: Theme.mono
+                font.pixelSize: Theme.tinySize
+            }
+            RowLayout {
+                Layout.alignment: Qt.AlignRight
+                SmithButton { text: "Keep it"; onClicked: dropConfirm.close() }
+                SmithButton {
+                    text: "Drop it"
+                    kind: "danger"
+                    onClicked: {
+                        Backend.removeWorktree(dropConfirm.target.path, true)
+                        dropConfirm.close()
+                    }
+                }
+            }
         }
     }
 

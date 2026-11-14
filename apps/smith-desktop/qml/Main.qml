@@ -65,6 +65,10 @@ ApplicationWindow {
         case "skills":
             return { title: "Skills", items: Backend.skills.map(s => ({ value: s.name, label: s.name, hint: s.description })), current: "",
                      empty: "No skills found. Add folders with a SKILL.md to .agents/skills/ in the project or ~/.config/smith/skills/." }
+        case "worktrees":
+            return { title: "Worktrees", items: Backend.worktrees.map(w => ({ value: w.path, label: (w.main ? "" : "⎇ ") + w.label, hint: w.hint })),
+                     current: (Backend.worktrees.find(w => w.current) || {}).path || "",
+                     empty: "Not in a git repository." }
         case "jobs":
             return { title: "Background jobs (enter stops one)", items: Backend.jobs.map(j => ({ value: j.id, label: j.id + "  " + j.command, hint: j.status + " · started " + j.started + " ago" })),
                      current: "", empty: "No background jobs. The agent starts them with bash's run_in_background." }
@@ -85,6 +89,7 @@ ApplicationWindow {
             case "reasoning": Backend.setReasoning(value); break
             case "recent": Backend.openProject(value); break
             case "jobs": Backend.stopJob(value); break
+            case "worktrees": Backend.switchToWorktree(value); break
             }
             composer.focusInput()
         }
@@ -103,6 +108,7 @@ ApplicationWindow {
         function onRestoreInput(text) { composer.setText(text) }
         function onOpenPicker(kind) { window.openPicker(kind) }
         function onRedPill() { redPill.visible = true }
+        function onConfirmDrop(path) { sidebar.askDrop(path) }
     }
 
     Shortcut { sequence: "Ctrl+N"; enabled: !Backend.busy; onActivated: Backend.newSession("") }
@@ -120,6 +126,7 @@ ApplicationWindow {
         visible: Backend.state === "ready"
 
         Sidebar {
+            id: sidebar
             visible: window.sidebarVisible
             Layout.preferredWidth: 290
             Layout.fillHeight: true
@@ -181,6 +188,11 @@ ApplicationWindow {
                 onShowJobs: window.openPicker("jobs")
             }
         }
+    }
+
+    LandPanel {
+        id: landPanel
+        objectName: "landPanel"
     }
 
     Splash {

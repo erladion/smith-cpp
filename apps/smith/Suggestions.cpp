@@ -24,7 +24,7 @@ QList<Suggestion> SuggestionList::items(const QString& input, const QString& cwd
   if (m_dismissedFor && *m_dismissedFor == input) {
     return {};
   }
-  return suggest(input, CompletionContext{cwd, endpoints, models});
+  return suggest(input, CompletionContext{cwd, endpoints, models, tasks});
 }
 
 SuggestionList::Outcome SuggestionList::handle(const Tui::Key& key, const QList<Suggestion>& items, const QString& input,

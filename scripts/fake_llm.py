@@ -10,6 +10,9 @@ fixed script chosen by what you type:
   "...database..."   asks you a question with ask_user
   anything else      a one-line reply
 
+Requests that don't stream (a commit message for /land, a summary for
+/compact) get a whole answer at once.
+
 Usage:
   python3 scripts/fake_llm.py [port]          # default 18090
   ./build/smith --base-url http://127.0.0.1:18090/v1
@@ -93,6 +96,16 @@ class Handler(BaseHTTPRequestHandler):
         last_user = max(i for i, m in enumerate(messages) if m["role"] == "user")
         prompt = messages[last_user]["content"]
         step = sum(1 for m in messages[last_user:] if m["role"] == "assistant")
+
+        if not body.get("stream"):
+            asked = messages[0]["content"] if messages and messages[0]["role"] == "system" else ""
+            if "commit message" in asked:
+                answer = "Greet by name instead of the whole world" if "greet" in prompt else "Apply the requested change"
+            else:
+                answer = "The user asked for a change; the agent made it and checked it works."
+            self._json(200, {"choices": [{"index": 0, "message": {"role": "assistant", "content": answer},
+                                          "finish_reason": "stop"}]})
+            return
 
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")

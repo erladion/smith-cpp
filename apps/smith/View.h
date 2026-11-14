@@ -41,6 +41,8 @@ struct Status {
   bool queueing = false;
   // Commands running in the background.
   int jobs = 0;
+  // The branch, when working in a task worktree.
+  QString worktreeBranch;
   // Fills spare room at the right end with this many columns of something, e.g. a code stream.
   std::function<QString(int)> filler;
 };

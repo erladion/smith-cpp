@@ -9,6 +9,7 @@
 #include "core/Dirs.h"
 #include "core/Jobs.h"
 #include "core/tools/Tools.h"
+#include "frontend/Worktrees.h"
 
 #include <QElapsedTimer>
 #include <QProcess>
@@ -29,6 +30,7 @@ private Q_SLOTS:
   void outsideIsReadOnlyOrHidden();
   void credentialsInHomeAreHidden();
   void gitIsReadOnly();
+  void gitWorksReadOnlyInWorktree();
   void secretsInEnvironmentStayOut();
   void hiddenSymlinksAreFollowed();
   void networkBlockedUnlessEnabled();
@@ -156,6 +158,32 @@ void TestSandbox::gitIsReadOnly() {
   QCOMPARE(read(fake.home.file(".git/config")), QString("[core]\n"));
   QVERIFY(exists(fake.home.file(".git")));
   QVERIFY(!exists(fake.home.file(".git/hooks/pre-commit")));
+}
+
+void TestSandbox::gitWorksReadOnlyInWorktree() {
+  REQUIRE_BWRAP();
+  FakeHome fake;
+  IsolatedGit isolated;
+  const QString main = fake.home.file("shop");
+  makeRepo(main, {{"login.ts", "check(password)\n"}});
+  const Worktree task = createTaskWorktree(main, "fix-login").worktree;
+  write(task.path + "/login.ts", "check(password) && password\n");
+  // As the runtime does for a worktree: its git data in the main repository is shown read-only.
+  const std::shared_ptr<Sandbox> sandbox = bwrap();
+  sandbox->setReadOnlyPaths({gitDirs(task.path)->commonDir});
+
+  const QString looked = sh(sandbox, task.path, "git status --short; git diff --stat; git log --format=%s; git branch --show-current").content;
+  QVERIFY_MATCH(looked, " M login.ts");
+  QVERIFY_MATCH(looked, "1 file changed");
+  QVERIFY_MATCH(looked, "Start");
+  QVERIFY_MATCH(looked, "smith/fix-login");
+  // The rest of the main checkout stays hidden.
+  QVERIFY_MATCH(sh(sandbox, task.path, "cat " + main + "/login.ts; echo end").content, "No such file or directory");
+
+  const QString committed = sh(sandbox, task.path, "git add -A; git commit -qm sneaky; git stash; echo end").content;
+  QVERIFY_MATCH(committed, "Read-only file system");
+  QCOMPARE(git(main, {"log", "--all", "--format=%s"}).trimmed(), QString("Start"));
+  QVERIFY(git(task.path, {"status", "--porcelain"}).contains(" M login.ts"));
 }
 
 void TestSandbox::secretsInEnvironmentStayOut() {

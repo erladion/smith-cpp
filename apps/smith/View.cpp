@@ -106,6 +106,10 @@ Line statusLine(const Status& status, int width) {
     parts << (status.queueing ? "esc to interrupt · enter queues" : "esc to interrupt");
   }
   Line line;
+  if (!status.worktreeBranch.isEmpty()) {
+    line.append(Span{"⎇ " + status.worktreeBranch, fg(Color::Yellow)});
+    line.append(Span{" · ", DIM});
+  }
   if (!status.sandboxActive) {
     line.append(Span{"unsandboxed · ", fg(Color::Red)});
   }

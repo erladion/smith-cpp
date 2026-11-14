@@ -562,18 +562,22 @@ bool Agent::compact(const CancelPtr& cancel, const QString& reason) {
   return true;
 }
 
-QString Agent::summarize(const Messages& messages, int maxChars, const CancelPtr& cancel) {
+QString Agent::complete(const QString& instructions, const QString& input, const CancelPtr& cancel) {
   const QString level = reasoning();
-  // A summary doesn't need deep thought; keep it quick unless the user opted out of reasoning settings.
+  // These don't need deep thought; keep them quick unless the user opted out of reasoning settings.
   QJsonObject body = requestBase(level == "default" || level == "off" ? level : QString("low"));
   body["messages"] = QJsonArray{
-      QJsonObject{{"role", "system"}, {"content", SUMMARY_INSTRUCTIONS}},
-      QJsonObject{{"role", "user"}, {"content", "Conversation to summarize:\n\n" + renderTranscript(messages, maxChars)}},
+      QJsonObject{{"role", "system"}, {"content", instructions}},
+      QJsonObject{{"role", "user"}, {"content", input}},
   };
   const ServerPtr target = server();
   const QJsonObject response = Http::postJson(target->url("/chat/completions"), target->apiKey(), body, cancel);
   const QString content = response.value("choices").toArray().at(0).toObject().value("message").toObject().value("content").toString();
-  const QString summary = stripThinkTags(content);
+  return stripThinkTags(content);
+}
+
+QString Agent::summarize(const Messages& messages, int maxChars, const CancelPtr& cancel) {
+  const QString summary = complete(SUMMARY_INSTRUCTIONS, "Conversation to summarize:\n\n" + renderTranscript(messages, maxChars), cancel);
   if (summary.isEmpty()) {
     throw SmithError("The model returned an empty summary; the conversation was not compacted.");
   }

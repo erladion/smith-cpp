@@ -7,6 +7,9 @@
 
 namespace Smith::Desktop {
 
+// A diff as rows for DiffView: [{kind, text, number, count}].
+QVariantList diffRows(const Diff& diff);
+
 // The conversation as the desktop app shows it: the same entries the TUI
 // prints, plus streamed text that is still arriving ("live").
 class TranscriptModel : public QAbstractListModel {

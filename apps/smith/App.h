@@ -26,6 +26,7 @@ namespace Smith::Ui {
 
 class ConnectionCommands;
 class SessionCommands;
+class WorktreeCommands;
 
 // How the session on screen started, for the banner's greeting.
 struct Start {
@@ -65,11 +66,17 @@ public:
   // Shows a picker; `onPick` gets the value of the item chosen (not called on esc).
   void openPicker(std::unique_ptr<Tui::Picker> picker, std::function<void(const QString&)> onPick,
                   std::function<void(const QString&)> onAction = {});
+  // Asks for a line of text in the input box, starting from `initial`; `onSubmit`
+  // gets it on enter. esc cancels, and the input box gets back what was in it.
+  void promptText(const QString& title, const QString& initial, std::function<void(const QString&)> onSubmit);
   // Shows a spinner while `work` runs on a worker thread. It returns what to
   // do next on the UI thread; an exception is printed instead.
   void withActivity(const QString& activity, std::function<std::function<void()>()> work);
   // Fetches the server's model list again, for completing /model.
   void refreshModels();
+  // Lists the repository's task worktrees again, for completing /land and /drop.
+  void refreshTasks();
+  SessionCommands& sessions() { return *m_pSessions; }
 
 Q_SIGNALS:
   void finished();
@@ -95,6 +102,13 @@ private:
     std::unique_ptr<Tui::Picker> picker;
     std::function<void(const QString&)> onPick;
     std::function<void(const QString&)> onAction;
+  };
+
+  struct TextPrompt {
+    QString title;
+    std::function<void(const QString&)> onSubmit;
+    // What was in the input box, put back afterwards.
+    QString stashed;
   };
 
   struct TurnInfo {
@@ -158,12 +172,14 @@ private:
   SuggestionList m_suggestions;
   std::unique_ptr<ConnectionCommands> m_pConnection;
   std::unique_ptr<SessionCommands> m_pSessions;
+  std::unique_ptr<WorktreeCommands> m_pWorktrees;
 
   std::optional<Live> m_live;
   QString m_activity;
   std::optional<PendingApproval> m_approval;
   std::optional<OpenPicker> m_picker;
   std::optional<PendingQuestion> m_question;
+  std::optional<TextPrompt> m_textPrompt;
   bool m_busy = false;
   CancelPtr m_pCancel;
   std::optional<qint64> m_tokens;

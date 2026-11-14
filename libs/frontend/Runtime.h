@@ -93,6 +93,10 @@ private:
     QList<Skill> skills;
     ToolList tools;
     QStringList warnings;
+    // For a linked worktree: its root, its branch, and the main repository's .git it uses.
+    QString worktreeRoot;
+    QString worktreeBranch;
+    QString gitCommonDir;
   };
 
   Runtime() = default;

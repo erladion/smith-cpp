@@ -7,6 +7,7 @@
 #include "core/Reasoning.h"
 #include "core/Toolchain.h"
 #include "core/tools/Tools.h"
+#include "frontend/Worktrees.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -223,6 +224,7 @@ std::shared_ptr<Runtime> Runtime::start(const LaunchOptions& options) {
 
   runtime->m_project = runtime->loadProject(cwd);
   runtime->m_pSandbox->setReadOnlyPaths(visibleFolders(runtime->m_project));
+  markWorktreeOpen(runtime->m_project.worktreeRoot);
   runtime->m_warnings = config.warnings + runtime->m_pSandbox->warnings() + runtime->m_project.warnings;
 
   runtime->m_pSession = resumed ? resumed->session : Session::create(cwd, model, runtime->m_pServer->name());
@@ -255,6 +257,10 @@ void Runtime::shutdown() {
     return;
   }
   m_shutDown = true;
+  {
+    QMutexLocker lock(&m_mutex);
+    clearWorktreeOpen(m_project.worktreeRoot);
+  }
   if (m_pJobs) {
     m_pJobs->stopAll();
   }
@@ -283,6 +289,7 @@ ProjectView Runtime::project() const {
   view.skills = m_project.skills;
   view.tools = m_project.tools;
   view.warnings = m_project.warnings;
+  view.worktreeBranch = m_project.worktreeBranch;
   return view;
 }
 
@@ -298,6 +305,14 @@ Runtime::Project Runtime::loadProject(const QString& cwd) const {
   if (!project.skills.isEmpty()) {
     project.tools.append(skillTool(project.skills));
   }
+  if (const std::optional<GitDirs> dirs = repo.isEmpty() ? std::nullopt : gitDirs(repo); dirs && dirs->linked) {
+    project.worktreeRoot = repo;
+    project.worktreeBranch = currentBranch(repo);
+    if (project.worktreeBranch.isEmpty()) {
+      project.worktreeBranch = "a detached HEAD";
+    }
+    project.gitCommonDir = dirs->commonDir;
+  }
   return project;
 }
 
@@ -305,6 +320,11 @@ QStringList Runtime::visibleFolders(const Project& project) {
   QStringList folders;
   for (const Skill& skill : project.skills) {
     folders << skill.dir;
+  }
+  // A worktree's git data is in the main repository's .git: shown read-only,
+  // so git works in the sandbox but can't commit.
+  if (!project.gitCommonDir.isEmpty()) {
+    folders << project.gitCommonDir;
   }
   const QString repo = findRepoRoot(project.cwd);
   if (!repo.isEmpty() && repo != project.cwd) {
@@ -325,6 +345,7 @@ std::shared_ptr<Agent> Runtime::createAgent(const AgentHooks& hooks, const std::
   extras.fastTools = fastTools();
   extras.canAsk = bool(hooks.ask);
   extras.sandbox = m_pSandbox->promptNotes(project.cwd);
+  extras.worktreeBranch = project.worktreeBranch;
   PromptExtras subagentExtras;
   subagentExtras.instructions = project.instructions;
   subagentExtras.skills = project.skills;
@@ -364,10 +385,16 @@ ProjectView Runtime::switchProject(const QString& folder) {
   const QString dir = resolveFolder(folder, projectCwd());
   Project next = loadProject(dir);
   m_pSandbox->setReadOnlyPaths(visibleFolders(next));
+  QString left;
   {
     QMutexLocker lock(&m_mutex);
+    left = m_project.worktreeRoot;
     m_project = next;
   }
+  if (left != next.worktreeRoot) {
+    clearWorktreeOpen(left);
+  }
+  markWorktreeOpen(next.worktreeRoot);
   return project();
 }
 

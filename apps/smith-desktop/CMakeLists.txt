@@ -24,6 +24,7 @@ set(SMITH_DESKTOP_QML
   qml/BannerCard.qml
   qml/Composer.qml
   qml/DiffView.qml
+  qml/LandPanel.qml
   qml/Picker.qml
   qml/QuestionPanel.qml
   qml/Sidebar.qml
@@ -35,6 +36,7 @@ set(SMITH_DESKTOP_QML
   qml/ToolCard.qml
   qml/TopBar.qml
   qml/TranscriptView.qml
+  qml/WorktreeList.qml
 )
 # The files sit at the module's root, next to its qmldir, so they see each other and the Theme singleton.
 foreach(file ${SMITH_DESKTOP_QML})

@@ -20,7 +20,7 @@ namespace Smith::Ui {
 
 SessionCommands::SessionCommands(App& app, ConnectionCommands& connection) : m_app(app), m_connection(connection) {}
 
-void SessionCommands::newSession(const QString& folder) {
+void SessionCommands::newSession(const QString& folder, const QList<Entry>& extra) {
   const QString previous = m_app.opts().sessions.currentId();
   QList<Entry> notes;
   if (!folder.isEmpty()) {
@@ -36,7 +36,20 @@ void SessionCommands::newSession(const QString& folder) {
   const QString where = folder.isEmpty() ? QString() : " in " + tildify(m_app.project().cwd);
   notes.prepend(Entry::notice(NoticeLevel::Info,
                               QString("Started a new session%1. The previous one is %2; /sessions lists this folder's sessions.").arg(where, previous)));
-  m_app.startOver(Start{}, notes);
+  m_app.startOver(Start{}, notes + extra);
+}
+
+void SessionCommands::resumeIn(const QString& folder, const QList<Entry>& extra) {
+  for (const SessionInfo& session : m_app.opts().sessions.list(true)) {
+    if (session.cwd == folder) {
+      if (session.id == m_app.opts().sessions.currentId()) {
+        return;
+      }
+      switchSession(session.id, folder, extra);
+      return;
+    }
+  }
+  newSession(folder, extra);
 }
 
 std::optional<QList<Entry>> SessionCommands::enterProject(const QString& folder) {
@@ -186,7 +199,7 @@ void SessionCommands::deleteSession(const QString& id, bool everywhere, const QS
   openSessionPicker(everywhere);
 }
 
-void SessionCommands::switchSession(const QString& id, const QString& folder) {
+void SessionCommands::switchSession(const QString& id, const QString& folder, const QList<Entry>& extra) {
   QList<Entry> notes;
   if (!folder.isEmpty() && folder != m_app.project().cwd) {
     if (!pathExists(folder)) {
@@ -208,7 +221,7 @@ void SessionCommands::switchSession(const QString& id, const QString& folder) {
     return;
   }
   m_app.agent()->loadConversation(opened.messages);
-  m_app.startOver(Start{true, opened.lastUsed}, notes + historyToEntries(opened.messages, m_app.project().tools));
+  m_app.startOver(Start{true, opened.lastUsed}, notes + extra + historyToEntries(opened.messages, m_app.project().tools));
 
   // Continue on the endpoint and model the session last used, when they're available.
   bool configured = false;

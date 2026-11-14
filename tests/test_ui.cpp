@@ -506,7 +506,7 @@ void TestUi::longPathsKeepTheirEnd() {
 namespace {
 
 CompletionContext completion(const QString& cwd = QDir::tempPath()) {
-  return CompletionContext{cwd, {"local", "gpu-box"}, {"qwen3-coder-30b", "gpt-oss-20b"}};
+  return CompletionContext{cwd, {"local", "gpu-box"}, {"qwen3-coder-30b", "gpt-oss-20b"}, {"fix-login", "add-export"}};
 }
 
 QStringList texts(const QString& input, const CompletionContext& ctx = completion()) {
@@ -535,6 +535,10 @@ void TestUi::argumentsComplete() {
   QCOMPARE(texts("/endpoint g"), QStringList({"/endpoint gpu-box"}));
   QCOMPARE(texts("/model oss"), QStringList({"/model gpt-oss-20b"}));
   QVERIFY2(texts("/help ").isEmpty(), "no arguments to complete");
+  QCOMPARE(texts("/land "), QStringList({"/land fix-login", "/land add-export"}));
+  QCOMPARE(texts("/drop a"), QStringList({"/drop add-export"}));
+  QCOMPARE(texts("/worktree f"), QStringList({"/worktree fix-login"}));
+  QCOMPARE(texts("/worktree"), QStringList({"/worktree", "/worktrees"}));
 }
 
 void TestUi::newCompletesFolders() {
@@ -631,6 +635,12 @@ void TestUi::statusLineHasCodeStream() {
   QVERIFY(plainLine(withStream).endsWith(QString(24, QChar(0xFF71))));
   QVERIFY2(plainLine(Ui::statusLine(streamed, 40)) == plainLine(Ui::statusLine(status, 40)), "no room, no stream");
   QVERIFY(lineWidth(Ui::statusLine(status, 80)) < 80);
+
+  // In a task worktree, its branch comes first, so it's never cut off.
+  Ui::Status inWorktree = status;
+  inWorktree.worktreeBranch = "smith/fix-login";
+  QVERIFY(plainLine(Ui::statusLine(inWorktree, 30)).startsWith("⎇ smith/fix-login · "));
+  QVERIFY(!plainLine(Ui::statusLine(status, 80)).contains("⎇"));
 }
 
 void TestUi::checklistShowsProgress() {

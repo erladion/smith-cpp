@@ -45,6 +45,8 @@ struct ProjectView {
   ToolList tools;
   // Problems found while loading (e.g. a skill without a description).
   QStringList warnings;
+  // The branch, when the folder is a task worktree (or any linked worktree).
+  QString worktreeBranch;
 };
 
 struct OpenedSession {

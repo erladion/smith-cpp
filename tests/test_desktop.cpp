@@ -6,6 +6,7 @@
 #include "FakeServer.h"
 #include "TestUtil.h"
 
+#include "core/Dirs.h"
 #include "core/Sandbox.h"
 #include "Backend.h"
 
@@ -52,6 +53,7 @@ private Q_SLOTS:
   void runsAWholeTurn();
   void asksAQuestion();
   void switchesSessions();
+  void landsATaskWorktree();
 
 private:
   void shot(const QString& name);
@@ -230,6 +232,64 @@ void TestDesktop::switchesSessions() {
   // The resumed conversation is replayed: its messages, tools and answers.
   QVERIFY(m_pBackend->transcript()->rowCount() > 10);
   QVERIFY2(g_qmlWarnings.isEmpty(), qPrintable(g_qmlWarnings.join('\n')));
+}
+
+void TestDesktop::landsATaskWorktree() {
+  if (!m_pBackend->sandboxActive()) {
+    QSKIP("task worktrees need the sandbox, and bwrap can't run here");
+  }
+  IsolatedGit isolated;
+  const QString repo = m_pHome->file("hello-app");
+  git(repo, {"init", "-q", "-b", "main"});
+  git(repo, {"add", "-A"});
+  git(repo, {"commit", "-q", "-m", "Start"});
+  // Your own work in progress, which landing must leave alone.
+  write(repo + "/NOTES.md", "my own work\n");
+  m_pBackend->refreshWorktrees();
+  QTRY_VERIFY(m_pBackend->inRepository());
+
+  m_pBackend->createWorktree("shout");
+  QTRY_COMPARE_WITH_TIMEOUT(m_pBackend->worktreeBranch(), QString("smith/shout"), 15000);
+  const QString path = realPath(m_pHome->file("hello-app-worktrees/shout"));
+  QCOMPARE(realPath(m_pBackend->projectPath()), path);
+  QTRY_COMPARE(m_pBackend->worktrees().size(), 2);
+  QVERIFY(m_pBackend->worktrees().at(1).toMap().value("current").toBool());
+
+  // The agent's work, as its edits leave it.
+  write(path + "/greet.py", TestUtil::read(path + "/greet.py").replace("Hello", "HELLO"));
+  m_pBackend->refreshWorktrees();
+  QTRY_VERIFY(m_pBackend->worktrees().value(1).toMap().value("summary").toString().startsWith("1 file changed"));
+  shot("09-worktree");
+
+  m_pFake->setScript({FakeServer::plain("Shout the greeting")});
+  m_pBackend->reviewLanding(path);
+  QTRY_COMPARE_WITH_TIMEOUT(m_pBackend->landing().value("stage").toString(), QString("review"), 15000);
+  QCOMPARE(m_pBackend->landing().value("files").toList().size(), 1);
+  QCOMPARE(m_pBackend->landing().value("target").toString(), QString("main"));
+  QObject* panel = root()->findChild<QObject*>("landPanel");
+  QObject* message = root()->findChild<QObject*>("commitMessage");
+  QVERIFY(panel && message);
+  QTRY_VERIFY(panel->property("visible").toBool());
+  QCOMPARE(message->property("text").toString(), QString("Shout the greeting"));
+  shot("10-land-review");
+
+  QMetaObject::invokeMethod(root()->findChild<QObject*>("cherryPick"), "clicked");
+  QTRY_COMPARE_WITH_TIMEOUT(m_pBackend->landing().value("stage").toString(), QString("landed"), 15000);
+  QCOMPARE(git(repo, {"log", "-1", "--format=%s"}).trimmed(), QString("Shout the greeting"));
+  QVERIFY(TestUtil::read(repo + "/greet.py").contains("HELLO"));
+  QCOMPARE(TestUtil::read(repo + "/NOTES.md"), QString("my own work\n"));
+  shot("11-landed");
+
+  QMetaObject::invokeMethod(root()->findChild<QObject*>("removeWorktree"), "clicked");
+  QTRY_VERIFY_WITH_TIMEOUT(!exists(path), 15000);
+  QCOMPARE(realPath(m_pBackend->projectPath()), realPath(repo));
+  QVERIFY(m_pBackend->worktreeBranch().isEmpty());
+  QTRY_COMPARE(m_pBackend->worktrees().size(), 1);
+  QVERIFY(m_pBackend->landing().isEmpty());
+  QTRY_VERIFY(!panel->property("visible").toBool());
+  QVERIFY(git(repo, {"branch", "--list", "smith/shout"}).trimmed().isEmpty());
+  QVERIFY2(g_qmlWarnings.isEmpty(), qPrintable(g_qmlWarnings.join('\n')));
+  shot("12-removed");
 }
 
 #endif

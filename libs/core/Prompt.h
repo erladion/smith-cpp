@@ -19,6 +19,8 @@ struct PromptExtras {
   bool canAsk = false;
   // Where commands run and what they can reach, from the sandbox.
   QStringList sandbox;
+  // The branch, when the working directory is a task worktree.
+  QString worktreeBranch;
 };
 
 QString buildSystemPrompt(const QString& cwd, const PromptExtras& extras = {});

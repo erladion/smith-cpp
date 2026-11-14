@@ -26,8 +26,8 @@ ctest --test-dir build
 ```
 
 The tests are a port of the original TypeScript suite, one QtTest suite per original file
-(`units`, `tools`, `sandbox`, `features`, `agent`, `ui`), plus `desktop` for the desktop
-app. Each original case keeps its name
+(`units`, `tools`, `sandbox`, `features`, `agent`, `ui`), plus `worktrees` for task
+worktrees and `desktop` for the desktop app. Each original case keeps its name
 and assertions. The agent tests run the real loop against a scripted fake server
 (`tests/FakeServer.h`), and the sandbox tests run real commands through bubblewrap. Tests
 that need something missing here skip themselves: bwrap, ripgrep, or docker with the ubi9
@@ -65,9 +65,9 @@ in one and continued in the other.
   cards with diffs or their output, and the checklist with its progress.
 - **Approvals and questions** replace the input box while they wait. y / a / n / esc answer
   an approval, as in the terminal.
-- **The sidebar** holds the project (open a folder, or a recent one) and its sessions: switch,
-  start a new one, rename the current one (double-click), delete others; "all" lists every
-  folder's.
+- **The sidebar** holds the project (open a folder, or a recent one), its task worktrees (see
+  below) and its sessions: switch, start a new one, rename the current one (double-click),
+  delete others; "all" lists every folder's.
 - **The top bar** picks the endpoint, model and reasoning level, switches the sandbox's
   network, and has undo and compact. The status bar shows the sandbox, how full the context
   is, and background jobs.
@@ -81,6 +81,43 @@ monospace, with a digital-rain splash that settles into "AGENT SMITH" and Agent 
 greetings; `plain` is a neutral dark theme. The `desktop` test loads the QML offscreen and
 runs a whole turn through it; with `SMITH_SHOTS_DIR=<dir>` it saves screenshots of each step
 (`SMITH_TEST_THEME=plain` for the other theme).
+
+## Task worktrees
+
+Let the agent work on one task while you work on another, in the same repository, without
+it being able to commit.
+
+```
+› /worktree fix-login
+  Made a worktree for the task: ~/git/shop-worktrees/fix-login, on smith/fix-login (from main @ 4e1c2a9).
+› The login form accepts an empty password when SSO is off. Fix it, with a test.
+  …
+› /land
+```
+
+- `/worktree <task>` makes a git worktree beside the repository (`<repo>-worktrees/<task>`) on a
+  `smith/<task>` branch from what you have checked out, and switches to it with a new session.
+  You keep working in your own checkout. The status line shows `⎇ smith/<task>` while you're in
+  one, and the agent's system prompt tells it to leave its changes uncommitted.
+- **The agent can't commit.** The sandbox shows the repository's `.git` read-only, so `git
+  status`, `diff` and `log` work but `commit`, `add` and `stash` fail; the file tools can't write
+  in `.git` either. That's why `/worktree` needs the sandbox (it refuses with `--sandbox off`).
+- `/land` (in the worktree, or `/land <task>` from anywhere) shows what changed, asks how to land
+  it (cherry-pick onto your branch, merge, or commit on the task branch only; "Show the diff"
+  shows each file's diff first), then for a commit message, prefilled with one the model
+  suggests. Smith makes the commit for you, as you. Landing never touches your uncommitted
+  work: if it would conflict with your branch or your changes, nothing changes in your checkout
+  and you're told which files clash; the commit stays on the task branch. Afterwards it offers to
+  remove the worktree and its branch.
+- `/worktrees` lists them, with what each has changed and whether another Smith has it open:
+  switch to one, land it or drop it. `/drop [task]` removes one, discarding what isn't landed
+  (it asks first).
+- In the desktop app the sidebar's Worktrees section does the same: "+ task", click to switch,
+  and land / drop on hover. Landing opens a panel with the diffs, the message and the choices.
+
+A new worktree only has tracked files: ignored ones (`node_modules`, `.env`, build folders) aren't
+there, so the agent may need to install or build first. Task worktrees are new in this port; the
+TypeScript version doesn't have them.
 
 ## Layout
 
@@ -105,7 +142,7 @@ libs/tui/                 terminal toolkit: raw mode and signals, inline rendere
 libs/frontend/            what both apps share: Runtime (server, model, sandbox, project,
                           session and agents from the flags and config), the frontend hooks,
                           transcript entries and session replay, commands and completion,
-                          greetings, spinner frames, durations
+                          task worktrees (git), greetings, spinner frames, durations
 apps/smith/               the terminal app: App (screen, keys, turns), session commands,
                           endpoint/model switching, entry rendering, status line; main.cpp
                           has the flags and the headless (-p) mode

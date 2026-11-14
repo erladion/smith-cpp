@@ -29,6 +29,8 @@ public:
 
   // Model ids the server listed, for completing /model.
   QStringList models;
+  // The repository's task worktrees, for completing /land and /drop.
+  QStringList tasks;
 
 private:
   int m_index = 0;

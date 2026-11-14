@@ -73,13 +73,18 @@ QString buildSystemPrompt(const QString& cwd, const PromptExtras& extras) {
   const QString ask = extras.canAsk ? "\n- If the request is ambiguous or needs a decision only the user can make, ask with ask_user rather than guessing. "
                                       "Don't ask about what you can find out yourself."
                                     : "\n- Nobody can answer questions during this run: make reasonable assumptions, and say what you assumed.";
+  const QString worktree = extras.worktreeBranch.isEmpty()
+                               ? QString()
+                               : QString("\n- Git: this is a worktree made for this task, on the branch %1. Leave your changes uncommitted: the user "
+                                         "reviews them and lands them on their own branch.")
+                                     .arg(extras.worktreeBranch);
   return QString(
              "You are a coding agent working in the user's terminal. You help with software tasks in the working directory by reading files, "
              "editing files, and running shell commands.\n"
              "\n"
              "Environment:\n"
              "- Working directory: %1\n"
-             "- Platform: %2\n"
+             "- Platform: %2%5\n"
              "\n"
              "How to work:\n"
              "- Use the tools to look at the actual code before answering questions about it or changing it.\n"
@@ -105,7 +110,7 @@ QString buildSystemPrompt(const QString& cwd, const PromptExtras& extras) {
              "adjust your plan.\n"
              "- When the task is done, reply with a short summary of what you did. The terminal renders basic Markdown (bold, italics, inline "
              "code, lists, headings, fenced code blocks) but not tables or images.")
-             .arg(cwd, platform(), fastToolsLine(extras.fastTools), ask) +
+             .arg(cwd, platform(), fastToolsLine(extras.fastTools), ask, worktree) +
          sandboxSection(extras.sandbox) + contextSections(extras);
 }
 

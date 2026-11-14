@@ -41,6 +41,18 @@ Rectangle {
         spacing: 14
 
         Text {
+            visible: Backend.worktreeBranch.length > 0
+            text: "⎇ " + Backend.worktreeBranch
+            color: Theme.warn
+            font.family: Theme.mono
+            font.pixelSize: Theme.tinySize
+            font.bold: true
+            ToolTip.visible: branchHover.hovered
+            ToolTip.text: "A task worktree: the agent's changes stay on this branch until you land them"
+            HoverHandler { id: branchHover }
+        }
+
+        Text {
             text: Backend.sandboxActive ? "◉ " + (Backend.sandboxKind === "container" ? "container" : "sandbox") + " · net " + (Backend.network ? "on" : "off")
                                         : "⚠ unsandboxed"
             color: Backend.sandboxActive ? Theme.added : Theme.error
