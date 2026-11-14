@@ -86,6 +86,71 @@ target_compile_options(smithcore PUBLIC -Wall -Wextra -Wno-unused-parameter -Wno
 add_executable(smith src/main.cpp)
 target_link_libraries(smith PRIVATE smithcore)
 
+# The desktop app (QML), when Qt Quick is installed.
+option(SMITH_BUILD_DESKTOP "Build smith-desktop, the QML desktop app" ON)
+if(SMITH_BUILD_DESKTOP)
+  find_package(Qt6 6.5 COMPONENTS Gui Qml Quick QuickControls2)
+  if(NOT Qt6Quick_FOUND OR NOT Qt6QuickControls2_FOUND)
+    message(STATUS "Qt Quick not found: smith-desktop is not built")
+    set(SMITH_BUILD_DESKTOP OFF)
+  endif()
+endif()
+if(SMITH_BUILD_DESKTOP)
+  qt_standard_project_setup(REQUIRES 6.5)
+  add_library(smithdesktop STATIC
+    src/desktop/Backend.cpp
+    src/desktop/MarkdownHtml.cpp
+    src/desktop/Palette.cpp
+    src/desktop/RainItem.cpp
+    src/desktop/TranscriptModel.cpp
+    src/desktop/Backend.h
+    src/desktop/MarkdownHtml.h
+    src/desktop/Palette.h
+    src/desktop/RainItem.h
+    src/desktop/TranscriptModel.h
+  )
+  target_link_libraries(smithdesktop PUBLIC smithcore Qt6::Gui Qt6::Qml Qt6::Quick)
+  # The generated QML type registrations include the headers by file name.
+  target_include_directories(smithdesktop PRIVATE src/desktop)
+  set(SMITH_DESKTOP_QML
+    src/desktop/qml/Main.qml
+    src/desktop/qml/Theme.qml
+    src/desktop/qml/ActivityBar.qml
+    src/desktop/qml/ApprovalPanel.qml
+    src/desktop/qml/BannerCard.qml
+    src/desktop/qml/Composer.qml
+    src/desktop/qml/DiffView.qml
+    src/desktop/qml/Picker.qml
+    src/desktop/qml/QuestionPanel.qml
+    src/desktop/qml/Sidebar.qml
+    src/desktop/qml/SmithButton.qml
+    src/desktop/qml/Spinner.qml
+    src/desktop/qml/Splash.qml
+    src/desktop/qml/StatusBar.qml
+    src/desktop/qml/TodoCard.qml
+    src/desktop/qml/ToolCard.qml
+    src/desktop/qml/TopBar.qml
+    src/desktop/qml/TranscriptView.qml
+  )
+  # The files sit at the module's root, next to its qmldir, so they see each other and the Theme singleton.
+  foreach(file ${SMITH_DESKTOP_QML})
+    get_filename_component(name ${file} NAME)
+    set_source_files_properties(${file} PROPERTIES QT_RESOURCE_ALIAS ${name})
+  endforeach()
+  set_source_files_properties(src/desktop/qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+  set_source_files_properties(src/desktop/icons/smith.svg PROPERTIES QT_RESOURCE_ALIAS icons/smith.svg)
+  qt_add_qml_module(smithdesktop
+    URI Smith.Desktop
+    VERSION 1.0
+    QML_FILES ${SMITH_DESKTOP_QML}
+    RESOURCES src/desktop/icons/smith.svg
+  )
+
+  qt_add_executable(smith-desktop src/desktop/main.cpp)
+  target_link_libraries(smith-desktop PRIVATE smithdesktop smithdesktopplugin Qt6::QuickControls2)
+  install(TARGETS smith-desktop RUNTIME DESTINATION bin)
+endif()
+
 option(SMITH_BUILD_TESTS "Build the unit tests" ON)
 if(SMITH_BUILD_TESTS)
   find_package(Qt6 REQUIRED COMPONENTS Test)
@@ -101,6 +166,13 @@ if(SMITH_BUILD_TESTS)
     add_dependencies(test_${name} smith)
     add_test(NAME ${name} COMMAND test_${name})
   endforeach()
+  if(SMITH_BUILD_DESKTOP)
+    # The desktop app's QML against the fake server, offscreen.
+    add_executable(test_desktop tests/test_desktop.cpp tests/TestUtil.h tests/FakeServer.h)
+    target_link_libraries(test_desktop PRIVATE smithdesktop smithdesktopplugin Qt6::QuickControls2 Qt6::Test)
+    target_include_directories(test_desktop PRIVATE src)
+    add_test(NAME desktop COMMAND test_desktop)
+  endif()
 endif()
 
 install(TARGETS smith RUNTIME DESTINATION bin)

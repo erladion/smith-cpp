@@ -11,23 +11,26 @@ commands and security apply unchanged. Both versions read and write the same
 
 ## Building
 
-Needs CMake 3.21+, a C++20 compiler and Qt 6.5+ (Core, Network; Test for the tests).
+Needs CMake 3.21+, a C++20 compiler and Qt 6.5+ (Core, Network; Test for the tests;
+Quick and Quick Controls 2 for the desktop app, which is skipped when they're missing).
 
 ```sh
 cmake -S . -B build -G Ninja -DCMAKE_PREFIX_PATH=~/Qt/6.11.2/gcc_64
 cmake --build build
 ctest --test-dir build
 ./build/smith --help
+./build/smith-desktop       # the desktop app
 ```
 
 The tests are a port of the original TypeScript suite, one QtTest suite per original file
-(`units`, `tools`, `sandbox`, `features`, `agent`, `ui`). Each original case keeps its name
+(`units`, `tools`, `sandbox`, `features`, `agent`, `ui`), plus `desktop` for the desktop
+app. Each original case keeps its name
 and assertions. The agent tests run the real loop against a scripted fake server
 (`tests/FakeServer.h`), and the sandbox tests run real commands through bubblewrap. Tests
 that need something missing here skip themselves: bwrap, ripgrep, or docker with the ubi9
 images for the container tests.
 
-`-DSMITH_BUILD_TESTS=OFF` skips the tests. At run time it needs bash, and `bubblewrap` for
+`-DSMITH_BUILD_TESTS=OFF` skips the tests, `-DSMITH_BUILD_DESKTOP=OFF` the desktop app. At run time it needs bash, and `bubblewrap` for
 the default sandbox (`--sandbox off` runs without one); `ripgrep`, `fd` and `jq` are used when present.
 
 ## Trying it without a model
@@ -44,6 +47,35 @@ python3 scripts/fake_llm.py &                 # listens on 127.0.0.1:18090
 Ask it to "fix the greeting bug" in a folder with the `greet.py` shown at the top of
 the script: it plans with todos, reads the file, asks to edit it (with a diff), asks to run
 it, and answers in Markdown. "Set up a database" shows an `ask_user` question.
+
+## The desktop app
+
+`smith-desktop` is the same agent in a window, written in QML. It takes the same folder
+argument and flags as `smith` (`-e`, `--base-url`, `--model`, `--sandbox`, `-c`, `-r`, ...),
+and uses the same config, preferences, sessions and tool logs, so a session can be started
+in one and continued in the other.
+
+- **The conversation:** your messages, the answer rendered as Markdown (through the TUI's
+  renderer, so both read it the same way), reasoning folded under "thought", tool calls as
+  cards with diffs or their output, and the checklist with its progress.
+- **Approvals and questions** replace the input box while they wait. y / a / n / esc answer
+  an approval, as in the terminal.
+- **The sidebar** holds the project (open a folder, or a recent one) and its sessions: switch,
+  start a new one, rename the current one (double-click), delete others; "all" lists every
+  folder's.
+- **The top bar** picks the endpoint, model and reasoning level, switches the sandbox's
+  network, and has undo and compact. The status bar shows the sandbox, how full the context
+  is, and background jobs.
+- **Slash commands** work in the input box too, with the same completion as the TUI.
+- **Keys:** enter sends (while the agent works, it queues the message), shift+enter adds a line,
+  esc interrupts, ctrl+n new session, ctrl+o open a folder, ctrl+k pick a model, ctrl+b
+  hides the sidebar.
+
+The theme follows `"theme"` in the config: `matrix` (default) is green on near-black in
+monospace, with a digital-rain splash that settles into "AGENT SMITH" and Agent Smith's
+greetings; `plain` is a neutral dark theme. The `desktop` test loads the QML offscreen and
+runs a whole turn through it; with `SMITH_SHOTS_DIR=<dir>` it saves screenshots of each step
+(`SMITH_TEST_THEME=plain` for the other theme).
 
 ## Layout
 
@@ -66,7 +98,11 @@ src/tui/                  terminal toolkit: raw mode and signals, inline rendere
                           line editor, Markdown, pickers, digital rain. Doesn't include src/core.
 src/ui/                   the agent's TUI: App (screen, keys, turns), commands, sessions,
                           endpoint/model switching, transcript entries, status line
-src/main.cpp              flags, server and model selection, TUI or headless (-p) mode
+src/app/                  what every frontend shares: Runtime (server, model, sandbox, project,
+                          session and agents from the flags and config) and the frontend hooks
+src/desktop/              the desktop app: Backend (the QML-facing controller), the transcript
+                          model, palette, Markdown to rich text, the rain item, qml/
+src/main.cpp              flags, the TUI or headless (-p) mode
 tests/                    QtTest suites; FakeServer.h is a scripted streaming server
 ```
 
