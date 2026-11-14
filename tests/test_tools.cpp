@@ -361,24 +361,26 @@ QStringList includeOffenders(const QString& folder, const QStringList& prefixes,
 
 void TestTools::tuiIncludesOnlyItself() {
   // libs/tui is a general terminal toolkit: it must not know about the agent or the apps.
+  // libs/compat (Qt 5/6 shims) sits below every library.
   int files = 0;
-  const QStringList offenders = includeOffenders("libs/tui", {"tui/"}, false, files);
+  const QStringList offenders = includeOffenders("libs/tui", {"tui/", "compat/"}, false, files);
   QVERIFY(files > 0);
-  QVERIFY2(offenders.isEmpty(), qPrintable("libs/tui must include only itself: " + offenders.join(", ")));
+  QVERIFY2(offenders.isEmpty(), qPrintable("libs/tui must include only itself and compat: " + offenders.join(", ")));
 }
 
 void TestTools::librariesDontIncludeApps() {
   // The agent knows no frontend; what the apps share knows the agent, not the apps.
   int files = 0;
-  QStringList offenders = includeOffenders("libs/core", {"core/"}, false, files);
-  offenders << includeOffenders("libs/frontend", {"core/", "frontend/"}, false, files);
+  QStringList offenders = includeOffenders("libs/core", {"core/", "compat/"}, false, files);
+  offenders << includeOffenders("libs/frontend", {"core/", "frontend/", "compat/"}, false, files);
+  offenders << includeOffenders("libs/compat", {"compat/"}, false, files);
   QVERIFY(files > 0);
   QVERIFY2(offenders.isEmpty(), qPrintable("libs/ must not include the apps: " + offenders.join(", ")));
 }
 
 void TestTools::appsDontIncludeEachOther() {
   // Each app is built from the libraries and its own files only.
-  const QStringList libraries = {"core/", "tui/", "frontend/"};
+  const QStringList libraries = {"core/", "tui/", "frontend/", "compat/"};
   int files = 0;
   QStringList offenders = includeOffenders("apps/smith", libraries, true, files);
   offenders << includeOffenders("apps/smith-desktop", libraries, true, files);

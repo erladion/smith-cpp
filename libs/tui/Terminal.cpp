@@ -122,7 +122,7 @@ void Terminal::onStdin() {
     }
     return;
   }
-  const QString text = m_decoder.decode(QByteArrayView(buffer, n));
+  const QString text = m_decoder.decode(buffer, n);
   if (!text.isEmpty()) {
     Q_EMIT input(text);
   }

@@ -1,11 +1,11 @@
 #include "core/Jobs.h"
 
 #include "core/Errors.h"
+#include "core/SessionProcess.h"
+#include "compat/Utf8Decoder.h"
 
 #include <QDeadlineTimer>
 #include <QMutexLocker>
-#include <QProcess>
-#include <QStringDecoder>
 
 #include <signal.h>
 
@@ -49,7 +49,7 @@ struct BackgroundJobs::Job {
   SpawnSpec spec;
   QProcess* process = nullptr;
   qint64 pid = 0;
-  QStringDecoder decoder{QStringDecoder::Utf8};
+  Utf8Decoder decoder;
   QString output;
   // Characters dropped from the start of `output` to keep it small.
   qint64 dropped = 0;
@@ -104,16 +104,14 @@ JobStatus BackgroundJobs::start(const QString& command, const SpawnSpec& spec, c
 }
 
 void BackgroundJobs::startOnThread(const std::shared_ptr<Job>& job, const QString& cwd) {
-  auto* process = new QProcess(m_pHome);
+  // Its own process group, so a stop ends everything it spawned.
+  auto* process = new SessionProcess(m_pHome);
   process->setProgram(job->spec.file);
   process->setArguments(job->spec.args);
   process->setProcessEnvironment(job->spec.env.isEmpty() ? QProcessEnvironment::systemEnvironment() : job->spec.env);
   process->setWorkingDirectory(job->spec.cwd.isEmpty() ? cwd : job->spec.cwd);
   process->setStandardInputFile(QProcess::nullDevice());
   process->setProcessChannelMode(QProcess::MergedChannels);
-  // Its own process group, so a stop ends everything it spawned.
-  process->setUnixProcessParameters(QProcess::UnixProcessFlag::CreateNewSession | QProcess::UnixProcessFlag::ResetSignalHandlers |
-                                    QProcess::UnixProcessFlag::IgnoreSigPipe);
   job->process = process;
 
   auto collect = [this, job](const QString& text) {
@@ -143,7 +141,7 @@ void BackgroundJobs::startOnThread(const std::shared_ptr<Job>& job, const QStrin
   QObject::connect(process, &QProcess::readyReadStandardOutput, process, [process, job, collect]() {
     collect(job->decoder.decode(process->readAllStandardOutput()));
   });
-  QObject::connect(process, &QProcess::finished, process, [process, job, collect, end](int code, QProcess::ExitStatus status) {
+  QObject::connect(process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), process, [process, job, collect, end](int code, QProcess::ExitStatus status) {
     collect(job->decoder.decode(process->readAllStandardOutput()));
     if (status == QProcess::CrashExit) {
       end(std::nullopt, signalName(code));

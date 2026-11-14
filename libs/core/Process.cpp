@@ -1,8 +1,9 @@
 #include "core/Process.h"
 
+#include "core/SessionProcess.h"
+
 #include <QElapsedTimer>
 #include <QFileInfo>
-#include <QProcess>
 #include <QStandardPaths>
 
 #include <signal.h>
@@ -21,7 +22,7 @@ QString which(const QString& name) {
 
 ProcessResult runProcess(const SpawnSpec& spec, const RunOptions& options) {
   ProcessResult result;
-  QProcess process;
+  SessionProcess process;
   process.setProgram(spec.file);
   process.setArguments(spec.args);
   process.setProcessEnvironment(spec.env.isEmpty() ? QProcessEnvironment::systemEnvironment() : spec.env);
@@ -33,11 +34,6 @@ ProcessResult runProcess(const SpawnSpec& spec, const RunOptions& options) {
   if (!options.input) {
     process.setStandardInputFile(QProcess::nullDevice());
   }
-  // Its own session and process group, so killing the group also stops
-  // anything it spawned (pipelines, dev servers, ...).
-  process.setUnixProcessParameters(QProcess::UnixProcessFlag::CreateNewSession | QProcess::UnixProcessFlag::ResetSignalHandlers |
-                                   QProcess::UnixProcessFlag::IgnoreSigPipe);
-
   process.start();
   if (!process.waitForStarted(30000)) {
     result.started = false;

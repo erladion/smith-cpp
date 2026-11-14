@@ -15,9 +15,22 @@ option(SMITH_BUILD_TUI "Build smith, the terminal app" ON)
 option(SMITH_BUILD_DESKTOP "Build smith-desktop, the QML desktop app" ON)
 option(SMITH_BUILD_TESTS "Build the tests" ON)
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Network)
+# Qt 6.6+, or Qt 5.15 for the terminal app. Qt 6 wins when both are found;
+# point CMAKE_PREFIX_PATH at one to pick it.
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core)
+if(QT_VERSION_MAJOR EQUAL 6)
+  set(SMITH_QT_MINIMUM 6.6)
+else()
+  set(SMITH_QT_MINIMUM 5.15)
+endif()
+find_package(Qt${QT_VERSION_MAJOR} ${SMITH_QT_MINIMUM} REQUIRED COMPONENTS Core Network)
+message(STATUS "Building against Qt ${Qt${QT_VERSION_MAJOR}Core_VERSION}")
 
-# The desktop app needs Qt Quick; without it, only the terminal app is built.
+# The desktop app needs Qt 6 and Qt Quick; without them, only the terminal app is built.
+if(SMITH_BUILD_DESKTOP AND QT_VERSION_MAJOR LESS 6)
+  message(STATUS "Qt 5: smith-desktop needs Qt 6 and is not built")
+  set(SMITH_BUILD_DESKTOP OFF)
+endif()
 if(SMITH_BUILD_DESKTOP)
   find_package(Qt6 6.6 COMPONENTS Gui Qml Quick QuickControls2)
   if(NOT Qt6Quick_FOUND OR NOT Qt6QuickControls2_FOUND)

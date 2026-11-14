@@ -366,7 +366,7 @@ void TestUnits::truncateLogKeepsErrorLines() {
 
 void TestUnits::promptSaysWhereCommandsRun() {
   PromptExtras extras;
-  extras.sandbox = {"Commands run in a test sandbox."};
+  extras.sandbox = QStringList{"Commands run in a test sandbox."};
   const QString prompt = buildSystemPrompt("/p", extras);
   QVERIFY_MATCH(prompt, "Where commands run:\\n- Commands run in a test sandbox\\.");
   QVERIFY_MATCH(prompt, "find out how this project does it");

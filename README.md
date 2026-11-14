@@ -13,6 +13,9 @@ commands and security apply unchanged. Both versions read and write the same
 
 Needs CMake 3.21+, a C++20 compiler and Qt 6.6+ (Core, Network; Test for the tests;
 Quick and Quick Controls 2 for the desktop app, which is skipped when they're missing).
+The terminal app also builds with Qt 5.15 (on Debian/Ubuntu, `qtbase5-dev`); the desktop
+app needs Qt 6. Qt 6 is used when both are found, so leave `CMAKE_PREFIX_PATH` out to build
+against a system Qt 5.
 
 ```sh
 cmake -S . -B build -G Ninja -DCMAKE_PREFIX_PATH=~/Qt/6.11.2/gcc_64
@@ -96,6 +99,7 @@ libs/core/                the agent, no UI. Agent.* is the loop: stream, run too
                           bash_output, bash_kill, skill, task, todo_write, ask_user
   ...                     think-tag parser, diff (Myers), undo checkpoints, run-later files,
                           glob, skills, AGENTS.md loading, system prompt
+libs/compat/              header-only shims over the Qt 5/6 differences, below every library
 libs/tui/                 terminal toolkit: raw mode and signals, inline renderer, keys, line
                           editor, Markdown, pickers, digital rain. Includes nothing else.
 libs/frontend/            what both apps share: Runtime (server, model, sandbox, project,

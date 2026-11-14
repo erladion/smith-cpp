@@ -1,8 +1,9 @@
 #pragma once
 
+#include "compat/Utf8Decoder.h"
+
 #include <QObject>
 #include <QSocketNotifier>
-#include <QStringDecoder>
 
 #include <memory>
 #include <termios.h>
@@ -46,7 +47,7 @@ private:
   termios m_saved{};
   std::unique_ptr<QSocketNotifier> m_pInput;
   std::unique_ptr<QSocketNotifier> m_pSignals;
-  QStringDecoder m_decoder{QStringDecoder::Utf8};
+  Utf8Decoder m_decoder;
 };
 
 } // namespace Smith::Tui

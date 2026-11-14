@@ -1,11 +1,11 @@
-find_package(Qt6 REQUIRED COMPONENTS Test)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Test)
 
 # One suite per file of the original TypeScript tests. They cover the libraries
 # and the terminal app (ui, and units runs the smith binary).
 if(SMITH_BUILD_TUI)
   foreach(name units tools sandbox features agent ui)
     add_executable(test_${name} test_${name}.cpp TestUtil.h FakeServer.h)
-    target_link_libraries(test_${name} PRIVATE smith_tui_app Qt6::Test)
+    target_link_libraries(test_${name} PRIVATE smith_tui_app Qt::Test)
     target_compile_definitions(test_${name} PRIVATE
       SMITH_BINARY="$<TARGET_FILE:smith>"
       SMITH_SOURCE_DIR="${PROJECT_SOURCE_DIR}"

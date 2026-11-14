@@ -12,4 +12,4 @@ add_library(smith_tui STATIC
   Terminal.cpp
   Text.cpp
 )
-target_link_libraries(smith_tui PUBLIC smith_settings Qt6::Core)
+target_link_libraries(smith_tui PUBLIC smith_settings Qt::Core)

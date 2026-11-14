@@ -40,8 +40,6 @@ constexpr int STRIP_ROWS = 3;
 // Spinner frames per step of the status line's code stream.
 constexpr int STREAM_EVERY = 4;
 
-const QString HELP = commandHelp();
-
 } // namespace
 
 App::App(TuiOptions options, QObject* parent)
@@ -830,7 +828,7 @@ void App::runCommand(const QString& text) {
   if (command == "/exit" || command == "/quit") {
     exitApp();
   } else if (command == "/help") {
-    print(Entry::notice(NoticeLevel::Info, HELP));
+    print(Entry::notice(NoticeLevel::Info, commandHelp()));
   } else if (command == "/new" || command == "/clear") {
     m_pSessions->newSession(arg);
   } else if (command == "/sessions" || command == "/resume") {

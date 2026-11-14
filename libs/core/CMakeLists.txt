@@ -16,6 +16,7 @@ add_library(smith_core STATIC
   Paths.cpp
   Preferences.cpp
   Process.cpp
+  SessionProcess.cpp
   Prompt.cpp
   Reasoning.cpp
   RunLater.cpp
@@ -37,4 +38,4 @@ add_library(smith_core STATIC
   tools/TaskTool.cpp
   tools/TodoTool.cpp
 )
-target_link_libraries(smith_core PUBLIC smith_settings Qt6::Core Qt6::Network)
+target_link_libraries(smith_core PUBLIC smith_settings Qt::Core Qt::Network)

@@ -140,7 +140,7 @@ int graphemeWidth(const QString& grapheme) {
   if (grapheme.isEmpty()) {
     return 0;
   }
-  const QList<uint> codePoints = grapheme.toUcs4();
+  const auto codePoints = grapheme.toUcs4();
   const char32_t cp = codePoints.first();
   if (cp < 0x20 || (cp >= 0x7f && cp < 0xa0)) {
     return 0;

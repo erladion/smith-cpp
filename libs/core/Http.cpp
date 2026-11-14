@@ -164,6 +164,8 @@ Outcome request(const QByteArray& verb, const QString& url, const QString& apiKe
   }
   req.setTransferTimeout(timeoutMs > 0 ? timeoutMs : DEFAULT_TIMEOUT_MS);
   req.setAttribute(QNetworkRequest::Http2AllowedAttribute, false);
+  // Qt 6's default; Qt 5 doesn't follow redirects otherwise.
+  req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
 
   QNetworkReply* reply = verb == "GET" ? manager.get(req) : manager.sendCustomRequest(req, verb, payload);
   Outcome outcome;
