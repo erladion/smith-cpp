@@ -1,0 +1,52 @@
+#pragma once
+
+#include <QMap>
+#include <QMutex>
+#include <QSet>
+#include <QString>
+#include <QStringList>
+
+#include <optional>
+
+namespace Smith {
+
+// What one turn changed through the file tools, so it can be put back.
+// Changes made by shell commands can't be seen here; `untracked` records
+// which such tools ran, so the user can be told. Tools may run in parallel,
+// so it locks.
+class Checkpoint {
+public:
+  struct FileChange {
+    // Content before the turn's first change; nullopt if the file didn't exist.
+    std::optional<QString> before;
+    // Content after the turn's last change.
+    std::optional<QString> after;
+  };
+
+  // Call before writing `file`; remembers its content the first time.
+  void beforeWrite(const QString& file);
+  void afterWrite(const QString& file, const QString& content);
+  void addUntracked(const QString& tool);
+
+  QMap<QString, FileChange> files() const;
+  QStringList untracked() const;
+
+private:
+  mutable QMutex m_mutex;
+  QMap<QString, FileChange> m_files;
+  QStringList m_untracked;
+};
+
+struct RestoreResult {
+  QStringList restored;
+  // Files left alone because they changed after the agent wrote them.
+  QStringList skipped;
+};
+
+// Puts files back as they were before the checkpoint, leaving alone any file changed since.
+RestoreResult restore(const Checkpoint& checkpoint);
+
+// A file's text, or nullopt if it doesn't exist.
+std::optional<QString> readOrNull(const QString& file);
+
+} // namespace Smith
