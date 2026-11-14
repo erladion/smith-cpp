@@ -227,11 +227,13 @@ public:
 
   void writeFile(const QString& file, const QString& content, const QString&) override {
     QDir().mkpath(QFileInfo(file).path());
-    QFile handle(file);
-    if (!handle.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    // Written beside the file and renamed over it, so a crash can't leave half of it.
+    QSaveFile handle(file);
+    // Where the folder isn't writable but the file is, write in place.
+    handle.setDirectWriteFallback(true);
+    if (!handle.open(QIODevice::WriteOnly) || handle.write(content.toUtf8()) < 0 || !handle.commit()) {
       throw SmithError(QString("Could not write %1: %2").arg(file, handle.errorString()), "EACCES");
     }
-    handle.write(content.toUtf8());
   }
 
   std::optional<SandboxPath> sandboxPath(const QString&, const QString&) override { return std::nullopt; }

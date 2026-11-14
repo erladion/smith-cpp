@@ -33,6 +33,7 @@ private Q_SLOTS:
   void recoversFromContextOverflow();
   void stopsAfterMaxSteps();
   void readOnlyCallsRunInParallel();
+  void parallelCallsAreCapped();
   void messageTypedDuringToolCallIsDelivered();
   void messageTypedDuringAnswerKeepsTurnGoing();
   void subagentReportsBack();
@@ -393,6 +394,35 @@ void TestAgent::readOnlyCallsRunInParallel() {
   QVERIFY2(startA < endB && startB < endA, "the two runs overlapped");
   QCOMPARE(toolResults(m_pFake->requests()[1]), QStringList({"done first", "done second"}));
   QCOMPARE(m_pFake->requests()[0].value("parallel_tool_calls").toBool(), true);
+}
+
+void TestAgent::parallelCallsAreCapped() {
+  Timeline timeline;
+  const int count = 20;
+  QList<QJsonObject> deltas;
+  QStringList expected;
+  for (int i = 0; i < count; i++) {
+    deltas << FakeServer::callDelta(i, QString("c%1").arg(i), "slow", {{"label", QString::number(i)}});
+    expected << QString("done %1").arg(i);
+  }
+  m_pFake->setScript({FakeServer::stream(deltas, "tool_calls"), FakeServer::text("ok")});
+  auto h = make(ApprovalDecision::Allow, [&](AgentOptions& options, Harness&) { options.tools << slowTool(timeline); });
+  h->agent->send("go", makeCancel());
+
+  QCOMPARE(timeline.runs.size(), count);
+  // The most runs under way at any one start.
+  int most = 0;
+  for (const auto& [name, start, end] : timeline.runs) {
+    int together = 0;
+    for (const auto& [otherName, otherStart, otherEnd] : timeline.runs) {
+      if (otherStart <= start && start < otherEnd) {
+        together++;
+      }
+    }
+    most = std::max(most, together);
+  }
+  QVERIFY2(most > 1 && most <= 8, qPrintable(QString("%1 ran at once").arg(most)));
+  QCOMPARE(toolResults(m_pFake->requests()[1]), expected);
 }
 
 void TestAgent::messageTypedDuringToolCallIsDelivered() {

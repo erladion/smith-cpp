@@ -28,6 +28,7 @@ private Q_SLOTS:
   void readFileRefusesBinary();
   void editFileRequiresUniqueMatch();
   void writesStayInsideEvenThroughSymlink();
+  void writesReplaceWholeFiles();
   void readsOutsideAskForApproval();
   void credentialsAreOffLimits();
 
@@ -129,6 +130,27 @@ void TestTools::editFileRequiresUniqueMatch() {
   const ToolResult all = call(editFileTool(), {{"path", "b.txt"}, {"old_string", "x = 1"}, {"new_string", "x = $&2"}, {"replace_all", true}});
   QVERIFY(!all.isError);
   QCOMPARE(read(m_pDir->file("b.txt")), QString("x = $&2\nx = $&2\n"));
+}
+
+void TestTools::writesReplaceWholeFiles() {
+  // Renamed into place: the mode stays, a link still leads to the file, and nothing is left beside it.
+  write(m_pDir->file("atomic/run.sh"), "old\n");
+  chmod(m_pDir->file("atomic/run.sh"), 0755);
+  QVERIFY(QFile::link("run.sh", m_pDir->file("atomic/link.sh")));
+  call(writeFileTool(), {{"path", "atomic/run.sh"}, {"content", "new\n"}});
+  QCOMPARE(read(m_pDir->file("atomic/run.sh")), QString("new\n"));
+  QVERIFY(QFileInfo(m_pDir->file("atomic/run.sh")).isExecutable());
+  call(writeFileTool(), {{"path", "atomic/link.sh"}, {"content", "linked\n"}});
+  QVERIFY(QFileInfo(m_pDir->file("atomic/link.sh")).isSymLink());
+  QCOMPARE(read(m_pDir->file("atomic/run.sh")), QString("linked\n"));
+  QCOMPARE(QDir(m_pDir->file("atomic")).entryList(QDir::Files | QDir::Hidden | QDir::System), QStringList({"link.sh", "run.sh"}));
+
+  // A file that can be written in a folder that can't.
+  write(m_pDir->file("locked/a.txt"), "old\n");
+  chmod(m_pDir->file("locked"), 0555);
+  call(writeFileTool(), {{"path", "locked/a.txt"}, {"content", "new\n"}});
+  chmod(m_pDir->file("locked"), 0755);
+  QCOMPARE(read(m_pDir->file("locked/a.txt")), QString("new\n"));
 }
 
 void TestTools::writesStayInsideEvenThroughSymlink() {

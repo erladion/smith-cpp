@@ -17,6 +17,8 @@
 #include <QThread>
 #include <QUuid>
 
+#include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <vector>
 
@@ -26,6 +28,8 @@ namespace {
 
 constexpr int MAX_UNDO = 20;
 constexpr int MAX_REPORT_CHARS = 8000;
+// Read-only tool calls running at once, so a burst of greps can't swamp the machine.
+constexpr int MAX_PARALLEL_TOOLS = 8;
 
 // Compact when the context is this full, and aim to get below the second figure.
 constexpr double COMPACT_AT = 0.75;
@@ -388,11 +392,16 @@ QList<ToolResult> Agent::runTools(const QList<ToolCall>& calls, const CancelPtr&
     if (end - i == 1) {
       results.append(runTool(calls[i], cancel));
     } else {
-      // Consecutive read-only calls run in parallel, each on a thread of its own.
+      // Consecutive read-only calls run in parallel: a few threads take them in turn.
       std::vector<ToolResult> group(end - i);
+      std::atomic<int> next{i};
       QList<QThread*> threads;
-      for (int j = i; j < end; j++) {
-        QThread* thread = QThread::create([this, &group, &calls, i, j, cancel]() { group[j - i] = runTool(calls[j], cancel); });
+      for (int n = std::min(end - i, MAX_PARALLEL_TOOLS); n > 0; n--) {
+        QThread* thread = QThread::create([this, &group, &calls, &next, i, end, cancel]() {
+          for (int j = next.fetch_add(1); j < end; j = next.fetch_add(1)) {
+            group[j - i] = runTool(calls[j], cancel);
+          }
+        });
         threads.append(thread);
         thread->start();
       }
