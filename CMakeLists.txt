@@ -50,6 +50,15 @@ set(SMITH_CORE_SOURCES
   src/core/tools/SkillTool.cpp
   src/core/tools/TaskTool.cpp
   src/core/tools/TodoTool.cpp
+  src/tui/Editor.cpp
+  src/tui/Keys.cpp
+  src/tui/Markdown.cpp
+  src/tui/Picker.cpp
+  src/tui/Rain.cpp
+  src/tui/Renderer.cpp
+  src/tui/Style.cpp
+  src/tui/Terminal.cpp
+  src/tui/Text.cpp
 )
 
 # Everything but main(), so the tests link against the same code.
