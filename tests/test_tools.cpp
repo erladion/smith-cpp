@@ -13,6 +13,9 @@
 
 #include <QDirIterator>
 #include <QElapsedTimer>
+#include <QThread>
+
+#include <atomic>
 
 using namespace Smith;
 using namespace TestUtil;
@@ -69,6 +72,7 @@ private Q_SLOTS:
   void editFileKeepsOtherEncodings();
   void bashKeepsTheEndOfLongOutput();
   void editFileMakesSeveralEdits();
+  void editsAtOnceKeepEachOther();
   void customToolsLoadFromFolders();
 
   // config file
@@ -507,6 +511,37 @@ void TestTools::editFileMakesSeveralEdits() {
   QVERIFY(failed.isError);
   QVERIFY_MATCH(failed.content, "^Edit 2 of 2: old_string was not found in multi\\.txt \\(after the edits before it\\)");
   QCOMPARE(read(m_pDir->file("multi.txt")), QString("A+B\ngamma\nB\n"));
+}
+
+void TestTools::editsAtOnceKeepEachOther() {
+  // Sub-agents working at once can edit the same file. Each edit reads it and writes it back: none may drop another's change.
+  QStringList lines;
+  for (int i = 0; i < 64; i++) {
+    lines << QString("line %1").arg(i);
+  }
+  call(writeFileTool(), {{"path", "shared.txt"}, {"content", lines.join('\n') + "\n"}});
+  const ToolDef tool = editFileTool();
+  std::atomic<int> failed{0};
+  QList<QThread*> threads;
+  for (int t = 0; t < 8; t++) {
+    threads << QThread::create([this, &tool, &failed, t]() {
+      for (int i = t; i < 64; i += 8) {
+        const QJsonObject input{{"path", "shared.txt"}, {"old_string", QString("line %1\n").arg(i)}, {"new_string", QString("done %1\n").arg(i)}};
+        if (call(tool, input).isError) {
+          failed++;
+        }
+      }
+    });
+  }
+  for (QThread* thread : threads) {
+    thread->start();
+  }
+  for (QThread* thread : threads) {
+    thread->wait();
+    delete thread;
+  }
+  QCOMPARE(failed.load(), 0);
+  QCOMPARE(read(m_pDir->file("shared.txt")).count("done "), 64);
 }
 
 void TestTools::bashKeepsTheEndOfLongOutput() {

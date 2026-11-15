@@ -461,7 +461,7 @@ ToolResult Agent::runSubagent(const TaskInput& input, const CancelPtr& cancel) {
   }
   child.alwaysAllowed = m_pAlwaysAllowed;
   const QString description = input.description;
-  // Its tools are read-only, but reading outside the project still asks you.
+  // Whatever needs asking, from reading outside the project to its changes, is asked through this agent.
   child.approve = [this, description, cancel](const ApprovalRequest& request) {
     ApprovalRequest forwarded = request;
     forwarded.note = QString("Sub-agent \"%1\": %2").arg(description, request.note).trimmed();

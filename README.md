@@ -166,7 +166,7 @@ TypeScript version doesn't have them.
 - **Sub-agents that do work.** `task` with `can_write` hands a sub-agent a piece of work, not only
   an investigation. Its changes ask for approval through the main agent, show in the transcript,
   and are undone with the turn. Several can run at once; the model is told to give them separate
-  files.
+  files, and edits that reach the same file anyway are made one after the other, so none is lost.
 - **edit_file** takes several replacements in one call (`edits`), all or nothing, and keeps the
   encoding of files that aren't UTF-8.
 

@@ -6,6 +6,8 @@
 #include "core/Paths.h"
 #include "core/Sandbox.h"
 
+#include <QMutex>
+
 namespace Smith {
 
 namespace {
@@ -83,6 +85,14 @@ QByteArray encode(const QString& text, Encoding encoding) {
     return text.toLatin1();
   }
   return text.toUtf8();
+}
+
+// Changes to files are made one at a time, from reading the file to writing
+// it back. Sub-agents can edit the same file at once, and a write that started
+// from the file as it was would drop the other's change.
+QMutex& fileChanges() {
+  static QMutex mutex;
+  return mutex;
 }
 
 const QString NOT_UTF8 = "[This file isn't UTF-8: each byte is shown as one Latin-1 character. edit_file keeps its bytes that way.]";
@@ -262,6 +272,7 @@ ToolDef writeFileTool() {
   tool.touches = [](const QJsonObject& input) { return QStringList{input.value("path").toString()}; };
   tool.preview = [](const QJsonObject& input, const ToolContext& ctx) { return planWrite(input, ctx).diff; };
   tool.run = [](const QJsonObject& input, const ToolContext& ctx) {
+    QMutexLocker lock(&fileChanges());
     const WritePlan plan = planWrite(input, ctx);
     if (ctx.beforeWrite) {
       ctx.beforeWrite(plan.file);
@@ -310,6 +321,7 @@ ToolDef editFileTool() {
   tool.touches = [](const QJsonObject& input) { return QStringList{input.value("path").toString()}; };
   tool.preview = [](const QJsonObject& input, const ToolContext& ctx) { return planEdit(input, ctx).diff; };
   tool.run = [](const QJsonObject& input, const ToolContext& ctx) {
+    QMutexLocker lock(&fileChanges());
     EditPlan plan;
     try {
       plan = planEdit(input, ctx);
