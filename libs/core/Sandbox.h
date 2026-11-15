@@ -51,7 +51,7 @@ struct HomeView {
 struct SandboxOptions {
   SandboxType type = SandboxType::Bwrap;
   bool network = false;
-  // More variables for commands: "NAME" passes it through, "NAME=value" sets it.
+  // More variables for commands, with or without a sandbox: "NAME" passes it through, "NAME=value" sets it.
   QStringList env;
   std::optional<Limits> limits;
   HomeView home;
@@ -107,7 +107,7 @@ public:
   // Stops and removes what it started (containers, temp folders); also done at exit.
   virtual void dispose() = 0;
 
-  // No sandbox: commands run directly with bash (still without Smith's API keys).
+  // No sandbox: commands run directly with bash, with the same short list of environment variables as in one.
   static std::shared_ptr<Sandbox> none(const QString& reason = "sandbox disabled");
   // bwrap requires bubblewrap and container needs podman or docker: throws if they can't run.
   static std::shared_ptr<Sandbox> create(const SandboxOptions& options);
@@ -118,7 +118,7 @@ protected:
   QStringList m_warnings;
 };
 
-// The environment for a program run outside any sandbox: everything but Smith's own keys.
+// The environment for programs Smith itself runs (git, bwrap, the container runtime): everything but Smith's own keys.
 QProcessEnvironment hostEnv();
 // The variables for sandboxed commands: those matching `allowed`, then `extra` from the config.
 QProcessEnvironment sandboxEnv(const QRegularExpression& allowed, const QStringList& extra);

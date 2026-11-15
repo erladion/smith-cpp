@@ -20,7 +20,8 @@ QJsonValue getJson(const QString& url, const QString& apiKey, int timeoutMs, con
 QJsonObject postJson(const QString& url, const QString& apiKey, const QJsonObject& body, const CancelPtr& cancel = {});
 
 // POSTs with "stream": true and calls `onChunk` with each server-sent event's JSON, until [DONE].
-void postStream(const QString& url, const QString& apiKey, const QJsonObject& body, const CancelPtr& cancel,
+// Returns how many events were skipped because they weren't JSON objects.
+int postStream(const QString& url, const QString& apiKey, const QJsonObject& body, const CancelPtr& cancel,
                 const std::function<void(const QJsonObject&)>& onChunk);
 
 // Applies proxy settings from the environment (HTTPS_PROXY, HTTP_PROXY, NO_PROXY); call once at startup.

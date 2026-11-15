@@ -180,6 +180,9 @@ apps never include each other.
 - **JSON key order.** Qt's JSON objects sort their keys, so keys in the JSON Smith writes
   (sessions, logs, preferences) come out sorted, which doesn't affect reading them.
   Endpoints in the config file still keep the order the file lists them in.
+- **Without a sandbox** (`--sandbox off`), commands are asked about every time ("always allow"
+  isn't offered for `bash`), and they get the same short list of environment variables as
+  in the sandbox instead of your whole environment; `sandbox.env` in the config passes more.
 - **Deployment.** The binary links Qt dynamically. To run it on another machine, ship the Qt
   libraries with it (or build against a static Qt) instead of the Node single-binary builds.
 

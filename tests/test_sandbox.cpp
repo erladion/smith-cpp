@@ -441,6 +441,20 @@ void TestSandbox::offMeansPlainBashWithoutKeys() {
   QCOMPARE(spec.file, QString("bash"));
   QVERIFY(!spec.env.contains("AGENT_API_KEY"));
   QVERIFY(!spec.env.contains("SMITH_API_KEY"));
+
+  // Nor anything else that isn't on the short list, unless sandbox.env passes it.
+  EnvGuard token("GITHUB_TOKEN", QString("ghp_secret"));
+  EnvGuard other("DEPLOY_ENV", QString("staging"));
+  const SpawnSpec plain = Sandbox::create(options)->spawnSpec("true", "/");
+  QVERIFY(plain.env.contains("PATH"));
+  QVERIFY(!plain.env.contains("GITHUB_TOKEN"));
+  QVERIFY(!plain.env.contains("DEPLOY_ENV"));
+  QVERIFY(!Sandbox::create(options)->programSpec("rg", {}, "/").env.contains("GITHUB_TOKEN"));
+  options.env = QStringList{"DEPLOY_ENV", "MODE=test"};
+  const SpawnSpec passed = Sandbox::create(options)->spawnSpec("true", "/");
+  QCOMPARE(passed.env.value("DEPLOY_ENV"), QString("staging"));
+  QCOMPARE(passed.env.value("MODE"), QString("test"));
+  QVERIFY(!passed.env.contains("GITHUB_TOKEN"));
 }
 
 void TestSandbox::sandboxIsRequired() {

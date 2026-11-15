@@ -23,7 +23,7 @@ Rectangle {
     Keys.onPressed: event => {
         if (event.key === Qt.Key_Y) {
             Backend.decide("allow")
-        } else if (event.key === Qt.Key_A) {
+        } else if (event.key === Qt.Key_A && panel.request.canAllowAlways) {
             Backend.decide("always")
         } else if (event.key === Qt.Key_N) {
             Backend.decide("deny")
@@ -130,7 +130,12 @@ Rectangle {
             Layout.fillWidth: true
             spacing: 8
             SmithButton { text: "Yes"; keyHint: "y"; kind: "primary"; onClicked: Backend.decide("allow") }
-            SmithButton { text: "Always allow " + (panel.request.tool || "") + " this session"; keyHint: "a"; onClicked: Backend.decide("always") }
+            SmithButton {
+                visible: !!panel.request.canAllowAlways
+                text: "Always allow " + (panel.request.tool || "") + " this session"
+                keyHint: "a"
+                onClicked: Backend.decide("always")
+            }
             SmithButton { text: "No"; keyHint: "n"; onClicked: Backend.decide("deny") }
             SmithButton { text: "No, and interrupt"; keyHint: "esc"; kind: "danger"; onClicked: Backend.decide("interrupt") }
         }

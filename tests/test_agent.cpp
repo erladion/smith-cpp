@@ -34,6 +34,8 @@ private Q_SLOTS:
   void stopsAfterMaxSteps();
   void readOnlyCallsRunInParallel();
   void parallelCallsAreCapped();
+  void unsandboxedCommandsAlwaysAsk();
+  void unreadableChunksAreReported();
   void messageTypedDuringToolCallIsDelivered();
   void messageTypedDuringAnswerKeepsTurnGoing();
   void subagentReportsBack();
@@ -425,6 +427,70 @@ void TestAgent::parallelCallsAreCapped() {
   QCOMPARE(toolResults(m_pFake->requests()[1]), expected);
 }
 
+void TestAgent::unsandboxedCommandsAlwaysAsk() {
+  auto script = [&]() {
+    m_pFake->setScript({
+        FakeServer::stream(FakeServer::toolCallDeltas("bash", {{"command", "echo one"}}), "tool_calls"),
+        FakeServer::stream(FakeServer::toolCallDeltas("bash", {{"command", "echo two"}}), "tool_calls"),
+        FakeServer::text("ok"),
+    });
+  };
+  QList<bool> offered;
+  auto always = [&](AgentOptions& options, Harness&) {
+    options.approve = [&](const ApprovalRequest& request) {
+      offered << request.canAllowAlways;
+      return ApprovalDecision::AllowAlways;
+    };
+  };
+
+  // No sandbox: "always" isn't on offer, and answering it anyway allows only that call.
+  script();
+  make(ApprovalDecision::Allow, always)->agent->send("go", makeCancel());
+  QCOMPARE(offered, QList<bool>({false, false}));
+
+  // A grant made elsewhere (a session shared with a sub-agent) doesn't count either.
+  script();
+  offered.clear();
+  make(ApprovalDecision::Allow, [&](AgentOptions& options, Harness& harness) {
+    always(options, harness);
+    options.alwaysAllowed = std::make_shared<AllowedTools>();
+    options.alwaysAllowed->insert("bash");
+  })->agent->send("go", makeCancel());
+  QCOMPARE(offered.size(), 2);
+
+  // In a sandbox, the first answer covers the second call.
+  std::shared_ptr<Sandbox> bwrap;
+  try {
+    bwrap = Sandbox::create(SandboxOptions{});
+  } catch (const SmithError&) {
+    // bwrap is not available.
+  }
+  if (bwrap) {
+    script();
+    offered.clear();
+    make(ApprovalDecision::Allow, [&](AgentOptions& options, Harness& harness) {
+      always(options, harness);
+      options.sandbox = bwrap;
+    })->agent->send("go", makeCancel());
+    bwrap->dispose();
+    QCOMPARE(offered, QList<bool>({true}));
+  }
+}
+
+void TestAgent::unreadableChunksAreReported() {
+  m_pFake->setScript({FakeServer::stream({QJsonObject{{"content", "Hello"}}, FakeServer::garbled(), QJsonObject{{"content", " there"}}}, "stop")});
+  auto h = make();
+  h->agent->send("hi", makeCancel());
+  QCOMPARE(textOf(h->events, BlockKind::Text), QString("Hello there"));
+  QVERIFY(hasNotice(h->events, "sent 1 chunk that couldn't be read as JSON; it was skipped"));
+  QVERIFY(endsWithDone(h->events, DoneReason::Stop));
+
+  m_pFake->setScript({FakeServer::text("fine")});
+  auto clean = make();
+  clean->agent->send("hi", makeCancel());
+  QVERIFY(!hasNotice(clean->events, "couldn't be read as JSON"));
+}
+
 void TestAgent::messageTypedDuringToolCallIsDelivered() {
   m_pFake->setScript({
       FakeServer::stream(FakeServer::toolCallDeltas("glob", {{"pattern", "*.none"}}), "tool_calls"),
@@ -766,8 +832,12 @@ void TestAgent::runLaterFilesAskAndAreReported() {
   });
   h->agent->send("set things up", makeCancel());
 
-  QVERIFY2(asked.size() == 1 && asked[0].first == "package.json", "only the run-later edit asks, despite always allow");
+  // The command asks too: there's no sandbox here, so bash is never "always allowed".
+  QCOMPARE(asked.size(), 2);
+  QVERIFY2(asked[0].first == "package.json", "the run-later edit asks, despite always allow");
   QVERIFY_MATCH(asked[0].second, "package\\.json runs outside the sandbox later: npm, yarn or pnpm run scripts from it");
+  QVERIFY_MATCH(asked[1].first, "^echo ");
+  QCOMPARE(asked[1].second, QString());
   QString notice;
   for (const AgentEvent& event : h->events) {
     if (event.type == AgentEvent::Type::Notice && event.level == NoticeLevel::Warn && notice.isEmpty()) {

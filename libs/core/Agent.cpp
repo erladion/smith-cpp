@@ -147,7 +147,7 @@ void Agent::loadConversation(const Messages& messages) {
     m_measured.reset();
     m_turns.clear();
   }
-  setTodos(todosFromHistory(m_history));
+  setTodos(todosFromHistory(this->messages()));
   emitContext();
 }
 
@@ -175,16 +175,18 @@ bool Agent::canUndo() const {
 
 std::optional<UndoResult> Agent::undo() {
   Turn turn;
+  Messages kept;
   {
     QMutexLocker lock(&m_mutex);
     if (m_turns.isEmpty()) {
       return std::nullopt;
     }
     turn = m_turns.takeLast();
+    kept = m_history.mid(1, turn.start - 1);
   }
   const RestoreResult restored = restore(*turn.checkpoint);
-  replaceHistory(m_history.mid(1, turn.start - 1));
-  setTodos(todosFromHistory(m_history));
+  replaceHistory(kept);
+  setTodos(todosFromHistory(messages()));
   emitContext();
   return UndoResult{turn.prompt, restored.restored, restored.skipped, turn.checkpoint->untracked()};
 }
@@ -514,9 +516,10 @@ bool Agent::compact(const CancelPtr& cancel, const QString& reason) {
   const qint64 before = estimateContext();
   // Without a known window (overflow on an unknown server), assume we're just past it.
   const qint64 limit = contextLimit().value_or(std::max<qint64>(4096, qint64(before * 0.9)));
-  const qint64 fixedCost = estimateTokens(m_history.first()) + estimateTokens(m_apiTools);
+  const Messages history = this->messages();
+  const qint64 fixedCost = estimateTokens(history.first()) + estimateTokens(m_apiTools);
 
-  const TrimResult trimmed = trimOldToolResults(m_history.mid(1));
+  const TrimResult trimmed = trimOldToolResults(history.mid(1));
   if (reason == "auto" && trimmed.count > 0 && fixedCost + estimateTokens(trimmed.messages) < limit * TRIM_TARGET) {
     replaceHistory(trimmed.messages);
     emitEvent(AgentEvent::notice(NoticeLevel::Info, QString("Cleared %1 old tool outputs to free context (~%2 → ~%3 tokens).")
@@ -668,7 +671,7 @@ Agent::StreamedResponse Agent::streamResponse(const CancelPtr& cancel) {
   };
 
   const ServerPtr target = server();
-  Http::postStream(target->url("/chat/completions"), target->apiKey(), body, cancel, [&](const QJsonObject& chunk) {
+  const int skipped = Http::postStream(target->url("/chat/completions"), target->apiKey(), body, cancel, [&](const QJsonObject& chunk) {
     const QJsonObject usage = chunk.value("usage").toObject();
     if (!usage.isEmpty()) {
       result.totalTokens = qint64(usage.value("prompt_tokens").toDouble() + usage.value("completion_tokens").toDouble());
@@ -733,6 +736,11 @@ Agent::StreamedResponse Agent::streamResponse(const CancelPtr& cancel) {
   });
   for (const Segment& segment : thinkTags.flush()) {
     output(segment.kind, segment.text);
+  }
+  if (skipped > 0) {
+    emitEvent(AgentEvent::notice(NoticeLevel::Warn, QString("The server sent %1 that couldn't be read as JSON; %2 skipped, so this response may be "
+                                                            "incomplete.")
+                                                        .arg(plural(skipped, "chunk"), skipped == 1 ? "it was" : "they were")));
   }
 
   // Some local servers omit tool-call ids; the protocol needs them to pair results.
@@ -837,8 +845,10 @@ ToolResult Agent::runTool(const ToolCall& call, const CancelPtr& cancel) {
   }
   const QString warning = runLaterWarning(*tool, args);
   const bool needsApproval = !tool->readOnly || !reason.isEmpty() || !warning.isEmpty();
+  // Commands that would run with no sandbox are asked about every time.
+  const bool unsandboxed = tool->sandboxed && !ctx.sandboxOrNone()->active();
   approval = needsApproval ? "already allowed" : "not needed";
-  if (needsApproval && (!m_pAlwaysAllowed->contains(tool->name) || !warning.isEmpty())) {
+  if (needsApproval && (unsandboxed || !m_pAlwaysAllowed->contains(tool->name) || !warning.isEmpty())) {
     // Show the change in the prompt; a call that would fail anyway fails without asking.
     std::optional<Diff> preview;
     if (tool->preview) {
@@ -862,7 +872,11 @@ ToolResult Agent::runTool(const ToolCall& call, const CancelPtr& cancel) {
       request.sandboxActive = sandbox->active();
       request.sandboxDescription = sandbox->describe(m_options.cwd);
     }
-    const ApprovalDecision decision = requestApproval(request);
+    request.canAllowAlways = !unsandboxed;
+    ApprovalDecision decision = requestApproval(request);
+    if (decision == ApprovalDecision::AllowAlways && unsandboxed) {
+      decision = ApprovalDecision::Allow;
+    }
     if (decision == ApprovalDecision::Deny || cancelled(cancel)) {
       approval = "denied";
       return fail("The user declined this tool call. Ask them how they want to proceed.", summary, "denied");
@@ -906,7 +920,7 @@ ApprovalDecision Agent::requestApproval(const ApprovalRequest& request) {
   // One at a time. A request that waited may no longer need asking: an
   // earlier answer can have been "always allow".
   QMutexLocker lock(&m_approvalMutex);
-  if (m_pAlwaysAllowed->contains(request.tool) && request.warning.isEmpty()) {
+  if (request.canAllowAlways && m_pAlwaysAllowed->contains(request.tool) && request.warning.isEmpty()) {
     return ApprovalDecision::Allow;
   }
   if (!m_options.approve) {

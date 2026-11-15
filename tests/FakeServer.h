@@ -37,6 +37,9 @@ public:
     return reply;
   }
 
+  // A delta that goes out as a line that isn't JSON, as a broken proxy might send.
+  static QJsonObject garbled() { return QJsonObject{{"__garbled", true}}; }
+
   static Reply text(const QString& text) { return stream({QJsonObject{{"content", text}}}, "stop"); }
 
   static Reply plain(const QString& content) {
@@ -200,6 +203,10 @@ private:
       stream += "data: " + QJsonDocument(object).toJson(QJsonDocument::Compact) + "\n\n";
     };
     for (const QJsonObject& delta : reply.deltas) {
+      if (delta.contains("__garbled")) {
+        stream += "data: {\"choices\": [{\"delta\": {\"content\": \"cut o\n\n";
+        continue;
+      }
       chunk(QJsonArray{QJsonObject{{"index", 0}, {"delta", delta}, {"finish_reason", QJsonValue::Null}}});
     }
     chunk(QJsonArray{QJsonObject{{"index", 0}, {"delta", QJsonObject{}}, {"finish_reason", reply.finish}}});

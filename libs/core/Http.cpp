@@ -62,6 +62,9 @@ public:
     dispatch(onChunk);
   }
 
+  // Events that weren't JSON objects.
+  int skipped() const { return m_skipped; }
+
 private:
   void dispatch(const std::function<void(const QJsonObject&)>& onChunk) {
     if (m_data.isEmpty() || m_done) {
@@ -77,6 +80,7 @@ private:
     QJsonParseError error;
     const QJsonDocument document = QJsonDocument::fromJson(data, &error);
     if (!document.isObject()) {
+      m_skipped++;
       return;
     }
     const QJsonObject chunk = document.object();
@@ -90,6 +94,7 @@ private:
   QByteArray m_buffer;
   QByteArray m_data;
   bool m_done = false;
+  int m_skipped = 0;
 };
 
 QString connectionCode(QNetworkReply::NetworkError error) {
@@ -277,7 +282,7 @@ QJsonObject postJson(const QString& url, const QString& apiKey, const QJsonObjec
   return document.object();
 }
 
-void postStream(const QString& url, const QString& apiKey, const QJsonObject& body, const CancelPtr& cancel,
+int postStream(const QString& url, const QString& apiKey, const QJsonObject& body, const CancelPtr& cancel,
                 const std::function<void(const QJsonObject&)>& onChunk) {
   SseParser parser;
   bool plainJson = false;
@@ -295,7 +300,7 @@ void postStream(const QString& url, const QString& apiKey, const QJsonObject& bo
   });
   if (!plainJson) {
     parser.finish(onChunk);
-    return;
+    return parser.skipped();
   }
   const QJsonDocument document = QJsonDocument::fromJson(plain);
   if (!document.isObject()) {
@@ -315,6 +320,7 @@ void postStream(const QString& url, const QString& apiKey, const QJsonObject& bo
   QJsonObject chunk = response;
   chunk["choices"] = choices;
   onChunk(chunk);
+  return 0;
 }
 
 void useSystemNetworkSettings() {

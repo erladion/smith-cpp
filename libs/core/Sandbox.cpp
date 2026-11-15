@@ -30,7 +30,8 @@ QString sandboxTypeName(SandboxType type) {
 
 namespace {
 
-// Environment variables passed into the bwrap sandbox: the basics, and what
+// Environment variables the agent's commands get, in the bwrap sandbox and
+// without one: the basics, and what
 // compilers and build tools read (including what RHEL's gcc-toolset, scl and
 // environment modules set). Left out: anything that commonly holds
 // credentials, such as NPM_CONFIG_* or PIP_INDEX_URL; sandbox.env adds more.
@@ -194,7 +195,7 @@ QString probeBwrap() {
 
 class NoSandbox : public Sandbox {
 public:
-  explicit NoSandbox(const QString& reason) : m_reason(reason) {}
+  NoSandbox(const QString& reason, const QStringList& extraEnv) : m_reason(reason), m_extraEnv(extraEnv) {}
 
   SandboxType type() const override { return SandboxType::Off; }
   bool active() const override { return false; }
@@ -204,10 +205,13 @@ public:
 
   QString describe(const QString&) const override { return QString("not sandboxed (%1)").arg(m_reason); }
 
-  SpawnSpec spawnSpec(const QString& command, const QString& cwd) override { return SpawnSpec{"bash", {"-c", command}, hostEnv(), cwd, {}}; }
+  // Nothing is isolated, but tokens and keys in your environment still stay out of the agent's commands.
+  SpawnSpec spawnSpec(const QString& command, const QString& cwd) override {
+    return SpawnSpec{"bash", {"-c", command}, sandboxEnv(ENV_ALLOW, m_extraEnv), cwd, {}};
+  }
 
   SpawnSpec programSpec(const QString& file, const QStringList& args, const QString& project, const QString& chdir) override {
-    return SpawnSpec{file, args, hostEnv(), chdir.isEmpty() ? project : chdir, {}};
+    return SpawnSpec{file, args, sandboxEnv(ENV_ALLOW, m_extraEnv), chdir.isEmpty() ? project : chdir, {}};
   }
 
   QString readFile(const QString& file, const QString&) override {
@@ -240,7 +244,9 @@ public:
 
   QStringList promptNotes(const QString&) const override {
     return {"Shell commands run directly on the user's machine, not in a sandbox. Be careful with anything that changes things outside the "
-            "working directory."};
+            "working directory.",
+            "Commands get a short list of environment variables (PATH, HOME, compiler and language settings, proxies), not the user's whole "
+            "environment: tokens and keys aren't there. If a command needs one, ask the user; they can pass it with sandbox.env in the config."};
   }
 
   std::optional<QString> explainFailure(const QString&, const QString&) const override { return std::nullopt; }
@@ -249,6 +255,7 @@ public:
 
 private:
   QString m_reason;
+  QStringList m_extraEnv;
 };
 
 class BwrapSandbox : public Sandbox {
@@ -499,12 +506,12 @@ void Sandbox::setReadOnlyPaths(const QStringList& paths) {
 }
 
 std::shared_ptr<Sandbox> Sandbox::none(const QString& reason) {
-  return std::make_shared<NoSandbox>(reason);
+  return std::make_shared<NoSandbox>(reason, QStringList());
 }
 
 std::shared_ptr<Sandbox> Sandbox::create(const SandboxOptions& options) {
   if (options.type == SandboxType::Off) {
-    return std::make_shared<NoSandbox>("disabled with --sandbox off");
+    return std::make_shared<NoSandbox>("disabled with --sandbox off", options.env);
   }
   if (options.type == SandboxType::Container) {
     return std::make_shared<ContainerSandbox>(options.container, options.network, options.limits, options.env);

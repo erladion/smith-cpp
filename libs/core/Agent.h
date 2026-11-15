@@ -38,6 +38,8 @@ struct ApprovalRequest {
   QString note;
   // The call changes a file that runs outside the sandbox later; asked even when the tool is always allowed.
   QString warning;
+  // Whether "always allow" is on offer: not for commands that run without a sandbox.
+  bool canAllowAlways = true;
 };
 
 struct UndoResult {

@@ -112,7 +112,7 @@ void App::onKey(const Key& key) {
     const QString letter = key.name == KeyName::Text ? key.text.toLower() : QString();
     if (letter == "y") {
       decide(ApprovalDecision::Allow);
-    } else if (letter == "a") {
+    } else if (letter == "a" && m_approval->request.canAllowAlways) {
       decide(ApprovalDecision::AllowAlways);
     } else if (letter == "n") {
       decide(ApprovalDecision::Deny);

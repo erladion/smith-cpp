@@ -51,16 +51,16 @@ QList<Line> approvalBox(const ApprovalRequest& request, int width, int rows) {
     content.append(Line{Span{(request.sandboxActive ? "✓ " : "⚠ ") + request.sandboxDescription,
                              fg(request.sandboxActive ? Color::Green : Color::Red)}});
   }
-  content.append(Line{
-      Span{"y", fg(Color::Green)},
-      Span{" yes · ", DIM},
-      Span{"a", fg(Color::Green)},
-      Span{QString(" always allow %1 this session · ").arg(request.tool), DIM},
-      Span{"n", fg(Color::Red)},
-      Span{" no · ", DIM},
-      Span{"esc", fg(Color::Red)},
-      Span{" no and interrupt", DIM},
-  });
+  Line keys{Span{"y", fg(Color::Green)}, Span{" yes · ", DIM}};
+  if (request.canAllowAlways) {
+    keys.append(Span{"a", fg(Color::Green)});
+    keys.append(Span{QString(" always allow %1 this session · ").arg(request.tool), DIM});
+  }
+  keys.append(Span{"n", fg(Color::Red)});
+  keys.append(Span{" no · ", DIM});
+  keys.append(Span{"esc", fg(Color::Red)});
+  keys.append(Span{" no and interrupt", DIM});
+  content.append(keys);
   return box(content, Color::Yellow, width, true);
 }
 
