@@ -64,6 +64,7 @@ private Q_SLOTS:
   void tuiIncludesOnlyItself();
   void librariesDontIncludeApps();
   void appsDontIncludeEachOther();
+  void desktopTextIsPlain();
 
   // config file
   void configMissingFile();
@@ -365,6 +366,37 @@ void TestTools::jobsClearRestartsNumbering() {
   QVERIFY(m_pJobs->list().isEmpty());
   QVERIFY_MATCH(call(bg, {{"command", "sleep 30"}, {"run_in_background", true}}).content, "job bg1\\b");
   m_pJobs->clear();
+}
+
+void TestTools::desktopTextIsPlain() {
+  // What the model writes reaches these as text. A Text left to detect rich text renders
+  // markup in it, and fetches an <img>'s address from this machine.
+  QStringList offenders;
+  int seen = 0;
+  QDirIterator it(QString(SMITH_SOURCE_DIR) + "/apps/smith-desktop/qml", {"*.qml"}, QDir::Files, QDirIterator::Subdirectories);
+  static const QRegularExpression opening(R"(\b(Text|Label)\s*\{)");
+  while (it.hasNext()) {
+    const QString file = it.next();
+    const QString source = read(file);
+    auto found = opening.globalMatch(source);
+    while (found.hasNext()) {
+      const QRegularExpressionMatch match = found.next();
+      int depth = 0;
+      int end = match.capturedEnd() - 1;
+      for (; end < source.size(); end++) {
+        depth += source[end] == '{' ? 1 : source[end] == '}' ? -1 : 0;
+        if (depth == 0) {
+          break;
+        }
+      }
+      seen++;
+      if (!source.mid(match.capturedStart(), end - match.capturedStart()).contains("textFormat:")) {
+        offenders << QString("%1:%2").arg(QFileInfo(file).fileName()).arg(source.left(match.capturedStart()).count('\n') + 1);
+      }
+    }
+  }
+  QVERIFY(seen > 50);
+  QVERIFY2(offenders.isEmpty(), qPrintable("Text without a textFormat (use Text.PlainText): " + offenders.join(", ")));
 }
 
 namespace {

@@ -41,6 +41,7 @@ Rectangle {
         spacing: 14
 
         Text {
+            textFormat: Text.PlainText
             visible: Backend.worktreeBranch.length > 0
             text: "⎇ " + Backend.worktreeBranch
             color: Theme.warn
@@ -53,6 +54,7 @@ Rectangle {
         }
 
         Text {
+            textFormat: Text.PlainText
             text: Backend.sandboxActive ? "◉ " + (Backend.sandboxKind === "container" ? "container" : "sandbox") + " · net " + (Backend.network ? "on" : "off")
                                         : "⚠ unsandboxed"
             color: Backend.sandboxActive ? Theme.added : Theme.error
@@ -83,6 +85,7 @@ Rectangle {
                 }
             }
             Text {
+                textFormat: Text.PlainText
                 text: Backend.contextLimit > 0 ? Math.round(100 * bar.fill) + "% of " + bar.k(Backend.contextLimit) + " context"
                                                : bar.k(Backend.contextTokens) + " tokens"
                 color: Theme.textDim
@@ -93,6 +96,7 @@ Rectangle {
         }
 
         Text {
+            textFormat: Text.PlainText
             visible: Backend.jobsRunning > 0
             text: Backend.jobsRunning + " background job" + (Backend.jobsRunning === 1 ? "" : "s")
             color: Theme.warn
@@ -104,6 +108,7 @@ Rectangle {
         }
 
         Text {
+            textFormat: Text.PlainText
             visible: Backend.busy
             text: Backend.agentRunning ? "esc interrupts · enter queues" : "working…"
             color: Theme.textFaint
@@ -114,6 +119,7 @@ Rectangle {
         Item { Layout.fillWidth: true }
 
         Text {
+            textFormat: Text.PlainText
             visible: bar.streaming
             text: Backend.codeStreamText(bar.streamOffset, 28)
             color: Theme.borderStrong

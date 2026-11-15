@@ -3,6 +3,7 @@ import Smith.Desktop 1.0
 
 // The TUI's spinner: half-width katakana with the matrix theme, braille dots otherwise.
 Text {
+    textFormat: Text.PlainText
     id: spinner
 
     property bool running: true

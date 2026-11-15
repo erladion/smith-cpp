@@ -46,6 +46,7 @@ Rectangle {
         visible: !Theme.matrix
         spacing: 10
         Text {
+            textFormat: Text.PlainText
             Layout.alignment: Qt.AlignHCenter
             text: "Smith"
             color: Theme.accent
@@ -78,6 +79,7 @@ Rectangle {
                 spacing: 10
                 Spinner { visible: Backend.state === "starting"; running: visible }
                 Text {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     text: Backend.state === "failed" ? "Smith couldn't start." : "Connecting to the model server…"
                     color: Backend.state === "failed" ? Theme.error : Theme.textDim

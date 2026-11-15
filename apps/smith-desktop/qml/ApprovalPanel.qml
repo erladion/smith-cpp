@@ -44,11 +44,13 @@ Rectangle {
         RowLayout {
             spacing: 10
             Text {
+                textFormat: Text.PlainText
                 text: "⚠"
                 color: panel.warnings.length > 0 ? Theme.error : Theme.warn
                 font.pixelSize: 16
             }
             Text {
+                textFormat: Text.PlainText
                 text: "Allow " + (panel.request.tool || "") + "?"
                 color: Theme.text
                 font.family: Theme.textFamily
@@ -81,6 +83,7 @@ Rectangle {
         }
 
         Text {
+            textFormat: Text.PlainText
             visible: (panel.request.note || "").length > 0
             Layout.fillWidth: true
             wrapMode: Text.Wrap
@@ -93,6 +96,7 @@ Rectangle {
         Repeater {
             model: panel.warnings
             Text {
+                textFormat: Text.PlainText
                 required property string modelData
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
@@ -117,6 +121,7 @@ Rectangle {
         }
 
         Text {
+            textFormat: Text.PlainText
             visible: panel.request.hasSandbox === true
             Layout.fillWidth: true
             wrapMode: Text.Wrap

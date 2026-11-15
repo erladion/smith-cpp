@@ -57,6 +57,7 @@ Item {
         }
 
         Text {
+            textFormat: Text.PlainText
             text: Backend.compacting && Theme.matrix ? "Purging old memories…" : Backend.activity
             color: Theme.textDim
             font.family: Theme.textFamily
@@ -66,6 +67,7 @@ Item {
         }
 
         Text {
+            textFormat: Text.PlainText
             visible: Backend.turnStartedAt > 0
             text: "· " + bar.elapsed(bar.now - Backend.turnStartedAt)
             color: Theme.textFaint
@@ -76,6 +78,7 @@ Item {
         Item { Layout.fillWidth: true }
 
         Text {
+            textFormat: Text.PlainText
             visible: bar.current !== undefined
             text: "▶ " + (bar.done + 1) + "/" + Backend.todos.length
             color: Theme.warn
@@ -83,6 +86,7 @@ Item {
             font.pixelSize: Theme.smallSize
         }
         Text {
+            textFormat: Text.PlainText
             visible: bar.current !== undefined
             text: bar.current ? bar.current.content : ""
             color: Theme.textDim

@@ -26,12 +26,14 @@ Button {
     contentItem: Row {
         spacing: 8
         Text {
+            textFormat: Text.PlainText
             text: control.text
             font: control.font
             color: !control.enabled ? Theme.textFaint : control.kind === "normal" || control.kind === "ghost" ? Theme.text : control.tone
             anchors.verticalCenter: parent.verticalCenter
         }
         Text {
+            textFormat: Text.PlainText
             visible: control.keyHint.length > 0
             text: control.keyHint
             font.family: Theme.mono

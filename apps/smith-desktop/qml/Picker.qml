@@ -43,6 +43,7 @@ Popup {
         spacing: 0
 
         Text {
+            textFormat: Text.PlainText
             text: picker.title
             color: Theme.accent
             font.family: Theme.textFamily
@@ -109,6 +110,7 @@ Popup {
                     x: 16
                     spacing: 10
                     Text {
+                        textFormat: Text.PlainText
                         text: row.modelData.label
                         color: list.currentIndex === row.index ? Theme.accent : Theme.text
                         font.family: Theme.textFamily
@@ -116,6 +118,7 @@ Popup {
                         font.bold: list.currentIndex === row.index
                     }
                     Text {
+                        textFormat: Text.PlainText
                         visible: row.modelData.value === picker.current
                         text: "(current)"
                         color: Theme.added
@@ -124,6 +127,7 @@ Popup {
                         anchors.baseline: parent.children[0].baseline
                     }
                     Text {
+                        textFormat: Text.PlainText
                         text: row.modelData.hint || ""
                         color: Theme.textFaint
                         font.family: Theme.textFamily
@@ -137,6 +141,7 @@ Popup {
         }
 
         Text {
+            textFormat: Text.PlainText
             visible: list.count === 0
             text: picker.items.length === 0 ? picker.emptyText : "No matches."
             color: Theme.textFaint

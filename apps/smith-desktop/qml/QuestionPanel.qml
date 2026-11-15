@@ -32,6 +32,7 @@ Rectangle {
         RowLayout {
             spacing: 10
             Text {
+                textFormat: Text.PlainText
                 text: "?"
                 color: Theme.accent
                 font.family: Theme.mono
@@ -39,6 +40,7 @@ Rectangle {
                 font.bold: true
             }
             Text {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
                 text: panel.asked.question || ""
@@ -67,12 +69,14 @@ Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 10
                     Text {
+                        textFormat: Text.PlainText
                         text: (option.index + 1) + "."
                         color: Theme.textFaint
                         font.family: Theme.mono
                         font.pixelSize: Theme.smallSize
                     }
                     Text {
+                        textFormat: Text.PlainText
                         id: label
                         text: option.modelData
                         color: panel.selected === option.index ? Theme.accent : Theme.text

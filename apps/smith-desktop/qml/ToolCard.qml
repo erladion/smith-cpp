@@ -42,6 +42,7 @@ Rectangle {
                 color: card.isError ? Theme.error : Theme.added
             }
             Text {
+                textFormat: Text.PlainText
                 text: card.name
                 color: Theme.text
                 font.family: Theme.mono
@@ -49,6 +50,7 @@ Rectangle {
                 font.bold: true
             }
             Text {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 text: card.summary
                 color: Theme.textDim
@@ -57,6 +59,7 @@ Rectangle {
                 elide: Text.ElideRight
             }
             Text {
+                textFormat: Text.PlainText
                 visible: card.hasDiff
                 text: "+" + (card.diffStats.added || 0)
                 color: Theme.added
@@ -64,6 +67,7 @@ Rectangle {
                 font.pixelSize: Theme.smallSize
             }
             Text {
+                textFormat: Text.PlainText
                 visible: card.hasDiff
                 text: "−" + (card.diffStats.removed || 0)
                 color: Theme.removed
@@ -106,6 +110,7 @@ Rectangle {
         }
 
         Text {
+            textFormat: Text.PlainText
             visible: card.canExpand
             text: card.expanded ? "▴ show less" : "▾ " + (card.outputLines - card.previewLines) + " more line" + (card.outputLines - card.previewLines === 1 ? "" : "s")
             color: Theme.textFaint

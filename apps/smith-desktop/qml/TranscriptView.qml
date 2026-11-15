@@ -93,6 +93,7 @@ ListView {
                         color: Theme.accent
                     }
                     Text {
+                        textFormat: Text.PlainText
                         id: prompt
                         x: 14
                         y: 10
@@ -175,6 +176,7 @@ ListView {
                     width: view.column - 8
                     spacing: 4
                     Text {
+                        textFormat: Text.PlainText
                         text: (reasoningRow.open ? "▾ " : "▸ ") + (reasoningRow.live ? "thinking…" : "thought")
                         color: Theme.textFaint
                         font.family: Theme.textFamily
@@ -287,6 +289,7 @@ ListView {
                 width: ListView.view.width
                 implicitHeight: metaText.implicitHeight
                 Text {
+                    textFormat: Text.PlainText
                     id: metaText
                     x: (parent.width - view.column) / 2 + 4
                     text: "— " + parent.text
@@ -304,6 +307,7 @@ ListView {
                 width: ListView.view.width
                 implicitHeight: quoteText.implicitHeight
                 Text {
+                    textFormat: Text.PlainText
                     id: quoteText
                     x: (parent.width - view.column) / 2 + 4
                     text: parent.text

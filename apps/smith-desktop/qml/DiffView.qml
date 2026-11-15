@@ -60,6 +60,7 @@ Rectangle {
         }
 
         Text {
+            textFormat: Text.PlainText
             visible: view.rows.length > view.maxLines
             text: "… " + (view.rows.length - view.maxLines) + " more diff lines"
             color: Theme.textFaint

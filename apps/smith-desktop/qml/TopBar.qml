@@ -30,6 +30,7 @@ Rectangle {
         contentItem: Row {
             spacing: 6
             Text {
+                textFormat: Text.PlainText
                 text: parent.parent.label
                 color: Theme.textFaint
                 font.family: Theme.textFamily
@@ -37,6 +38,7 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
             }
             Text {
+                textFormat: Text.PlainText
                 text: parent.parent.value
                 color: parent.parent.enabled ? Theme.text : Theme.textDim
                 font.family: Theme.mono
@@ -46,6 +48,7 @@ Rectangle {
                 width: Math.min(implicitWidth, 240)
             }
             Text {
+                textFormat: Text.PlainText
                 text: "▾"
                 color: Theme.textFaint
                 font.pixelSize: Theme.tinySize
@@ -99,6 +102,7 @@ Rectangle {
                 anchors.centerIn: parent
                 spacing: 8
                 Text {
+                    textFormat: Text.PlainText
                     text: "network"
                     color: Theme.textFaint
                     font.family: Theme.textFamily
@@ -153,6 +157,7 @@ Rectangle {
                 delegate: MenuItem {
                     id: menuItem
                     contentItem: Text {
+                        textFormat: Text.PlainText
                         text: menuItem.text
                         color: menuItem.enabled ? Theme.text : Theme.textFaint
                         font.family: Theme.textFamily

@@ -14,6 +14,7 @@ Rectangle {
 
     // A thin bar of glyphs across the top, like a rain drop caught mid-fall.
     Text {
+        textFormat: Text.PlainText
         visible: Theme.matrix
         anchors.right: parent.right
         anchors.top: parent.top
@@ -31,6 +32,7 @@ Rectangle {
         spacing: 4
 
         Text {
+            textFormat: Text.PlainText
             text: Theme.matrix ? "AGENT SMITH" : "Smith"
             color: Theme.accent
             font.family: Theme.mono
@@ -40,6 +42,7 @@ Rectangle {
         }
 
         Text {
+            textFormat: Text.PlainText
             visible: (card.banner.greeting || "").length > 0
             text: card.banner.greeting || ""
             color: Theme.accentSoft
@@ -73,6 +76,7 @@ Rectangle {
                     Layout.fillWidth: true
                     implicitHeight: value.implicitHeight
                     Text {
+                        textFormat: Text.PlainText
                         id: key
                         width: 72
                         text: field.modelData[0]
@@ -81,6 +85,7 @@ Rectangle {
                         font.pixelSize: Theme.smallSize
                     }
                     Text {
+                        textFormat: Text.PlainText
                         id: value
                         x: 72
                         width: parent.width - 72
@@ -95,6 +100,7 @@ Rectangle {
         }
 
         Text {
+            textFormat: Text.PlainText
             Layout.topMargin: 8
             Layout.fillWidth: true
             wrapMode: Text.Wrap

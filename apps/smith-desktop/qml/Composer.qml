@@ -55,11 +55,13 @@ Rectangle {
                 Layout.fillWidth: true
                 spacing: 8
                 Text {
+                    textFormat: Text.PlainText
                     text: "⧗"
                     color: Theme.textFaint
                     font.pixelSize: Theme.smallSize
                 }
                 Text {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     text: queuedRow.modelData
                     elide: Text.ElideRight
@@ -68,6 +70,7 @@ Rectangle {
                     font.pixelSize: Theme.smallSize
                 }
                 Text {
+                    textFormat: Text.PlainText
                     text: "queued for the next step"
                     color: Theme.textFaint
                     font.family: Theme.textFamily
@@ -82,6 +85,7 @@ Rectangle {
             spacing: 10
 
             Text {
+                textFormat: Text.PlainText
                 Layout.alignment: Qt.AlignTop
                 Layout.topMargin: 6
                 text: "›"
@@ -214,6 +218,7 @@ Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 12
                     Text {
+                        textFormat: Text.PlainText
                         width: 180
                         text: suggestion.modelData.label
                         color: composer.suggestionIndex === suggestion.index ? Theme.accent : Theme.text
@@ -223,6 +228,7 @@ Rectangle {
                         elide: Text.ElideRight
                     }
                     Text {
+                        textFormat: Text.PlainText
                         text: suggestion.modelData.hint
                         color: Theme.textFaint
                         font.family: Theme.textFamily
@@ -239,6 +245,7 @@ Rectangle {
             }
         }
         Text {
+            textFormat: Text.PlainText
             anchors.left: parent.left
             anchors.bottom: parent.bottom
             anchors.margins: 8

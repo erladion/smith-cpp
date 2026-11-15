@@ -30,6 +30,7 @@ Rectangle {
                 color: Theme.added
             }
             Text {
+                textFormat: Text.PlainText
                 text: "Todos"
                 color: Theme.text
                 font.family: Theme.mono
@@ -37,6 +38,7 @@ Rectangle {
                 font.bold: true
             }
             Text {
+                textFormat: Text.PlainText
                 text: card.todos.length === 0 ? "cleared" : card.done + "/" + card.todos.length + " done"
                 color: Theme.textDim
                 font.family: Theme.mono
@@ -68,6 +70,7 @@ Rectangle {
                 Layout.leftMargin: 4
                 spacing: 8
                 Text {
+                    textFormat: Text.PlainText
                     Layout.alignment: Qt.AlignTop
                     text: item.modelData.status === "completed" ? "✔" : item.modelData.status === "in_progress" ? "▶" : "○"
                     color: item.modelData.status === "completed" ? Theme.added : item.modelData.status === "in_progress" ? Theme.warn : Theme.textFaint
@@ -75,6 +78,7 @@ Rectangle {
                     font.pixelSize: Theme.smallSize
                 }
                 Text {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     wrapMode: Text.Wrap
                     text: item.modelData.content

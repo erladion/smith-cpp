@@ -65,6 +65,7 @@ Popup {
             spacing: 10
             Spinner { visible: panel.working; running: panel.working }
             Text {
+                textFormat: Text.PlainText
                 text: (panel.stage === "landed" ? "Landed " : "Land ") + (panel.landing.branch || "")
                 color: Theme.accent
                 font.family: Theme.mono
@@ -72,6 +73,7 @@ Popup {
                 font.bold: true
             }
             Text {
+                textFormat: Text.PlainText
                 Layout.fillWidth: true
                 text: panel.stage === "loading" ? "reading the changes…" : panel.stage === "landing" ? "landing…" : panel.landing.summary || ""
                 color: Theme.textDim
@@ -101,6 +103,7 @@ Popup {
                         Layout.fillWidth: true
                         spacing: 4
                         Text {
+                            textFormat: Text.PlainText
                             Layout.fillWidth: true
                             text: "● " + file.modelData.name + "  " + file.modelData.summary
                             color: Theme.text
@@ -122,6 +125,7 @@ Popup {
                     Layout.fillWidth: true
                     spacing: 2
                     Text {
+                        textFormat: Text.PlainText
                         text: "Committed already, not on " + (panel.target || "your branch") + " yet:"
                         color: Theme.textDim
                         font.family: Theme.textFamily
@@ -130,6 +134,7 @@ Popup {
                     Repeater {
                         model: panel.landing.pending || []
                         Text {
+                            textFormat: Text.PlainText
                             required property var modelData
                             text: "  " + modelData
                             color: Theme.text
@@ -147,6 +152,7 @@ Popup {
             Layout.fillWidth: true
             spacing: 4
             Text {
+                textFormat: Text.PlainText
                 text: "Commit message"
                 color: Theme.textDim
                 font.family: Theme.textFamily
@@ -166,6 +172,7 @@ Popup {
                 onAccepted: if (panel.target.length > 0) Backend.land("cherry-pick", text)
             }
             Text {
+                textFormat: Text.PlainText
                 visible: (panel.landing.error || "").length > 0
                 text: panel.landing.error || ""
                 color: Theme.error
@@ -175,6 +182,7 @@ Popup {
         }
 
         Text {
+            textFormat: Text.PlainText
             visible: panel.stage === "review" || panel.stage === "landing"
             Layout.fillWidth: true
             text: panel.target.length > 0
@@ -189,6 +197,7 @@ Popup {
         }
 
         Text {
+            textFormat: Text.PlainText
             visible: panel.stage === "landed"
             Layout.fillWidth: true
             Layout.maximumWidth: 640

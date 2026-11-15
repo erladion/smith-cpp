@@ -40,6 +40,7 @@ Rectangle {
         ColumnLayout {
             spacing: 0
             Text {
+                textFormat: Text.PlainText
                 text: Theme.matrix ? "AGENT SMITH" : "Smith"
                 color: Theme.accent
                 font.family: Theme.mono
@@ -48,6 +49,7 @@ Rectangle {
                 font.letterSpacing: Theme.matrix ? 3 : 0
             }
             Text {
+                textFormat: Text.PlainText
                 text: Theme.matrix ? "ｴｰｼﾞｪﾝﾄ · coding agent" : "coding agent"
                 color: Theme.textFaint
                 font.family: Theme.mono
@@ -68,6 +70,7 @@ Rectangle {
                 anchors.margins: 9
                 spacing: 2
                 Text {
+                    textFormat: Text.PlainText
                     text: "PROJECT"
                     color: Theme.textFaint
                     font.family: Theme.textFamily
@@ -75,6 +78,7 @@ Rectangle {
                     font.letterSpacing: 1.5
                 }
                 Text {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     text: Backend.projectName || "…"
                     color: Theme.text
@@ -84,6 +88,7 @@ Rectangle {
                     elide: Text.ElideRight
                 }
                 Text {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     text: Backend.projectPath
                     color: Theme.textFaint
@@ -118,6 +123,7 @@ Rectangle {
         RowLayout {
             Layout.fillWidth: true
             Text {
+                textFormat: Text.PlainText
                 text: "SESSIONS"
                 color: Theme.textFaint
                 font.family: Theme.textFamily
@@ -128,6 +134,7 @@ Rectangle {
             Repeater {
                 model: [["this folder", false], ["all", true]]
                 Text {
+                    textFormat: Text.PlainText
                     required property var modelData
                     text: modelData[0]
                     color: Backend.allSessions === modelData[1] ? Theme.accent : Theme.textFaint
@@ -188,6 +195,7 @@ Rectangle {
                     width: parent.width - 20 - (remove.visible ? remove.width + 4 : 0)
                     spacing: 1
                     Text {
+                        textFormat: Text.PlainText
                         visible: !entry.renaming
                         Layout.fillWidth: true
                         text: entry.modelData.name
@@ -214,6 +222,7 @@ Rectangle {
                         Keys.onEscapePressed: entry.renaming = false
                     }
                     Text {
+                        textFormat: Text.PlainText
                         Layout.fillWidth: true
                         text: entry.modelData.hint + (Backend.allSessions ? " · " + entry.modelData.folder : "")
                         color: Theme.textFaint
@@ -224,6 +233,7 @@ Rectangle {
                 }
 
                 Text {
+                    textFormat: Text.PlainText
                     id: remove
                     visible: hover.hovered && !entry.modelData.current
                     anchors.right: parent.right
@@ -243,6 +253,7 @@ Rectangle {
             }
 
             Text {
+                textFormat: Text.PlainText
                 visible: sessions.count === 0
                 text: "No saved sessions yet."
                 color: Theme.textFaint
@@ -252,6 +263,7 @@ Rectangle {
         }
 
         Text {
+            textFormat: Text.PlainText
             text: "smith " + Backend.version + (Backend.sessionId ? "  ·  " + Backend.sessionId : "")
             color: Theme.textFaint
             font.family: Theme.mono
@@ -274,12 +286,14 @@ Rectangle {
         contentItem: ColumnLayout {
             spacing: 14
             Text {
+                textFormat: Text.PlainText
                 text: "Drop " + (dropConfirm.target.branch || "") + " and its worktree?"
                 color: Theme.text
                 font.family: Theme.textFamily
                 font.pixelSize: Theme.fontSize
             }
             Text {
+                textFormat: Text.PlainText
                 text: (dropConfirm.target.summary || "") === "no changes" ? "Nothing in it is unlanded."
                       : "This throws away what isn't landed: " + (dropConfirm.target.summary || "") + "."
                 color: (dropConfirm.target.summary || "") === "no changes" ? Theme.textDim : Theme.warn
@@ -287,6 +301,7 @@ Rectangle {
                 font.pixelSize: Theme.smallSize
             }
             Text {
+                textFormat: Text.PlainText
                 text: dropConfirm.target.path || ""
                 color: Theme.textFaint
                 font.family: Theme.mono
@@ -319,12 +334,14 @@ Rectangle {
         contentItem: ColumnLayout {
             spacing: 14
             Text {
+                textFormat: Text.PlainText
                 text: "Delete \"" + (confirm.target.name || "") + "\" and its tool log?"
                 color: Theme.text
                 font.family: Theme.textFamily
                 font.pixelSize: Theme.fontSize
             }
             Text {
+                textFormat: Text.PlainText
                 text: (confirm.target.hint || "") + "  ·  " + (confirm.target.id || "")
                 color: Theme.textFaint
                 font.family: Theme.mono

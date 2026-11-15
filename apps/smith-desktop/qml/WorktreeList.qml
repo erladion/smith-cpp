@@ -19,6 +19,7 @@ ColumnLayout {
     RowLayout {
         Layout.fillWidth: true
         Text {
+            textFormat: Text.PlainText
             text: "WORKTREES"
             color: Theme.textFaint
             font.family: Theme.textFamily
@@ -27,6 +28,7 @@ ColumnLayout {
         }
         Item { Layout.fillWidth: true }
         Text {
+            textFormat: Text.PlainText
             objectName: "newTask"
             text: "+ task"
             color: !list.idle ? Theme.textFaint : addHover.hovered ? Theme.accent : Theme.textDim
@@ -105,6 +107,7 @@ ColumnLayout {
                 width: parent.width - 20 - (actions.visible ? actions.width + 6 : 0)
                 spacing: 1
                 Text {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     text: (row.modelData.main ? "" : "⎇ ") + row.modelData.label
                     color: row.modelData.current ? Theme.accent : Theme.text
@@ -114,6 +117,7 @@ ColumnLayout {
                     elide: Text.ElideRight
                 }
                 Text {
+                    textFormat: Text.PlainText
                     Layout.fillWidth: true
                     text: row.modelData.hint
                     color: row.modelData.openElsewhere ? Theme.warn : Theme.textFaint
@@ -131,6 +135,7 @@ ColumnLayout {
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 10
                 Text {
+                    textFormat: Text.PlainText
                     text: "land"
                     color: landHover.hovered ? Theme.accent : Theme.textDim
                     font.family: Theme.textFamily
@@ -139,6 +144,7 @@ ColumnLayout {
                     TapHandler { onTapped: Backend.reviewLanding(row.modelData.path) }
                 }
                 Text {
+                    textFormat: Text.PlainText
                     text: "drop"
                     color: dropHover.hovered ? Theme.error : Theme.textDim
                     font.family: Theme.textFamily
@@ -151,6 +157,7 @@ ColumnLayout {
     }
 
     Text {
+        textFormat: Text.PlainText
         visible: Backend.worktrees.length <= 1 && !list.adding
         Layout.fillWidth: true
         text: "None yet. With one, the agent works on its own branch while you keep working here."
