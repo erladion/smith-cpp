@@ -11,6 +11,7 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QThread>
+#include <QThreadStorage>
 #include <QTimer>
 #include <QUrl>
 
@@ -157,11 +158,22 @@ struct Outcome {
   bool delivered = false;
 };
 
+// This thread's manager, kept between requests so a turn's model calls reuse
+// one connection instead of opening (and negotiating TLS for) one each. It
+// goes when the thread ends.
+QNetworkAccessManager& threadManager() {
+  static QThreadStorage<QNetworkAccessManager*> managers;
+  if (!managers.hasLocalData()) {
+    managers.setLocalData(new QNetworkAccessManager);
+  }
+  return *managers.localData();
+}
+
 // One request, with an event loop of its own. `onData` gets the body as it
 // arrives when the status is 2xx; otherwise the body is collected for the error.
 Outcome request(const QByteArray& verb, const QString& url, const QString& apiKey, const QByteArray& payload, int timeoutMs,
                 const CancelPtr& cancel, const std::function<void(const QByteArray&)>& onData) {
-  QNetworkAccessManager manager;
+  QNetworkAccessManager& manager = threadManager();
   QNetworkRequest req{QUrl(url)};
   req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
   req.setRawHeader("Accept", onData ? "text/event-stream, application/json" : "application/json");
