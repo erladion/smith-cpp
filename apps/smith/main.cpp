@@ -1,4 +1,5 @@
 #include "frontend/Runtime.h"
+#include "core/Images.h"
 #include "core/Agent.h"
 #include "core/Config.h"
 #include "core/Dirs.h"
@@ -238,7 +239,15 @@ int runHeadless(const std::function<std::shared_ptr<Agent>(const AgentHooks&)>& 
   clock.start();
   int code = 0;
   try {
-    agent->send(prompt, g_headlessCancel);
+    // Image files the prompt names go along with it.
+    const ImageRefs refs = imagesIn(prompt, QDir::currentPath());
+    if (!refs.attached.isEmpty()) {
+      err(QString("[attached %1]\n").arg(refs.attached.join(", ")));
+    }
+    for (const QString& problem : refs.problems) {
+      err(QString("[warn] %1\n").arg(problem));
+    }
+    agent->send(prompt, g_headlessCancel, refs.images);
   } catch (const std::exception& error) {
     err(describeError(error, baseUrl) + "\n");
     code = 1;

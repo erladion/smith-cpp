@@ -10,6 +10,7 @@ add_library(smith_core STATIC
   Glob.cpp
   History.cpp
   Http.cpp
+  Images.cpp
   Instructions.cpp
   Jobs.cpp
   Json.cpp

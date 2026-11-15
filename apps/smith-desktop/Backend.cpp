@@ -1,6 +1,7 @@
 #include "Backend.h"
 
 #include "core/Errors.h"
+#include "core/Images.h"
 #include "core/Jobs.h"
 #include "core/Reasoning.h"
 #include "tui/Rain.h"
@@ -237,9 +238,18 @@ void Backend::submit(const QString& value) {
     return;
   }
   m_transcript.append(Entry::simple(Entry::Kind::User, text));
+  // Image files the message names go along with it.
+  const ImageRefs refs = imagesIn(text, m_project.cwd);
+  if (!refs.attached.isEmpty()) {
+    notice(NoticeLevel::Info, "Attached " + refs.attached.join(", ") + ".");
+  }
+  for (const QString& problem : refs.problems) {
+    notice(NoticeLevel::Warn, problem);
+  }
   const std::shared_ptr<Agent> agent = m_pAgent;
+  const QList<Image> images = refs.images;
   runTurn(
-      "Thinking…", [agent, text](const CancelPtr& cancel) { agent->send(text, cancel); },
+      "Thinking…", [agent, text, images](const CancelPtr& cancel) { agent->send(text, cancel, images); },
       [this]() {
         const TurnStats& turn = m_turns.lastTurn();
         m_transcript.append(Entry::simple(Entry::Kind::Meta, turnSummary(turn.reason, turn.elapsedMs, turn.toolCalls)));

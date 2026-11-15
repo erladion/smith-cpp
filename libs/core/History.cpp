@@ -28,6 +28,36 @@ Message userMessage(const QString& text) {
   return Message{{"role", "user"}, {"content", text}};
 }
 
+Message userMessage(const QString& text, const QList<Image>& images) {
+  if (images.isEmpty()) {
+    return userMessage(text);
+  }
+  QJsonArray parts{QJsonObject{{"type", "text"}, {"text", text}}};
+  for (const Image& image : images) {
+    const QString url = QString("data:%1;base64,%2").arg(image.type, QString::fromLatin1(image.data.toBase64()));
+    parts.append(QJsonObject{{"type", "image_url"}, {"image_url", QJsonObject{{"url", url}}}});
+  }
+  return Message{{"role", "user"}, {"content", parts}};
+}
+
+bool hasImages(const Message& message) {
+  for (const QJsonValue& part : message.value("content").toArray()) {
+    if (part.toObject().value("type").toString() == "image_url") {
+      return true;
+    }
+  }
+  return false;
+}
+
+Message withoutImages(const Message& message) {
+  if (!hasImages(message)) {
+    return message;
+  }
+  Message plain = message;
+  plain["content"] = messageText(message);
+  return plain;
+}
+
 Message toolMessage(const QString& callId, const QString& content) {
   return Message{{"role", "tool"}, {"tool_call_id", callId}, {"content", content}};
 }

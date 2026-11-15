@@ -187,7 +187,7 @@ void Agent::emitEvent(const AgentEvent& event) const {
   }
 }
 
-void Agent::send(const QString& text, const CancelPtr& cancel) {
+void Agent::send(const QString& text, const CancelPtr& cancel, const QList<Image>& images) {
   {
     QMutexLocker lock(&m_mutex);
     m_turns.append(Turn{int(m_history.size()), text, std::make_shared<Checkpoint>()});
@@ -196,7 +196,8 @@ void Agent::send(const QString& text, const CancelPtr& cancel) {
     }
     m_approvedRunLater.clear();
   }
-  append(userMessage(text));
+  const int sent = int(messages().size());
+  append(userMessage(text, images));
   std::optional<QMap<QString, QString>> before;
   if (m_options.protectRunLater) {
     try {
@@ -211,11 +212,29 @@ void Agent::send(const QString& text, const CancelPtr& cancel) {
     if (before) {
       reportRunLater(*before);
     }
+    if (!images.isEmpty()) {
+      dropUnansweredImages(sent);
+    }
     throw;
   }
   if (before) {
     reportRunLater(*before);
   }
+}
+
+// A request with pictures that failed before the model answered: most likely
+// the model can't read them, and with them left in the conversation every
+// later request would fail the same way. The message stays, as text.
+void Agent::dropUnansweredImages(int index) {
+  const Messages history = messages();
+  if (history.size() != index + 1 || !hasImages(history[index])) {
+    return;
+  }
+  Messages kept = history.mid(1, index - 1);
+  kept.append(withoutImages(history[index]));
+  replaceHistory(kept);
+  emitEvent(Event::Notice{NoticeLevel::Warn, "The request failed, so the pictures were taken out of the conversation: if this model can't read "
+                                             "images, they would fail every request after it. Your message is still there."});
 }
 
 void Agent::reportRunLater(const QMap<QString, QString>& before) {

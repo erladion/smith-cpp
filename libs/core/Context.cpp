@@ -36,16 +36,35 @@ qint64 estimateTokens(const QString& text) {
   return qint64(std::ceil(text.size() / CHARS_PER_TOKEN));
 }
 
+namespace {
+
+// What a picture costs, roughly; servers count them by size, not by their base64.
+constexpr qint64 IMAGE_TOKENS = 1500;
+
+qint64 imageTokens(const Message& message) {
+  qint64 tokens = 0;
+  for (const QJsonValue& part : message.value("content").toArray()) {
+    if (part.toObject().value("type").toString() == "image_url") {
+      tokens += IMAGE_TOKENS;
+    }
+  }
+  return tokens;
+}
+
+} // namespace
+
 qint64 estimateTokens(const Message& message) {
-  return estimateTokens(Json::stringify(message));
+  return estimateTokens(Json::stringify(withoutImages(message))) + imageTokens(message);
 }
 
 qint64 estimateTokens(const Messages& messages) {
   QJsonArray array;
+  qint64 images = 0;
   for (const Message& message : messages) {
-    array.append(message);
+    array.append(withoutImages(message));
+    images += imageTokens(message);
   }
-  return estimateTokens(array);
+  return estimateTokens(array) + images;
 }
 
 qint64 estimateTokens(const QJsonArray& value) {

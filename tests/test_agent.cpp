@@ -42,6 +42,7 @@ private Q_SLOTS:
   void subagentReportsBack();
   void outsideReadsAskOneAtATime();
   void subagentAsksThroughMainAgent();
+  void imagesGoWithTheMessage();
   void interruptStopsFurtherApprovals();
   void loadingConversationIsntRecorded();
   void resumedHistoryIsRepaired();
@@ -675,6 +676,34 @@ void TestAgent::interruptStopsFurtherApprovals() {
   });
   h->agent->send("read", cancel);
   QCOMPARE(asked.load(), 1);
+}
+
+void TestAgent::imagesGoWithTheMessage() {
+  const QList<Image> images{Image{"shot.png", "image/png", QByteArray("\x89PNG....")}};
+  m_pFake->setScript({FakeServer::text("A login form."), FakeServer::text("Yes.")});
+  auto h = make();
+  h->agent->send("what is this?", makeCancel(), images);
+  const QJsonArray parts = lastMessage(m_pFake->requests()[0]).value("content").toArray();
+  QCOMPARE(parts.size(), 2);
+  QCOMPARE(parts[0].toObject().value("text").toString(), QString("what is this?"));
+  QVERIFY(parts[1].toObject().value("image_url").toObject().value("url").toString().startsWith("data:image/png;base64,"));
+  // It stays in the conversation for the turns after.
+  h->agent->send("sure?", makeCancel());
+  QVERIFY(hasImages(messagesOf(m_pFake->requests()[1])[1].toObject()));
+
+  // A server that refuses the request: the picture goes, the words stay, and the next request can work.
+  m_pFake->setScript({FakeServer::failure(400, QJsonObject{{"message", "image input is not supported"}}), FakeServer::text("OK.")});
+  auto refused = make();
+  QVERIFY_THROWS_MATCH(refused->agent->send("and this?", makeCancel(), images), "image input is not supported");
+  const Messages left = refused->agent->messages();
+  QCOMPARE(left.size(), 2);
+  QCOMPARE(left[1], userMessage("and this?"));
+  bool told = false;
+  for (const AgentEvent& event : refused->events) {
+    const auto* notice = std::get_if<Event::Notice>(&event);
+    told = told || (notice && notice->text.contains("pictures were taken out"));
+  }
+  QVERIFY(told);
 }
 
 void TestAgent::subagentAsksThroughMainAgent() {

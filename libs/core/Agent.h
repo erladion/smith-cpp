@@ -138,8 +138,8 @@ public:
   // Undoes the last turn: puts back files it changed and removes the turn from the conversation.
   std::optional<UndoResult> undo();
 
-  // Runs one user turn. Throws on API errors; interruption via `cancel` is not an error.
-  void send(const QString& text, const CancelPtr& cancel);
+  // Runs one user turn, with pictures to show the model if any. Throws on API errors; interruption via `cancel` is not an error.
+  void send(const QString& text, const CancelPtr& cancel, const QList<Image>& images = {});
   // Summarizes the conversation now, regardless of how full the context is.
   void compactNow(const CancelPtr& cancel);
   // One quick reply from the model, outside the conversation: no history, no
@@ -171,6 +171,7 @@ private:
   void emitEvent(const AgentEvent& event) const;
   void interruptible(const CancelPtr& cancel, const std::function<void()>& work);
   void loop(const CancelPtr& cancel);
+  void dropUnansweredImages(int index);
   void deliverQueued();
   QList<ToolResult> runTools(const QList<ToolCall>& calls, const CancelPtr& cancel);
   ToolResult runSubagent(const TaskInput& input, const CancelPtr& cancel);

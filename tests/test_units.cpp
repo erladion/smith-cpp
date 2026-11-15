@@ -7,6 +7,7 @@
 #include "core/Errors.h"
 #include "core/Preferences.h"
 #include "core/Prompt.h"
+#include "core/Images.h"
 #include "core/Permissions.h"
 #include "core/RunLater.h"
 #include "core/Session.h"
@@ -61,6 +62,7 @@ private Q_SLOTS:
   void runLaterRecognisedByNameAndPlace();
   void runLaterSnapshots();
   void runLaterSeesGitFolders();
+  void messagesNameTheirImages();
   void permissionRulesCoverCommands();
 
 private:
@@ -479,6 +481,51 @@ void TestUnits::permissionRulesCoverCommands() {
   QCOMPARE(saved, QStringList());
   QVERIFY(!allowed.allows("bash", bash("npm test"), false));
   QVERIFY2(allowed.allows("bash", bash("make"), false), "the config file's rules stay");
+}
+
+void TestUnits::messagesNameTheirImages() {
+  TempDir dir(QDir::tempPath(), "smith-images-");
+  auto put = [&](const QString& name, const QByteArray& data) {
+    QDir().mkpath(QFileInfo(dir.file(name)).path());
+    QFile file(dir.file(name));
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(data);
+  };
+  const QByteArray png("\x89PNG\r\n\x1a\n....", 12);
+  put("shot.png", png);
+  put("my shots/after fix.JPG", QByteArray("\xFF\xD8\xFF\xE0....", 8));
+  put("notes.png", "not really a picture");
+  put("big.png", png + QByteArray(6 * 1024 * 1024, 'x'));
+
+  const QString text = QString("Compare shot.png with 'my shots/after fix.JPG' and my\\ shots/after\\ fix.JPG, also file://%1 and notes.png, big.png, "
+                               "gone.png, main.c")
+                           .arg(dir.file("shot.png"));
+  const ImageRefs refs = imagesIn(text, dir.path());
+  // Each file once, however it was written; what only looks like an image, or isn't there, is left as text.
+  QCOMPARE(refs.images.size(), 2);
+  QCOMPARE(refs.images[0].name, QString("shot.png"));
+  QCOMPARE(refs.images[0].type, QString("image/png"));
+  QCOMPARE(refs.images[0].data, png);
+  QCOMPARE(refs.images[1].type, QString("image/jpeg"));
+  QCOMPARE(refs.attached, QStringList({"shot.png (1 kB)", "after fix.JPG (1 kB)"}));
+  QCOMPARE(refs.problems.size(), 1);
+  QVERIFY_MATCH(refs.problems[0], "^big\\.png is 6\\.0 MB; images over 5\\.0 MB aren't attached");
+  QVERIFY(imagesIn("no pictures here", dir.path()).images.isEmpty());
+
+  const Message message = userMessage("look", refs.images);
+  QVERIFY(hasImages(message));
+  QCOMPARE(messageText(message), QString("look"));
+  const QJsonArray parts = message.value("content").toArray();
+  QCOMPARE(parts.size(), 3);
+  QCOMPARE(parts[1].toObject().value("image_url").toObject().value("url").toString(), QString("data:image/png;base64,") + png.toBase64());
+  QCOMPARE(withoutImages(message), userMessage("look"));
+  QCOMPARE(userMessage("look", {}), userMessage("look"));
+
+  // A picture counts as a picture, not as the text of its bytes.
+  const Message heavy = userMessage("look", {Image{"big.png", "image/png", QByteArray(3 * 1024 * 1024, 'x')}});
+  QVERIFY(estimateTokens(heavy) < 2000);
+  QVERIFY(estimateTokens(Messages{heavy}) < 2000);
+  QVERIFY(estimateTokens(heavy) > estimateTokens(userMessage("look")) + 1000);
 }
 
 void TestUnits::runLaterSeesGitFolders() {
