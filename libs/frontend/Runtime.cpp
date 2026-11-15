@@ -378,6 +378,16 @@ std::shared_ptr<Agent> Runtime::createAgent(const AgentHooks& hooks, const std::
   if (m_pToolLog) {
     options.onToolRun = [log = m_pToolLog](const ToolRun& run) { log->write(run); };
   }
+  // What runs without asking here: the config file's rules, and what the user allowed in this folder before.
+  options.alwaysAllowed = std::make_shared<AllowedTools>();
+  options.alwaysAllowed->setConfigured(m_config.allow, m_config.deny);
+  const QString folder = project.cwd;
+  options.alwaysAllowed->setRemembered(loadPreferences().allowed.value(folder), [folder](const QStringList& rules) {
+    PreferenceChange change;
+    change.allowedIn = folder;
+    change.allowed = rules;
+    Smith::savePreferences(change);
+  });
   options.onEvent = hooks.onEvent;
   options.approve = hooks.approve;
   options.ask = hooks.ask;

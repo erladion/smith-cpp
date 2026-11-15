@@ -49,16 +49,6 @@ QString relativeSlashPath(const QString& cwd, const QString& path) {
 
 const QString TODO_REMINDER = "[Reminder] Your todo list still has unfinished steps:";
 
-bool AllowedTools::contains(const QString& tool) const {
-  QMutexLocker lock(&m_mutex);
-  return m_tools.contains(tool);
-}
-
-void AllowedTools::insert(const QString& tool) {
-  QMutexLocker lock(&m_mutex);
-  m_tools.insert(tool);
-}
-
 Agent::Agent(AgentOptions options) : m_options(std::move(options)) {
   m_history = Messages{Message{{"role", "system"}, {"content", m_options.systemPrompt}}} + repairHistory(m_options.history);
   m_tools = m_options.tools;
@@ -826,8 +816,13 @@ ToolResult Agent::runTool(const ToolCall& call, const CancelPtr& cancel) {
   const bool needsApproval = !tool->readOnly || !reason.isEmpty() || !warning.isEmpty();
   // Commands that would run with no sandbox are asked about every time.
   const bool unsandboxed = tool->sandboxed && !ctx.sandboxOrNone()->active();
+  if (m_pAlwaysAllowed->denies(tool->name, args)) {
+    approval = "denied by the config";
+    return fail("The user's config file doesn't allow this (permissions.deny). Don't try it another way; ask them how they want to proceed.", summary,
+                "denied");
+  }
   approval = needsApproval ? "already allowed" : "not needed";
-  if (needsApproval && (unsandboxed || !m_pAlwaysAllowed->contains(tool->name) || !warning.isEmpty())) {
+  if (needsApproval && (!m_pAlwaysAllowed->allows(tool->name, args, unsandboxed) || !warning.isEmpty())) {
     // Show the change in the prompt; a call that would fail anyway fails without asking.
     std::optional<Diff> preview;
     if (tool->preview) {
@@ -852,17 +847,22 @@ ToolResult Agent::runTool(const ToolCall& call, const CancelPtr& cancel) {
       request.sandboxDescription = sandbox->describe(m_options.cwd);
     }
     request.canAllowAlways = !unsandboxed;
+    request.similar = tool->sandboxed ? commandPrefix(args.value("command").toString()) : QString();
+    request.remembered = m_pAlwaysAllowed->remembers();
     ApprovalDecision decision = requestApproval(request, cancel);
-    if (decision == ApprovalDecision::AllowAlways && unsandboxed) {
+    // An answer that wasn't on offer allows only this call.
+    if ((decision == ApprovalDecision::AllowAlways && unsandboxed) || (decision == ApprovalDecision::AllowSimilar && request.similar.isEmpty())) {
       decision = ApprovalDecision::Allow;
     }
     if (decision == ApprovalDecision::Deny || cancelled(cancel)) {
       approval = "denied";
       return fail("The user declined this tool call. Ask them how they want to proceed.", summary, "denied");
     }
-    approval = decision == ApprovalDecision::AllowAlways ? "allowed always" : "allowed";
+    approval = decision == ApprovalDecision::AllowAlways ? "allowed always" : decision == ApprovalDecision::AllowSimilar ? "allowed for commands like it" : "allowed";
     if (decision == ApprovalDecision::AllowAlways) {
       m_pAlwaysAllowed->insert(tool->name);
+    } else if (decision == ApprovalDecision::AllowSimilar) {
+      m_pAlwaysAllowed->insert(tool->name + ":" + request.similar);
     }
   }
 
@@ -889,7 +889,7 @@ ApprovalDecision Agent::requestApproval(const ApprovalRequest& request, const Ca
   if (cancelled(cancel)) {
     return ApprovalDecision::Deny;
   }
-  if (request.canAllowAlways && m_pAlwaysAllowed->contains(request.tool) && request.warning.isEmpty()) {
+  if (request.warning.isEmpty() && m_pAlwaysAllowed->allows(request.tool, request.input, !request.canAllowAlways)) {
     return ApprovalDecision::Allow;
   }
   if (!m_options.approve) {

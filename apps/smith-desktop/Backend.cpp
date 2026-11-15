@@ -183,6 +183,8 @@ void Backend::decide(const QString& decision) {
     m_prompts.decide(ApprovalDecision::Allow);
   } else if (decision == "always") {
     m_prompts.decide(ApprovalDecision::AllowAlways);
+  } else if (decision == "similar") {
+    m_prompts.decide(ApprovalDecision::AllowSimilar);
   } else {
     m_prompts.decide(ApprovalDecision::Deny);
     if (decision == "interrupt") {

@@ -94,6 +94,8 @@ void Backend::runCommand(const QString& text) {
     } else {
       notice(NoticeLevel::Info, QString("Network is %1 for sandboxed commands. Use /network on or /network off.").arg(network() ? "on" : "off"));
     }
+  } else if (command == "/permissions") {
+    notice(NoticeLevel::Info, managePermissions(*m_pAgent->allowed(), arg));
   } else if (command == "/undo") {
     undo();
   } else if (command == "/skills") {

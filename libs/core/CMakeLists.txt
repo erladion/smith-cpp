@@ -14,6 +14,7 @@ add_library(smith_core STATIC
   Jobs.cpp
   Json.cpp
   Paths.cpp
+  Permissions.cpp
   Preferences.cpp
   Process.cpp
   SessionProcess.cpp

@@ -2,6 +2,7 @@
 
 #include <QMap>
 #include <QString>
+#include <QStringList>
 
 namespace Smith {
 
@@ -12,6 +13,8 @@ struct Preferences {
   QString endpoint;
   // Base URL → model id.
   QMap<QString, QString> models;
+  // Project folder → what the user allowed to run there without asking.
+  QMap<QString, QStringList> allowed;
 };
 
 Preferences loadPreferences();
@@ -21,6 +24,9 @@ struct PreferenceChange {
   QString endpoint;
   QString modelBaseUrl;
   QString modelId;
+  // With a folder: what is allowed there now (replacing what was; none forgets the folder).
+  QString allowedIn;
+  QStringList allowed;
 };
 
 // Merges the non-empty fields into the saved preferences. Failing to save is ignored.

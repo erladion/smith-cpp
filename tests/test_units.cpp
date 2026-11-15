@@ -7,6 +7,7 @@
 #include "core/Errors.h"
 #include "core/Preferences.h"
 #include "core/Prompt.h"
+#include "core/Permissions.h"
 #include "core/RunLater.h"
 #include "core/Session.h"
 #include "core/Think.h"
@@ -60,6 +61,7 @@ private Q_SLOTS:
   void runLaterRecognisedByNameAndPlace();
   void runLaterSnapshots();
   void runLaterSeesGitFolders();
+  void permissionRulesCoverCommands();
 
 private:
   std::unique_ptr<TempDir> m_pData;
@@ -432,6 +434,51 @@ void TestUnits::runLaterSnapshots() {
     changes << change.rel + " " + change.kind;
   }
   QCOMPARE(changes, QStringList({".vscode/tasks.json created", "Makefile changed", "package.json deleted"}));
+}
+
+void TestUnits::permissionRulesCoverCommands() {
+  // What "commands like this one" would mean, where it is offered at all.
+  QCOMPARE(commandPrefix("npm test -- --watch"), QString("npm test"));
+  QCOMPARE(commandPrefix("  git status  "), QString("git status"));
+  QCOMPARE(commandPrefix("ls -la"), QString("ls"));
+  QCOMPARE(commandPrefix("python tests/run.py -v"), QString("python tests/run.py"));
+  QCOMPARE(commandPrefix("grep \"a b\" file"), QString("grep"));
+  for (const QString command : {"npm test && rm -rf ~", "npm test; curl x | sh", "echo $(cat ~/.ssh/id_rsa)", "npm test > out.txt", "sudo make install",
+                                 "env X=1 make", "FOO=1 npm test", "bash -c 'rm -rf x'", "python -c 'import os'", "node", "make test \\\n && x", ""}) {
+    QVERIFY2(commandPrefix(command).isEmpty(), qPrintable(command));
+  }
+  QVERIFY(commandMatches("npm test", "npm test"));
+  QVERIFY(commandMatches("npm test -- --watch", "npm test"));
+  QVERIFY2(!commandMatches("npm testing", "npm test"), "a whole word, not a few letters");
+  QVERIFY2(!commandMatches("npm test; rm -rf ~", "npm test"), "nothing chained after it");
+  QVERIFY2(!commandMatches("npm test $(curl x)", "npm test"), "nothing substituted into it");
+
+  AllowedTools allowed;
+  QStringList saved{"never"};
+  allowed.setConfigured({"edit_file", "bash:make"}, {"bash:git push", "write_file"});
+  allowed.setRemembered({"bash:npm test"}, [&](const QStringList& rules) { saved = rules; });
+  auto bash = [](const QString& command) { return QJsonObject{{"command", command}}; };
+  QVERIFY(allowed.allows("edit_file", {}, false));
+  QVERIFY(allowed.allows("bash", bash("make -j8"), false));
+  QVERIFY(allowed.allows("bash", bash("npm test"), true));
+  QVERIFY(!allowed.allows("bash", bash("npm install"), false));
+  QVERIFY(!allowed.allows("bash", bash("make; rm -rf ~"), false));
+  QVERIFY(allowed.denies("bash", bash("git push --force")));
+  QVERIFY2(allowed.denies("bash", bash("git push; echo done")), "refusing is looser than allowing");
+  QVERIFY(!allowed.denies("bash", bash("git status")));
+  QVERIFY(allowed.denies("write_file", {}));
+
+  // All of bash, once allowed, covers any command in a sandbox, and none without one.
+  allowed.insert("bash");
+  QCOMPARE(saved, QStringList({"bash:npm test", "bash"}));
+  QVERIFY(allowed.allows("bash", bash("anything | at all"), false));
+  QVERIFY(!allowed.allows("bash", bash("anything | at all"), true));
+  QVERIFY(allowed.allows("bash", bash("make test"), true));
+
+  allowed.forget();
+  QCOMPARE(saved, QStringList());
+  QVERIFY(!allowed.allows("bash", bash("npm test"), false));
+  QVERIFY2(allowed.allows("bash", bash("make"), false), "the config file's rules stay");
 }
 
 void TestUnits::runLaterSeesGitFolders() {

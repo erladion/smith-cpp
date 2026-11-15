@@ -44,6 +44,8 @@ QVariantMap Backend::approval() const {
       {"sandboxActive", request.sandboxActive},
       {"sandboxDescription", request.sandboxDescription},
       {"canAllowAlways", request.canAllowAlways},
+      {"similar", request.similar},
+      {"remembered", request.remembered},
   };
   if (request.preview) {
     QVariantList rows;

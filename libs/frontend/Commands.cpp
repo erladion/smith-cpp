@@ -1,6 +1,8 @@
 #include "frontend/Commands.h"
 
 #include "core/Dirs.h"
+#include "core/Permissions.h"
+#include "core/Tool.h"
 #include "core/Reasoning.h"
 #include "frontend/Folders.h"
 
@@ -97,6 +99,8 @@ const QList<CommandSpec>& commands() {
         {"/skills", {}, "list the available skills", {}},
         {"/network", "on|off", "allow or block network access for sandboxed commands",
          fixed({Completion{"on", "allow network access"}, Completion{"off", "block network access"}})},
+        {"/permissions", "[reset]", "show what runs here without asking, or forget what you allowed",
+         fixed({Completion{"reset", "forget what you allowed in this project"}})},
         {"/jobs", "[stop id|all]", "list the commands the agent runs in the background, or stop one or all",
          fixed({Completion{"stop all", "stop every background job"}})},
         {"/compact", {}, "summarize the conversation now to free context", {}},
@@ -156,6 +160,41 @@ QList<Suggestion> suggest(const QString& input, const CompletionContext& ctx) {
     }
   }
   return out;
+}
+
+QString managePermissions(AllowedTools& allowed, const QString& arg) {
+  if (arg == "reset") {
+    const int count = allowed.remembered().size();
+    allowed.forget();
+    return count ? QString("Forgot %1 you allowed in this project. Those tools ask again.").arg(plural(count, "rule")) : QString("There was nothing to forget.");
+  }
+  auto shown = [](const QString& rule) {
+    const int colon = rule.indexOf(':');
+    return colon < 0 ? rule : QString("%1 commands starting with \"%2\"").arg(rule.left(colon), rule.mid(colon + 1));
+  };
+  auto list = [&](const QStringList& rules) {
+    QStringList lines;
+    for (const QString& rule : rules) {
+      lines << "  " + shown(rule);
+    }
+    return lines.join('\n');
+  };
+  QStringList parts;
+  if (!allowed.remembered().isEmpty()) {
+    parts << QString("You allowed these %1 (/permissions reset forgets them):\n").arg(allowed.remembers() ? "in this project" : "for this session") +
+                 list(allowed.remembered());
+  }
+  if (!allowed.configured().isEmpty()) {
+    parts << "Allowed by the config file (permissions.allow):\n" + list(allowed.configured());
+  }
+  if (!allowed.denied().isEmpty()) {
+    parts << "Refused by the config file (permissions.deny):\n" + list(allowed.denied());
+  }
+  if (parts.isEmpty()) {
+    return "Nothing runs without asking, apart from tools that only read. Answer a prompt with \"always\" to allow a tool or a kind of command, "
+           "or list rules under permissions.allow in the config file.";
+  }
+  return parts.join("\n\n");
 }
 
 } // namespace Smith

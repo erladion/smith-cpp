@@ -35,6 +35,7 @@ private Q_SLOTS:
   void readOnlyCallsRunInParallel();
   void parallelCallsAreCapped();
   void unsandboxedCommandsAlwaysAsk();
+  void commandsLikeOneAllowedStopAsking();
   void unreadableChunksAreReported();
   void messageTypedDuringToolCallIsDelivered();
   void messageTypedDuringAnswerKeepsTurnGoing();
@@ -432,6 +433,36 @@ void TestAgent::parallelCallsAreCapped() {
   }
   QVERIFY2(most > 1 && most <= 8, qPrintable(QString("%1 ran at once").arg(most)));
   QCOMPARE(toolResults(m_pFake->requests()[1]), expected);
+}
+
+void TestAgent::commandsLikeOneAllowedStopAsking() {
+  auto run = [](const QString& id, const QString& command) { return FakeServer::stream({FakeServer::callDelta(0, id, "bash", {{"command", command}})}, "tool_calls"); };
+  m_pFake->setScript({
+      run("b1", "echo one"),
+      run("b2", "echo one more"),
+      run("b3", "echo one; echo four"),
+      run("b4", "printf nope"),
+      FakeServer::text("Done."),
+  });
+  QStringList asked;
+  QStringList saved;
+  auto h = make(ApprovalDecision::Allow, [&](AgentOptions& options, Harness&) {
+    options.alwaysAllowed = std::make_shared<AllowedTools>();
+    options.alwaysAllowed->setConfigured({}, {"bash:printf"});
+    options.alwaysAllowed->setRemembered({}, [&](const QStringList& rules) { saved = rules; });
+    options.approve = [&](const ApprovalRequest& request) {
+      asked << QString("%1|%2|%3").arg(request.summary, request.similar, request.remembered ? "kept" : "session");
+      return ApprovalDecision::AllowSimilar;
+    };
+  });
+  h->agent->send("go", makeCancel());
+
+  // No sandbox here, where every command asks: one allowed kind of command is the exception.
+  // Two commands in one aren't that kind, and aren't offered a rule of their own.
+  QCOMPARE(asked, QStringList({"echo one|echo one|kept", "echo one; echo four||kept"}));
+  QCOMPARE(saved, QStringList({"bash:echo one"}));
+  const QJsonArray sent = messagesOf(m_pFake->requests()[4]);
+  QVERIFY_MATCH(sent[sent.size() - 1].toObject().value("content").toString(), "config file doesn't allow this");
 }
 
 void TestAgent::unsandboxedCommandsAlwaysAsk() {

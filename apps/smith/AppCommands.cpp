@@ -61,6 +61,8 @@ void App::runCommand(const QString& text) {
     }
   } else if (command == "/network") {
     setNetwork(arg);
+  } else if (command == "/permissions") {
+    print(Entry::notice(NoticeLevel::Info, managePermissions(*m_pAgent->allowed(), arg)));
   } else if (command == "/undo") {
     undo();
   } else if (command == "/skills") {

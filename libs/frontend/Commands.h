@@ -49,4 +49,8 @@ struct Suggestion {
 // follows a command that has them ("/reasoning h" → high).
 QList<Suggestion> suggest(const QString& input, const CompletionContext& ctx);
 
+class AllowedTools;
+// /permissions: what runs without asking, as text; with "reset", forgets what the user allowed.
+QString managePermissions(AllowedTools& allowed, const QString& arg);
+
 } // namespace Smith

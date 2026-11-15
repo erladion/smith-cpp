@@ -4,6 +4,7 @@
 #include "core/Reasoning.h"
 
 #include <QFile>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSaveFile>
@@ -40,6 +41,18 @@ Preferences loadPreferences() {
       prefs.models.insert(it.key(), it.value().toString());
     }
   }
+  const QJsonObject allowed = raw.value("allowed").toObject();
+  for (auto it = allowed.begin(); it != allowed.end(); ++it) {
+    QStringList rules;
+    for (const QJsonValue& rule : it.value().toArray()) {
+      if (rule.isString() && !rule.toString().isEmpty()) {
+        rules << rule.toString();
+      }
+    }
+    if (!rules.isEmpty()) {
+      prefs.allowed.insert(it.key(), rules);
+    }
+  }
   return prefs;
 }
 
@@ -54,6 +67,13 @@ void savePreferences(const PreferenceChange& change) {
   if (!change.modelBaseUrl.isEmpty() && !change.modelId.isEmpty()) {
     prefs.models.insert(change.modelBaseUrl, change.modelId);
   }
+  if (!change.allowedIn.isEmpty()) {
+    if (change.allowed.isEmpty()) {
+      prefs.allowed.remove(change.allowedIn);
+    } else {
+      prefs.allowed.insert(change.allowedIn, change.allowed);
+    }
+  }
   QJsonObject out;
   if (!prefs.reasoning.isEmpty()) {
     out["reasoning"] = prefs.reasoning;
@@ -67,6 +87,13 @@ void savePreferences(const PreferenceChange& change) {
       models[it.key()] = it.value();
     }
     out["models"] = models;
+  }
+  if (!prefs.allowed.isEmpty()) {
+    QJsonObject allowed;
+    for (auto it = prefs.allowed.begin(); it != prefs.allowed.end(); ++it) {
+      allowed[it.key()] = QJsonArray::fromStringList(it.value());
+    }
+    out["allowed"] = allowed;
   }
   // Preferences are a convenience; failing to save them shouldn't break anything.
   privateDir(configDir());

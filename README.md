@@ -132,6 +132,17 @@ TypeScript version doesn't have them.
 
 ## New in this port
 
+- **Permissions.** Answering an approval with "always" is remembered for the project folder (in
+  `preferences.json`), and for a shell command there is a third answer, `s`: always allow commands
+  that start the same way (`npm test`, `git status`). Such a rule covers one program and its
+  arguments, never a command that chains or substitutes others (`;`, `|`, `&&`, `$(...)`), and unlike
+  "always allow bash" it also applies with `--sandbox off`. `/permissions` lists what runs without
+  asking; `/permissions reset` forgets what you allowed. The config file takes rules too:
+
+  ```json
+  "permissions": { "allow": ["edit_file", "bash:npm test"], "deny": ["bash:git push"] }
+  ```
+
 - **edit_file** takes several replacements in one call (`edits`), all or nothing, and keeps the
   encoding of files that aren't UTF-8.
 

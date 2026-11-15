@@ -52,6 +52,9 @@ struct Config {
   SandboxConfig sandbox;
   // Whether changes to files that run outside the sandbox later always ask, and are reported.
   bool protectRunLater = true;
+  // What runs without asking, and what is refused: a tool's name, or "bash:<start of a command>".
+  QStringList allow;
+  QStringList deny;
   // Problems worth telling the user about that don't stop the agent.
   QStringList warnings;
 

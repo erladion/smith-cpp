@@ -3,6 +3,7 @@
 #include "core/Cancel.h"
 #include "core/Events.h"
 #include "core/History.h"
+#include "core/Permissions.h"
 #include "core/Server.h"
 #include "core/Tool.h"
 #include "core/ToolLog.h"
@@ -22,7 +23,8 @@ namespace Smith {
 
 class Sandbox;
 
-enum class ApprovalDecision { Allow, AllowAlways, Deny };
+// AllowAlways: the tool from now on. AllowSimilar: commands that start like this one (ApprovalRequest::similar).
+enum class ApprovalDecision { Allow, AllowAlways, AllowSimilar, Deny };
 
 struct ApprovalRequest {
   QString tool;
@@ -40,6 +42,10 @@ struct ApprovalRequest {
   QString warning;
   // Whether "always allow" is on offer: not for commands that run without a sandbox.
   bool canAllowAlways = true;
+  // For a command: the start that "always allow commands like this" would cover ("npm test"); empty when that isn't on offer.
+  QString similar;
+  // Whether an "always" answer is kept for the project's later sessions, not only this one.
+  bool remembered = false;
 };
 
 struct UndoResult {
@@ -50,17 +56,6 @@ struct UndoResult {
   QStringList skipped;
   // Tools that ran in the turn whose changes can't be undone (bash).
   QStringList untracked;
-};
-
-// Tools the user allowed for the session; shared with sub-agents so a grant applies to both.
-class AllowedTools {
-public:
-  bool contains(const QString& tool) const;
-  void insert(const QString& tool);
-
-private:
-  mutable QMutex m_mutex;
-  QSet<QString> m_tools;
 };
 
 // Starts the message that reminds the model of unfinished todos when it stops early.
@@ -116,6 +111,8 @@ public:
   std::optional<int> contextLimit() const;
   QString reasoning() const;
   ServerPtr server() const;
+  // What runs without asking, and what the user allowed.
+  std::shared_ptr<AllowedTools> allowed() const { return m_pAlwaysAllowed; }
 
   // Switches model, and optionally server, for the following requests. The conversation carries over.
   void setModel(const QString& model, std::optional<int> contextSize, const ServerPtr& server = {});

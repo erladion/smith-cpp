@@ -65,6 +65,8 @@ void App::onKey(const Key& key) {
       m_prompts.decide(ApprovalDecision::Allow);
     } else if (letter == "a" && approval->canAllowAlways) {
       m_prompts.decide(ApprovalDecision::AllowAlways);
+    } else if (letter == "s" && !approval->similar.isEmpty()) {
+      m_prompts.decide(ApprovalDecision::AllowSimilar);
     } else if (letter == "n") {
       m_prompts.decide(ApprovalDecision::Deny);
     } else if (key.name == KeyName::Escape) {

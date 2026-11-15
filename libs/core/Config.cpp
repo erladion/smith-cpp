@@ -286,7 +286,7 @@ Config loadConfig(const QString& file) {
   }
   const QJsonObject root = json.toObject();
   Checker check;
-  check.strict(root, {"default", "maxSteps", "subagents", "toolLog", "theme", "codeStream", "sandbox", "protectRunLater", "endpoints"}, {});
+  check.strict(root, {"default", "maxSteps", "subagents", "toolLog", "theme", "codeStream", "sandbox", "protectRunLater", "permissions", "endpoints"}, {});
 
   config.defaultEndpoint = check.string(root, "default", {}).value_or(QString());
   if (const auto maxSteps = check.number(root, "maxSteps", {}, true, 1, 10000)) {
@@ -303,6 +303,11 @@ Config loadConfig(const QString& file) {
   }
   config.codeStream = check.boolean(root, "codeStream", {}).value_or(true);
   config.protectRunLater = check.boolean(root, "protectRunLater", {}).value_or(true);
+  if (const auto permissions = check.object(root, "permissions", {})) {
+    check.strict(*permissions, {"allow", "deny"}, "permissions");
+    config.allow = check.strings(*permissions, "allow", "permissions", true).value_or(QStringList());
+    config.deny = check.strings(*permissions, "deny", "permissions", true).value_or(QStringList());
+  }
   if (const auto sandbox = check.object(root, "sandbox", {})) {
     config.sandbox = sandboxConfig(*sandbox, check);
   }

@@ -54,7 +54,11 @@ QList<Line> approvalBox(const ApprovalRequest& request, int width, int rows) {
   Line keys{Span{"y", fg(Color::Green)}, Span{" yes · ", DIM}};
   if (request.canAllowAlways) {
     keys.append(Span{"a", fg(Color::Green)});
-    keys.append(Span{QString(" always allow %1 this session · ").arg(request.tool), DIM});
+    keys.append(Span{QString(" always allow %1 %2 · ").arg(request.tool, request.remembered ? "in this project" : "this session"), DIM});
+  }
+  if (!request.similar.isEmpty()) {
+    keys.append(Span{"s", fg(Color::Green)});
+    keys.append(Span{QString(" always allow \"%1\" commands · ").arg(request.similar), DIM});
   }
   keys.append(Span{"n", fg(Color::Red)});
   keys.append(Span{" no · ", DIM});
