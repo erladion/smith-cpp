@@ -14,13 +14,23 @@ endif()
 option(SMITH_BUILD_TUI "Build smith, the terminal app" ON)
 option(SMITH_BUILD_DESKTOP "Build smith-desktop, the QML desktop app" ON)
 option(SMITH_BUILD_TESTS "Build the tests" ON)
+# A sanitizer for everything built here, e.g. "thread" or "address,undefined".
+set(SMITH_SANITIZE "" CACHE STRING "Build with -fsanitize=<this>")
 
 # Qt 6.6+, or Qt 5.15 for the terminal app. Qt 6 wins when both are found;
-# point CMAKE_PREFIX_PATH at one to pick it.
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core)
-if(QT_VERSION_MAJOR EQUAL 6)
+# point CMAKE_PREFIX_PATH at one to pick it. An older Qt 6 (a distribution's
+# 6.4, say) is passed over for Qt 5 rather than failing.
+find_package(Qt6 6.6 QUIET COMPONENTS Core)
+if(Qt6_FOUND)
+  set(QT_VERSION_MAJOR 6)
   set(SMITH_QT_MINIMUM 6.6)
 else()
+  find_package(Qt5 5.15 QUIET COMPONENTS Core)
+  if(NOT Qt5_FOUND)
+    message(FATAL_ERROR "Smith needs Qt 6.6 or newer, or Qt 5.15 for the terminal app alone; neither was found. "
+                        "Point CMAKE_PREFIX_PATH at a Qt installation.")
+  endif()
+  set(QT_VERSION_MAJOR 5)
   set(SMITH_QT_MINIMUM 5.15)
 endif()
 find_package(Qt${QT_VERSION_MAJOR} ${SMITH_QT_MINIMUM} REQUIRED COMPONENTS Core Network)
@@ -48,6 +58,10 @@ target_compile_definitions(smith_settings INTERFACE
   QT_NO_KEYWORDS
 )
 target_compile_options(smith_settings INTERFACE -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers)
+if(SMITH_SANITIZE)
+  target_compile_options(smith_settings INTERFACE -fsanitize=${SMITH_SANITIZE} -fno-omit-frame-pointer)
+  target_link_options(smith_settings INTERFACE -fsanitize=${SMITH_SANITIZE})
+endif()
 # Libraries are included as "core/...", "tui/..." and "frontend/...".
 target_include_directories(smith_settings INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/libs)
 

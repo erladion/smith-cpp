@@ -22,8 +22,13 @@ jobs:
           # Both apps.
           - name: Qt 6.8
             qt: 6
+          # Memory errors, leaks and undefined behaviour, on the terminal app and the libraries.
+          - name: Qt 5.15, ASan and UBSan
+            qt: 5
+            sanitize: address,undefined
     env:
       QT_QPA_PLATFORM: offscreen
+      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
     steps:
       - uses: actions/checkout@v4
 
@@ -52,7 +57,7 @@ jobs:
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
       - name: Configure
-        run: cmake -S . -B build -G Ninja -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
+        run: cmake -S . -B build -G Ninja -DCMAKE_COMPILE_WARNING_AS_ERROR=ON -DSMITH_SANITIZE=${{ matrix.sanitize }}
 
       - name: Build
         run: cmake --build build

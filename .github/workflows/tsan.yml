@@ -1,0 +1,61 @@
+name: ThreadSanitizer
+
+# Run by hand (Actions, "Run workflow"). ThreadSanitizer can't see the locking
+# inside a Qt that wasn't built with it and reports that as races, so this
+# builds QtCore, QtNetwork and QtTest from the distribution's Qt 5.15 source
+# with -sanitize thread first (cached afterwards), then builds Smith against
+# that and runs the suites that use threads.
+on:
+  workflow_dispatch:
+
+jobs:
+  tsan:
+    runs-on: ubuntu-24.04
+    env:
+      QT_TSAN: ${{ github.workspace }}/qt5-tsan
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build bubblewrap ripgrep
+
+      - name: Restore the instrumented Qt
+        id: qt
+        uses: actions/cache@v4
+        with:
+          path: qt5-tsan
+          key: qt5-tsan-ubuntu-24.04-v1
+
+      - name: Build Qt 5.15 with ThreadSanitizer
+        if: steps.qt.outputs.cache-hit != 'true'
+        run: |
+          sudo sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources
+          sudo apt-get update
+          mkdir qt-src && cd qt-src
+          apt-get source qtbase-opensource-src
+          mkdir build && cd build
+          ../qtbase-opensource-src-*/configure -prefix "$QT_TSAN" -opensource -confirm-license -release -force-debug-info \
+            -sanitize thread -no-gui -no-widgets -no-dbus -no-opengl -no-openssl -no-icu -qt-pcre -qt-zlib -qt-doubleconversion \
+            -no-feature-sql -no-feature-concurrent -nomake examples -nomake tests
+          make -j"$(nproc)"
+          make install
+
+      - name: Let bubblewrap make namespaces
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      # ThreadSanitizer needs fewer random address bits than Ubuntu 24.04's default.
+      - name: Lower address randomization
+        run: sudo sysctl -w vm.mmap_rnd_bits=28
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_PREFIX_PATH="$QT_TSAN" -DSMITH_SANITIZE=thread -DSMITH_BUILD_DESKTOP=OFF
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        env:
+          TSAN_OPTIONS: halt_on_error=0:second_deadlock_stack=1
+        run: ctest --test-dir build --output-on-failure -R 'agent|frontend|tools|worktrees'

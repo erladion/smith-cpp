@@ -14,8 +14,8 @@ commands and security apply unchanged. Both versions read and write the same
 Needs CMake 3.21+, a C++20 compiler and Qt 6.6+ (Core, Network; Test for the tests;
 Quick and Quick Controls 2 for the desktop app, which is skipped when they're missing).
 The terminal app also builds with Qt 5.15 (on Debian/Ubuntu, `qtbase5-dev`); the desktop
-app needs Qt 6. Qt 6 is used when both are found, so leave `CMAKE_PREFIX_PATH` out to build
-against a system Qt 5.
+app needs Qt 6. Qt 6.6+ is used when both are found, so leave `CMAKE_PREFIX_PATH` out to build
+against a system Qt 5; a Qt 6 older than 6.6 (Ubuntu 24.04's 6.4) is passed over for Qt 5.
 
 ```sh
 cmake -S . -B build -G Ninja -DCMAKE_PREFIX_PATH=~/Qt/6.11.2/gcc_64
@@ -33,7 +33,10 @@ and assertions. The agent tests run the real loop against a scripted fake server
 (`tests/FakeServer.h`), and the sandbox tests run real commands through bubblewrap. Tests
 that need something missing here skip themselves: bwrap, ripgrep, or docker with the ubi9
 images for the container tests. CI (`.github/workflows/ci.yml`) builds and runs them against
-Qt 5.15 (terminal app only) and Qt 6.8 (both apps) on every push.
+Qt 5.15 (terminal app only) and Qt 6.8 (both apps) on every push, and once more with
+AddressSanitizer and UBSan. `-DSMITH_SANITIZE=address,undefined` gives the same build locally.
+`-DSMITH_SANITIZE=thread` builds with ThreadSanitizer, which is only useful against a Qt that
+was built with it too; the `ThreadSanitizer` workflow (run by hand) builds one first.
 
 There are two applications, `smith` (the terminal app) and `smith-desktop`, over shared
 libraries. Each builds on its own: `-DSMITH_BUILD_DESKTOP=OFF` builds only the terminal app,
