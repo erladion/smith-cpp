@@ -87,8 +87,9 @@ ColumnLayout {
             color: modelData.current ? Theme.accentWash : hover.hovered ? Theme.surfaceRaised : "transparent"
 
             HoverHandler { id: hover }
+            // Not while on "land" or "drop": a tap there reaches this handler too.
             TapHandler {
-                enabled: !row.modelData.current && list.idle
+                enabled: !row.modelData.current && list.idle && !landHover.hovered && !dropHover.hovered
                 onTapped: Backend.switchToWorktree(row.modelData.path)
             }
 

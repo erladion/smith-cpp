@@ -159,6 +159,7 @@ Rectangle {
             delegate: Rectangle {
                 id: entry
                 required property var modelData
+                objectName: "session:" + modelData.id
                 property bool renaming: false
                 width: sessions.width
                 implicitHeight: info.implicitHeight + 14
@@ -166,8 +167,9 @@ Rectangle {
                 color: modelData.current ? Theme.accentWash : hover.hovered ? Theme.surfaceRaised : "transparent"
 
                 HoverHandler { id: hover }
+                // Not while on the ✕: a tap there reaches this handler too, and would open the session it deletes.
                 TapHandler {
-                    enabled: !entry.modelData.current && !Backend.busy
+                    enabled: !entry.modelData.current && !Backend.busy && !removeHover.hovered
                     onTapped: Backend.openSession(entry.modelData.id)
                 }
                 TapHandler {
@@ -235,6 +237,7 @@ Rectangle {
                 Text {
                     textFormat: Text.PlainText
                     id: remove
+                    objectName: "removeSession"
                     visible: hover.hovered && !entry.modelData.current
                     anchors.right: parent.right
                     anchors.rightMargin: 8
@@ -324,6 +327,7 @@ Rectangle {
 
     Popup {
         id: confirm
+        objectName: "deleteConfirm"
         property var target: ({})
         parent: Overlay.overlay
         anchors.centerIn: parent
@@ -351,6 +355,7 @@ Rectangle {
                 Layout.alignment: Qt.AlignRight
                 SmithButton { text: "Cancel"; onClicked: confirm.close() }
                 SmithButton {
+                    objectName: "confirmDelete"
                     text: "Delete"
                     kind: "danger"
                     onClicked: {

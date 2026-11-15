@@ -46,6 +46,19 @@ QJsonArray todos(const QStringList& states) {
 
 } // namespace
 
+// An item by its objectName, among the visual children of `from` (a view's delegates aren't its QObject children).
+QQuickItem* findItem(QQuickItem* from, const QString& name) {
+  if (from->objectName() == name) {
+    return from;
+  }
+  for (QQuickItem* child : from->childItems()) {
+    if (QQuickItem* found = findItem(child, name)) {
+      return found;
+    }
+  }
+  return nullptr;
+}
+
 class TestDesktop : public QObject {
   Q_OBJECT
 
@@ -56,6 +69,7 @@ private Q_SLOTS:
   void runsAWholeTurn();
   void asksAQuestion();
   void switchesSessions();
+  void deletesAnotherSession();
   void landsATaskWorktree();
 
 private:
@@ -242,6 +256,42 @@ void TestDesktop::switchesSessions() {
   QCOMPARE(m_pBackend->sessionId(), first);
   // The resumed conversation is replayed: its messages, tools and answers.
   QVERIFY(m_pBackend->transcript()->rowCount() > 10);
+  QVERIFY2(g_qmlWarnings.isEmpty(), qPrintable(g_qmlWarnings.join('\n')));
+}
+
+void TestDesktop::deletesAnotherSession() {
+  // Clicked as you would: hover a session that isn't the current one, then its ✕.
+  const QString other = m_pBackend->sessionId();
+  m_pBackend->newSession();
+  const QString current = m_pBackend->sessionId();
+  auto listed = [&](const QString& id) {
+    for (const QVariant& session : m_pBackend->sessions()) {
+      if (session.toMap().value("id").toString() == id) {
+        return true;
+      }
+    }
+    return false;
+  };
+  QTRY_VERIFY(listed(other));
+  auto* window = qobject_cast<QQuickWindow*>(root());
+  QQuickItem* row = nullptr;
+  QTRY_VERIFY((row = findItem(window->contentItem(), "session:" + other)));
+  QQuickItem* remove = findItem(row, "removeSession");
+  QVERIFY(remove);
+  QTest::mouseMove(window, row->mapToScene(QPointF(row->width() / 2, row->height() / 2)).toPoint());
+  QTRY_VERIFY(remove->isVisible());
+  const QPoint at = remove->mapToScene(QPointF(remove->width() / 2, remove->height() / 2)).toPoint();
+  QTest::mouseMove(window, at);
+  QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, at);
+
+  QObject* confirm = root()->findChild<QObject*>("deleteConfirm");
+  QVERIFY(confirm);
+  QTRY_VERIFY(confirm->property("visible").toBool());
+  QCOMPARE(m_pBackend->sessionId(), current);
+  QMetaObject::invokeMethod(root()->findChild<QObject*>("confirmDelete"), "clicked");
+  QTRY_VERIFY(!listed(other));
+  QCOMPARE(m_pBackend->sessionId(), current);
+  QTRY_VERIFY(!confirm->property("visible").toBool());
   QVERIFY2(g_qmlWarnings.isEmpty(), qPrintable(g_qmlWarnings.join('\n')));
 }
 
