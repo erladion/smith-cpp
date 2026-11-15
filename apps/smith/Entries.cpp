@@ -57,6 +57,9 @@ QList<Line> bannerLines(const Entry& banner, int width) {
   if (!banner.skills.isEmpty()) {
     content.append(Line{Span{"skills  " + banner.skills.join(", "), DIM}});
   }
+  if (!banner.tools.isEmpty()) {
+    content.append(Line{Span{"tools   " + banner.tools.join(", "), DIM}});
+  }
   content.append(sandbox);
   content.append(Line{Span{"/help for commands · esc interrupts · ctrl+c quits", DIM}});
   return box(content, Color::Cyan, width);

@@ -93,6 +93,9 @@ private:
     QList<InstructionFile> instructions;
     QList<Skill> skills;
     ToolList tools;
+    // Tools of the user's or the project's own (CustomTools.h), and their folders.
+    QStringList customTools;
+    QStringList toolDirs;
     QStringList warnings;
     // For a linked worktree: its root, its branch, and the main repository's .git it uses.
     QString worktreeRoot;

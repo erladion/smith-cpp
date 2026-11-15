@@ -4,6 +4,7 @@ add_library(smith_core STATIC
   Config.cpp
   ContainerSandbox.cpp
   Context.cpp
+  CustomTools.cpp
   Diff.cpp
   Dirs.cpp
   Errors.cpp

@@ -6,6 +6,7 @@
 #include "TestUtil.h"
 
 #include "core/ContainerSandbox.h"
+#include "core/CustomTools.h"
 #include "core/Dirs.h"
 #include "core/Jobs.h"
 #include "core/tools/Tools.h"
@@ -53,6 +54,7 @@ private Q_SLOTS:
 
   // skill folders (from features.test.ts, which needs bwrap too)
   void skillFoldersReadableInSandbox();
+  void customToolsRunInTheSandbox();
 
   // containers
   void mountsAreReadAsWritten();
@@ -463,6 +465,38 @@ void TestSandbox::sandboxIsRequired() {
   SandboxOptions options;
   options.type = SandboxType::Off;
   QVERIFY2(!Sandbox::create(options)->active(), "only an explicit off runs unsandboxed");
+}
+
+void TestSandbox::customToolsRunInTheSandbox() {
+  REQUIRE_BWRAP();
+  TempDir project(QDir::tempPath(), "agent-proj-");
+  TempDir tools(homeDir(), ".agent-test-tools-");
+  write(tools.file("echo/prefix.txt"), "got ");
+  write(tools.file("echo/tool.json"),
+        R"({"description": "Echo the arguments.",
+            "command": "cat \"$SMITH_TOOL_DIR/prefix.txt\"; cat; echo; pwd; touch \"$SMITH_TOOL_DIR/x\" 2>&1 | grep -o Read-only; touch ~/.agent-test-escape 2>/dev/null; ls ~/.agent-test-escape",
+            "parameters": {"type": "object", "properties": {"text": {"type": "string"}}}})");
+  write(tools.file("fail/tool.json"), R"({"description": "Fails.", "command": "echo broke >&2; exit 3"})");
+  const LoadedTools loaded = loadCustomTools({{tools.path(), true}}, {});
+  QCOMPARE(loaded.tools.size(), 2);
+  const auto sandbox = bwrap();
+  sandbox->setReadOnlyPaths(loaded.dirs);
+  const ToolContext ctx = context(project.path(), sandbox);
+
+  // The arguments arrive whole, quotes and all; the tool's folder is there, read-only; home is the sandbox's own.
+  const QString text = "it's \"quoted\" $HOME `id`\nline two";
+  const ToolResult echoed = run(loaded.tools[0], {{"text", text}}, ctx);
+  QVERIFY2(!echoed.isError, qPrintable(echoed.content));
+  const QStringList lines = echoed.content.split('\n');
+  QCOMPARE(lines.value(0), "got " + QString::fromUtf8(QJsonDocument(QJsonObject{{"text", text}}).toJson(QJsonDocument::Compact)));
+  QCOMPARE(lines.value(1), realPath(project.path()));
+  QCOMPARE(lines.value(2), QString("Read-only"));
+  QVERIFY2(!QFileInfo::exists(homeDir() + "/.agent-test-escape"), "what it wrote in home stayed in the sandbox");
+
+  const ToolResult failed = run(loaded.tools[1], {}, ctx);
+  QVERIFY(failed.isError);
+  QVERIFY_MATCH(failed.content, "broke[\\s\\S]*Exit code 3");
+  sandbox->dispose();
 }
 
 void TestSandbox::skillFoldersReadableInSandbox() {

@@ -56,6 +56,7 @@ struct Answer {
 };
 
 inline const QString ASK_TOOL = QStringLiteral("ask_user");
+inline const QString BASH_TOOL = QStringLiteral("bash");
 
 ToolDef askTool(std::function<Answer(const Question&, const ToolContext&)> ask);
 

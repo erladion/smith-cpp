@@ -147,6 +147,7 @@ void Backend::printBanner(bool resumed, const std::optional<QDateTime>& lastUsed
   for (const Skill& skill : m_project.skills) {
     banner.skills << skill.name;
   }
+  banner.tools = m_project.customTools;
   if (matrix()) {
     banner.greeting = greeting(context);
   }

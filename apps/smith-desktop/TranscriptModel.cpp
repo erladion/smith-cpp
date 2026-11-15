@@ -152,6 +152,7 @@ QVariant TranscriptModel::data(const QModelIndex& index, int role) const {
         {"sandboxDescription", entry.sandboxDescription},
         {"instructions", entry.instructions},
         {"skills", entry.skills},
+        {"tools", entry.tools},
         {"greeting", entry.greeting},
     };
   case LiveRole:

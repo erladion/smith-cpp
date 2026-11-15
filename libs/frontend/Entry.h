@@ -42,6 +42,7 @@ struct Entry {
   QString sandboxDescription;
   QStringList instructions;
   QStringList skills;
+  QStringList tools;
   QString greeting;
 
   // Tool.

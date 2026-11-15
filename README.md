@@ -143,6 +143,23 @@ TypeScript version doesn't have them.
   "permissions": { "allow": ["edit_file", "bash:npm test"], "deny": ["bash:git push"] }
   ```
 
+- **Tools of your own.** A folder with a `tool.json` is a tool the model can call: in
+  `~/.config/smith/tools/<name>/` for yours, or `.agents/tools/<name>/` in a project.
+
+  ```json
+  { "description": "Look up an issue in the tracker by its number.",
+    "parameters": { "type": "object", "properties": { "id": { "type": "integer" } }, "required": ["id"] },
+    "command": "python3 \"$SMITH_TOOL_DIR/issue.py\"" }
+  ```
+
+  The command runs with bash in the project folder, always in the sandbox, with the call's
+  arguments as JSON on stdin and `SMITH_TOOL_DIR` set to the tool's folder (read-only there). What
+  it prints is the result; a non-zero exit is an error. It asks like a shell command does, and
+  `permissions.allow` can name it. `"readOnly": true` lets one of *your* tools run without asking,
+  and alongside other read-only calls; a project's tools always ask, since the agent could have
+  written them, and a change under `.agents/tools/` is reported like other files that run later.
+  With `--sandbox off` these tools aren't offered. `"timeoutMs"` sets the time limit (5 minutes
+  by default).
 - **Images.** Name an image file in your message (a path, quoted or not, as a terminal pastes a
   dropped file) and it is sent along: PNG, JPEG, GIF or WebP, up to 5 MB each. If the server
   refuses the request, the pictures are taken out of the conversation again.

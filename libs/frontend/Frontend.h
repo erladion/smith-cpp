@@ -43,6 +43,8 @@ struct ProjectView {
   // Skills available, for the banner and /skills.
   QList<Skill> skills;
   ToolList tools;
+  // Tools of the user's or the project's own, for the banner.
+  QStringList customTools;
   // Problems found while loading (e.g. a skill without a description).
   QStringList warnings;
   // The branch, when the folder is a task worktree (or any linked worktree).

@@ -4,6 +4,7 @@
 #include "TestUtil.h"
 
 #include "core/Config.h"
+#include "core/CustomTools.h"
 #include "core/Jobs.h"
 #include "core/Prompt.h"
 #include "core/Server.h"
@@ -68,6 +69,7 @@ private Q_SLOTS:
   void editFileKeepsOtherEncodings();
   void bashKeepsTheEndOfLongOutput();
   void editFileMakesSeveralEdits();
+  void customToolsLoadFromFolders();
 
   // config file
   void configMissingFile();
@@ -437,6 +439,53 @@ void TestTools::editFileKeepsOtherEncodings() {
   put("plain.txt", QString("na\u00efve = 1\n").toUtf8());
   QVERIFY(!call(editFileTool(), {{"path", "plain.txt"}, {"old_string", "= 1"}, {"new_string", "= 2"}}).isError);
   QCOMPARE(bytes("plain.txt"), QString("na\u00efve = 2\n").toUtf8());
+}
+
+void TestTools::customToolsLoadFromFolders() {
+  TempDir mine(QDir::tempPath(), "smith-my-tools-");
+  TempDir theirs(QDir::tempPath(), "smith-project-tools-");
+  auto manifest = [](const QString& description, const QString& command, bool readOnly) {
+    return QString::fromUtf8(QJsonDocument(QJsonObject{{"description", description}, {"command", command}, {"readOnly", readOnly}}).toJson());
+  };
+  write(mine.file("issue/tool.json"),
+        R"({"description": "Look up an issue.", "command": "cat", "readOnly": true, "timeoutMs": 5000,
+            "parameters": {"type": "object", "properties": {"id": {"type": "integer", "minimum": 1}}, "required": ["id"]}})");
+  write(mine.file("deploy/tool.json"), manifest("Mine, but the project has one too.", "true", true));
+  write(mine.file("bash/tool.json"), manifest("Shadows a built-in.", "true", false));
+  write(mine.file("broken/tool.json"), "{ not json");
+  write(mine.file("silent/tool.json"), R"({"command": "true"})");
+  write(mine.file("no tool here/readme.txt"), "not a tool");
+  write(theirs.file("deploy/tool.json"), manifest("Deploy the project.", "make deploy", true));
+  write(theirs.file("bad name!/tool.json"), manifest("x", "true", false));
+
+  const QList<ToolRoot> roots{{theirs.path(), false}, {mine.path(), true}};
+  QCOMPARE(countCustomTools(roots), 7);
+  const LoadedTools loaded = loadCustomTools(roots, {"bash", "read_file"});
+  QStringList names;
+  for (const ToolDef& tool : loaded.tools) {
+    names << QString("%1%2").arg(tool.name, tool.readOnly ? " (no asking)" : "");
+    QVERIFY2(tool.sandboxed, "shown as a sandboxed command when it asks");
+  }
+  // The project's wins by name, and asks whatever it says; only your own can run without asking.
+  QCOMPARE(names, QStringList({"deploy", "issue (no asking)"}));
+  QCOMPARE(loaded.dirs, QStringList({theirs.file("deploy"), mine.file("issue")}));
+  const QString warnings = loaded.warnings.join('\n');
+  QVERIFY_MATCH(warnings, "bad name!/tool\\.json is in a folder whose name can't be a tool's");
+  QVERIFY_MATCH(warnings, "deploy is the project's, so it asks before it runs");
+  QVERIFY_MATCH(warnings, "bash/tool\\.json has the name of a built-in tool");
+  QVERIFY_MATCH(warnings, "broken/tool\\.json isn't valid JSON");
+  QVERIFY_MATCH(warnings, "silent/tool\\.json has no description");
+  QCOMPARE(loaded.warnings.size(), 5);
+
+  const ToolDef& issue = loaded.tools[1];
+  QCOMPARE(issue.description, QString("Look up an issue."));
+  QVERIFY(validateSchema(QJsonObject{{"id", 0}}, issue.schema));
+  QVERIFY(!validateSchema(QJsonObject{{"id", 7}}, issue.schema));
+  QCOMPARE(issue.summarize(QJsonObject{{"id", 7}}), QString(R"({"id":7})"));
+  // Never outside a sandbox.
+  const ToolResult refused = call(issue, {{"id", 7}});
+  QVERIFY(refused.isError);
+  QVERIFY_MATCH(refused.content, "only runs in the sandbox");
 }
 
 void TestTools::editFileMakesSeveralEdits() {

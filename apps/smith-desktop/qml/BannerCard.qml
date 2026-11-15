@@ -66,6 +66,7 @@ Rectangle {
                     ["session", (card.banner.session || "") + (card.banner.resumed ? "  (resumed)" : "")],
                     ["rules", (card.banner.instructions || []).join(", ")],
                     ["skills", (card.banner.skills || []).join(", ")],
+                    ["tools", (card.banner.tools || []).join(", ")],
                 ].filter(row => row[1] && row[1].length > 0)
 
                 delegate: Item {

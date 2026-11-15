@@ -31,6 +31,7 @@ const QList<Rule>& rules() {
       {QRegularExpression(R"((^|/)(\.pre-commit-config\.ya?ml|\.?lefthook\.ya?ml|\.lintstagedrc[^/]*|lint-staged\.config\.[^/]+)$)"),
        "it runs when you commit"},
       {QRegularExpression(R"((^|/)\.gitmodules$)"), "git fetches what it points to"},
+      {QRegularExpression(R"((^|/)\.agents/tools/)"), "Smith offers it to the model as a tool the next time it starts here"},
       {QRegularExpression(R"((^|/)\.git(/|$))"), "git runs its hooks and what its config names whenever git runs there: a shell prompt, an editor, a commit"},
       {QRegularExpression(
            R"((^|/)(\.github/workflows/|\.gitlab-ci\.ya?ml$|Jenkinsfile$|\.circleci/|azure-pipelines\.ya?ml$|\.travis\.ya?ml$|bitbucket-pipelines\.ya?ml$))"),

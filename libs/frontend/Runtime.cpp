@@ -1,5 +1,6 @@
 #include "frontend/Runtime.h"
 
+#include "core/CustomTools.h"
 #include "core/Dirs.h"
 #include "core/Errors.h"
 #include "core/Preferences.h"
@@ -291,6 +292,7 @@ ProjectView Runtime::project() const {
   }
   view.skills = m_project.skills;
   view.tools = m_project.tools;
+  view.customTools = m_project.customTools;
   view.warnings = m_project.warnings;
   view.worktreeBranch = m_project.worktreeBranch;
   return view;
@@ -308,6 +310,24 @@ Runtime::Project Runtime::loadProject(const QString& cwd) const {
   if (!project.skills.isEmpty()) {
     project.tools.append(skillTool(project.skills));
   }
+  // Tools of your own run only in the sandbox, so without one they aren't offered.
+  const QList<ToolRoot> roots = toolRoots(repo.isEmpty() ? cwd : repo);
+  if (m_pSandbox && m_pSandbox->active()) {
+    QStringList reserved{"task", "todo_write", ASK_TOOL};
+    for (const ToolDef& tool : project.tools) {
+      reserved << tool.name;
+    }
+    const LoadedTools custom = loadCustomTools(roots, reserved);
+    for (const ToolDef& tool : custom.tools) {
+      project.customTools << tool.name;
+    }
+    project.tools << custom.tools;
+    project.toolDirs = custom.dirs;
+    project.warnings << custom.warnings;
+  } else if (const int skipped = countCustomTools(roots)) {
+    project.warnings << QString("%1 of your own %2 offered: they only run in the sandbox, which is off.")
+                            .arg(plural(skipped, "tool"), skipped == 1 ? "isn't" : "aren't");
+  }
   if (const std::optional<GitDirs> dirs = repo.isEmpty() ? std::nullopt : gitDirs(repo); dirs && dirs->linked) {
     project.worktreeRoot = repo;
     project.worktreeBranch = currentBranch(repo);
@@ -324,6 +344,7 @@ QStringList Runtime::visibleFolders(const Project& project) {
   for (const Skill& skill : project.skills) {
     folders << skill.dir;
   }
+  folders << project.toolDirs;
   // A worktree's git data is in the main repository's .git: shown read-only,
   // so git works in the sandbox but can't commit.
   if (!project.gitCommonDir.isEmpty()) {
