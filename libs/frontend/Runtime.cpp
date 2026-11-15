@@ -349,6 +349,7 @@ std::shared_ptr<Agent> Runtime::createAgent(const AgentHooks& hooks, const std::
   extras.canAsk = bool(hooks.ask);
   extras.sandbox = m_pSandbox->promptNotes(project.cwd);
   extras.worktreeBranch = project.worktreeBranch;
+  extras.workers = m_config.subagents;
   PromptExtras subagentExtras;
   subagentExtras.instructions = project.instructions;
   subagentExtras.skills = project.skills;
@@ -367,6 +368,11 @@ std::shared_ptr<Agent> Runtime::createAgent(const AgentHooks& hooks, const std::
   options.systemPrompt = buildSystemPrompt(project.cwd, extras);
   if (m_config.subagents) {
     options.subagentPrompt = buildSubagentPrompt(project.cwd, subagentExtras);
+    PromptExtras workerExtras = subagentExtras;
+    workerExtras.fastTools = extras.fastTools;
+    workerExtras.sandbox = extras.sandbox;
+    workerExtras.worktreeBranch = extras.worktreeBranch;
+    options.workerPrompt = buildWorkerPrompt(project.cwd, workerExtras);
   }
   const std::weak_ptr<Runtime> weak = weak_from_this();
   options.onHistory = [weak](const HistoryChange& change) {

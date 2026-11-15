@@ -146,6 +146,10 @@ TypeScript version doesn't have them.
 - **Images.** Name an image file in your message (a path, quoted or not, as a terminal pastes a
   dropped file) and it is sent along: PNG, JPEG, GIF or WebP, up to 5 MB each. If the server
   refuses the request, the pictures are taken out of the conversation again.
+- **Sub-agents that do work.** `task` with `can_write` hands a sub-agent a piece of work, not only
+  an investigation. Its changes ask for approval through the main agent, show in the transcript,
+  and are undone with the turn. Several can run at once; the model is told to give them separate
+  files.
 - **edit_file** takes several replacements in one call (`edits`), all or nothing, and keeps the
   encoding of files that aren't UTF-8.
 

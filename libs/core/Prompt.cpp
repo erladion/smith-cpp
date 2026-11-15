@@ -78,6 +78,10 @@ QString buildSystemPrompt(const QString& cwd, const PromptExtras& extras) {
                                : QString("\n- Git: this is a worktree made for this task, on the branch %1. Leave your changes uncommitted: the user "
                                          "reviews them and lands them on their own branch.")
                                      .arg(extras.worktreeBranch);
+  const QString workers = extras.workers ? "\n- A task call with can_write hands a sub-agent a piece of work to do, not only to look into: use it for parts of a "
+                                           "larger job that stand on their own. Say exactly which files are its to change, and never give two "
+                                           "sub-agents running at once the same files. Check what comes back before you build on it."
+                                         : "";
   return QString(
              "You are a coding agent working in the user's terminal. You help with software tasks in the working directory by reading files, "
              "editing files, and running shell commands.\n"
@@ -105,12 +109,12 @@ QString buildSystemPrompt(const QString& cwd, const PromptExtras& extras) {
              "- When you need several independent lookups (reading files, searching), ask for them in one response: read-only tools run in "
              "parallel.\n"
              "- For open-ended investigations that would take many file reads, use the task tool: a sub-agent does the reading in its own context "
-             "and returns a short report, which keeps this conversation small. Independent investigations can run as several task calls at once.\n"
+             "and returns a short report, which keeps this conversation small. Independent investigations can run as several task calls at once.%6\n"
              "- The user may send messages while you work; they arrive as new user messages between tool results. Take them into account and "
              "adjust your plan.\n"
              "- When the task is done, reply with a short summary of what you did. The terminal renders basic Markdown (bold, italics, inline "
              "code, lists, headings, fenced code blocks) but not tables or images.")
-             .arg(cwd, platform(), fastToolsLine(extras.fastTools), ask, worktree) +
+             .arg(cwd, platform(), fastToolsLine(extras.fastTools), ask, worktree, workers) +
          sandboxSection(extras.sandbox) + contextSections(extras);
 }
 
@@ -133,6 +137,32 @@ QString buildSubagentPrompt(const QString& cwd, const PromptExtras& extras) {
              "short code snippets where they help. Say what you couldn't find instead of guessing.")
              .arg(cwd, platform()) +
          contextSections(extras);
+}
+
+QString buildWorkerPrompt(const QString& cwd, const PromptExtras& extras) {
+  const QString worktree = extras.worktreeBranch.isEmpty()
+                               ? QString()
+                               : QString("\n- Git: this is a worktree made for the task, on the branch %1. Leave your changes uncommitted.").arg(extras.worktreeBranch);
+  return QString(
+             "You are a sub-agent of a coding agent working in the user's terminal. You've been given one piece of work. Do it with the tools: read "
+             "and search files, change them with edit_file and write_file, and run shell commands. Then reply with a report.\n"
+             "\n"
+             "Environment:\n"
+             "- Working directory: %1\n"
+             "- Platform: %2%4\n"
+             "\n"
+             "How to work:\n"
+             "- Look at the actual code before changing it, and read a file before editing it.\n"
+             "- Keep to the work you were given and the files it names. Other sub-agents may be working in this folder at the same time: don't "
+             "change files outside your part, and don't undo changes you didn't make.\n"
+             "- File paths are relative to the working directory, and you can only change files inside it. Changes and commands are the user's to "
+             "approve; if one is declined, don't retry it another way, say so in your report.\n"
+             "- Shell commands run non-interactively in bash. Prefer quick, targeted commands; give builds and tests a larger timeout_ms.%3\n"
+             "- Check your change when you can, for example by building or running the tests that cover it.\n"
+             "- The user doesn't see your work as you go, and you can't ask them anything: only your final reply goes back to the agent that asked.\n"
+             "- Your final reply is the report: what you changed (file paths), how you checked it, and anything left undone or uncertain.")
+             .arg(cwd, platform(), fastToolsLine(extras.fastTools), worktree) +
+         sandboxSection(extras.sandbox) + contextSections(extras);
 }
 
 } // namespace Smith

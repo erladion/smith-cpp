@@ -79,6 +79,12 @@ struct AgentOptions {
   std::shared_ptr<Sandbox> sandbox;
   // System prompt for sub-agents; when set, the agent gets a `task` tool.
   QString subagentPrompt;
+  // System prompt for sub-agents that may change files and run commands; when set, `task` offers that.
+  QString workerPrompt;
+  // For a sub-agent: where its file changes are recorded (the turn that started it), instead of in turns of its own.
+  std::shared_ptr<Checkpoint> checkpoint;
+  // For a sub-agent: told of each run-later file written with the user's approval, as the agent that started it reports them.
+  std::function<void(const QString& rel, const QString& hash)> onRunLaterApproved;
   std::shared_ptr<AllowedTools> alwaysAllowed;
   // Earlier conversation to continue (without the system prompt).
   Messages history;
@@ -92,6 +98,8 @@ struct AgentOptions {
   bool todos = true;
   // Always ask before the file tools change a file that runs outside the sandbox later, and report other changes after each turn.
   bool protectRunLater = true;
+  // The report after each turn; off for a sub-agent, whose changes are in its parent's.
+  bool reportRunLater = true;
   // Called from whichever thread the agent (or one of its parallel tools) runs on.
   std::function<void(const AgentEvent&)> onEvent;
   // Called when each tool call is over, whatever the outcome, e.g. for the tool log.

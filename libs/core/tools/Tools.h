@@ -31,12 +31,14 @@ ToolDef skillTool(const QList<Skill>& skills);
 // The file, search and shell tools; bash can run commands in the background as `jobs` when given.
 ToolList defaultTools(const std::shared_ptr<BackgroundJobs>& jobs = {});
 
-// The `task` tool: hands an investigation to a sub-agent and returns its report.
+// The `task` tool: hands an investigation, or with `workers` a piece of work, to a sub-agent and returns its report.
 struct TaskInput {
   QString description;
   QString prompt;
+  // The sub-agent may change files and run commands.
+  bool write = false;
 };
-ToolDef taskTool(std::function<ToolResult(const TaskInput&, const ToolContext&)> run);
+ToolDef taskTool(std::function<ToolResult(const TaskInput&, const ToolContext&)> run, bool workers = false);
 
 // The `ask_user` tool.
 struct Question {

@@ -42,6 +42,7 @@ private Q_SLOTS:
   void subagentReportsBack();
   void outsideReadsAskOneAtATime();
   void subagentAsksThroughMainAgent();
+  void subagentCanBeSentToWork();
   void imagesGoWithTheMessage();
   void interruptStopsFurtherApprovals();
   void loadingConversationIsntRecorded();
@@ -704,6 +705,51 @@ void TestAgent::imagesGoWithTheMessage() {
     told = told || (notice && notice->text.contains("pictures were taken out"));
   }
   QVERIFY(told);
+}
+
+void TestAgent::subagentCanBeSentToWork() {
+  TempDir project(QDir::tempPath(), "smith-worker-");
+  write(project.file("a.txt"), "one\n");
+  m_pFake->setScript({
+      FakeServer::stream(FakeServer::toolCallDeltas("task", {{"description", "fix a"}, {"prompt", "Change one to two in a.txt"}, {"can_write", true}}),
+                         "tool_calls"),
+      // The sub-agent edits, then reports.
+      FakeServer::stream(FakeServer::toolCallDeltas("edit_file", {{"path", "a.txt"}, {"old_string", "one"}, {"new_string", "two"}}, "e1"), "tool_calls"),
+      FakeServer::text("Changed a.txt."),
+      FakeServer::text("Done."),
+  });
+  QStringList asked;
+  auto h = make(ApprovalDecision::Allow, [&](AgentOptions& options, Harness&) {
+    options.cwd = project.path();
+    options.subagentPrompt = "SUB";
+    options.workerPrompt = "WORKER";
+    options.approve = [&](const ApprovalRequest& request) {
+      asked << request.tool + "|" + request.note;
+      return ApprovalDecision::Allow;
+    };
+  });
+  h->agent->send("fix it", makeCancel());
+
+  QVERIFY(toolNames(m_pFake->requests()[0]).contains("task"));
+  const QJsonObject child = m_pFake->requests()[1];
+  QCOMPARE(messagesOf(child)[0].toObject().value("content").toString(), QString("WORKER"));
+  QVERIFY2(toolNames(child).contains("edit_file") && toolNames(child).contains("bash"), "a worker gets the tools that change things");
+  QVERIFY2(!toolNames(child).contains("task") && !toolNames(child).contains("todo_write"), "but no sub-agents or checklist of its own");
+  // Its change is asked about through the main agent, and shown like the agent's own.
+  QCOMPARE(asked, QStringList({"edit_file|Sub-agent \"fix a\":"}));
+  QCOMPARE(read(project.file("a.txt")), QString("two\n"));
+  bool shown = false;
+  for (const AgentEvent& event : h->events) {
+    const auto* end = std::get_if<Event::ToolEnd>(&event);
+    shown = shown || (end && end->name == "edit_file" && end->summary == QString::fromUtf8("fix a \u203a a.txt") && end->diff);
+  }
+  QVERIFY(shown);
+
+  // The turn's undo takes the sub-agent's change back with it.
+  const std::optional<UndoResult> undone = h->agent->undo();
+  QVERIFY(undone);
+  QCOMPARE(undone->restored, QStringList({project.file("a.txt")}));
+  QCOMPARE(read(project.file("a.txt")), QString("one\n"));
 }
 
 void TestAgent::subagentAsksThroughMainAgent() {

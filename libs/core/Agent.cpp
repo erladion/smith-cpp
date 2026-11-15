@@ -53,7 +53,8 @@ Agent::Agent(AgentOptions options) : m_options(std::move(options)) {
   m_history = Messages{Message{{"role", "system"}, {"content", m_options.systemPrompt}}} + repairHistory(m_options.history);
   m_tools = m_options.tools;
   if (!m_options.subagentPrompt.isEmpty()) {
-    m_tools.append(taskTool([this](const TaskInput& input, const ToolContext& ctx) { return runSubagent(input, ctx.cancel); }));
+    m_tools.append(
+        taskTool([this](const TaskInput& input, const ToolContext& ctx) { return runSubagent(input, ctx.cancel); }, !m_options.workerPrompt.isEmpty()));
   }
   if (m_options.todos) {
     m_tools.append(createTodoTool([this](const TodoList& todos) { setTodos(todos); }));
@@ -190,7 +191,7 @@ void Agent::emitEvent(const AgentEvent& event) const {
 void Agent::send(const QString& text, const CancelPtr& cancel, const QList<Image>& images) {
   {
     QMutexLocker lock(&m_mutex);
-    m_turns.append(Turn{int(m_history.size()), text, std::make_shared<Checkpoint>()});
+    m_turns.append(Turn{int(m_history.size()), text, m_options.checkpoint ? m_options.checkpoint : std::make_shared<Checkpoint>()});
     if (m_turns.size() > MAX_UNDO) {
       m_turns.removeFirst();
     }
@@ -199,7 +200,7 @@ void Agent::send(const QString& text, const CancelPtr& cancel, const QList<Image
   const int sent = int(messages().size());
   append(userMessage(text, images));
   std::optional<QMap<QString, QString>> before;
-  if (m_options.protectRunLater) {
+  if (m_options.protectRunLater && m_options.reportRunLater) {
     try {
       before = snapshotRunLater(m_options.cwd);
     } catch (const std::exception&) {
@@ -437,15 +438,27 @@ ToolResult Agent::runSubagent(const TaskInput& input, const CancelPtr& cancel) {
   child.maxSteps = m_options.maxSteps;
   child.contextSize = contextLimit();
   child.sandbox = m_options.sandbox;
-  // Read-only tools only (which also rules out nested sub-agents), no checklist or questions.
+  // Read-only tools only, unless it was sent to do work. No nested sub-agents, checklist or questions either way.
   for (const ToolDef& tool : m_options.tools) {
-    if (tool.forSubagents()) {
+    if (input.write || tool.forSubagents()) {
       child.tools.append(tool);
     }
   }
   child.todos = false;
-  child.protectRunLater = false;
-  child.systemPrompt = m_options.subagentPrompt;
+  child.protectRunLater = input.write && m_options.protectRunLater;
+  child.reportRunLater = false;
+  child.systemPrompt = input.write ? m_options.workerPrompt : m_options.subagentPrompt;
+  if (input.write) {
+    // What it changes is part of this turn: undone with it, and reported with it.
+    QMutexLocker lock(&m_mutex);
+    if (!m_turns.isEmpty()) {
+      child.checkpoint = m_turns.last().checkpoint;
+    }
+    child.onRunLaterApproved = [this](const QString& rel, const QString& hash) {
+      QMutexLocker lock(&m_mutex);
+      m_approvedRunLater.insert(rel, hash);
+    };
+  }
   child.alwaysAllowed = m_pAlwaysAllowed;
   const QString description = input.description;
   // Its tools are read-only, but reading outside the project still asks you.
@@ -464,6 +477,15 @@ ToolResult Agent::runSubagent(const TaskInput& input, const CancelPtr& cancel) {
   child.onEvent = [this, description, &reason](const AgentEvent& event) {
     if (const auto* start = std::get_if<Event::ToolStart>(&event)) {
       emitEvent(Event::Activity{QString("%1 › %2 %3").arg(description, start->name, start->summary)});
+    } else if (const auto* end = std::get_if<Event::ToolEnd>(&event)) {
+      // What it changed (or tried to) is shown like the agent's own changes; its reading stays out of the transcript.
+      const ToolDef* tool = findTool(end->name);
+      if (tool && !tool->readOnly) {
+        Event::ToolEnd shown = *end;
+        shown.id = description + "/" + end->id;
+        shown.summary = QString("%1 › %2").arg(description, end->summary);
+        emitEvent(shown);
+      }
     } else if (const auto* done = std::get_if<Event::Done>(&event)) {
       reason = done->reason;
     }
@@ -981,8 +1003,12 @@ ToolContext Agent::toolContext(const ToolDef& tool, const CancelPtr& cancel) {
     // Approved with the warning: the end-of-turn report leaves it out, unless it changes again.
     const QString rel = relativeSlashPath(m_options.cwd, file);
     if (!runLaterReason(rel).isEmpty()) {
+      const QString hash = hashBytes(content);
+      if (m_options.onRunLaterApproved) {
+        m_options.onRunLaterApproved(rel, hash);
+      }
       QMutexLocker lock(&m_mutex);
-      m_approvedRunLater.insert(rel, hashBytes(content));
+      m_approvedRunLater.insert(rel, hash);
     }
   };
   return ctx;
