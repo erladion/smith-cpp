@@ -19,6 +19,16 @@ bool simpleCommand(const QString& command) {
   return !command.isEmpty() && !shell.match(command).hasMatch();
 }
 
+// Arguments that only name things (files, targets): no options, nothing quoted.
+bool plainWords(const QStringList& words) {
+  for (const QString& word : words) {
+    if (word.startsWith('-') || word.contains('"') || word.contains('\'')) {
+      return false;
+    }
+  }
+  return true;
+}
+
 // Reading a command line for deny rules: close enough to the shell that a
 // command can't slip past one by how it is written.
 constexpr int MAX_QUOTE_DEPTH = 4;
@@ -141,14 +151,14 @@ Rule parseRule(const QString& rule) {
   return colon < 0 ? Rule{rule.trimmed(), {}} : Rule{rule.left(colon).trimmed(), rule.mid(colon + 1).trimmed()};
 }
 
-bool covers(const QStringList& rules, const QString& tool, const QJsonObject& input, bool wholeToolCounts) {
+bool covers(const QStringList& rules, const QString& tool, const QJsonObject& input, bool unsandboxed) {
   const QString command = input.value("command").toString();
   for (const QString& text : rules) {
     const Rule rule = parseRule(text);
     if (rule.tool != tool) {
       continue;
     }
-    if (rule.prefix.isEmpty() ? wholeToolCounts : commandMatches(command, rule.prefix)) {
+    if (rule.prefix.isEmpty() ? !unsandboxed : commandMatches(command, rule.prefix, unsandboxed)) {
       return true;
     }
   }
@@ -157,7 +167,7 @@ bool covers(const QStringList& rules, const QString& tool, const QJsonObject& in
 
 } // namespace
 
-QString commandPrefix(const QString& command) {
+QString commandPrefix(const QString& command, bool unsandboxed) {
   const QString trimmed = command.trimmed();
   if (!simpleCommand(trimmed)) {
     return {};
@@ -171,15 +181,33 @@ QString commandPrefix(const QString& command) {
   // "npm test", "git status": the second word when it names what the program does, not an option or a quoted argument.
   const QString second = words.value(1);
   const bool named = !second.isEmpty() && !second.startsWith('-') && !second.contains('"') && !second.contains('\'');
-  if (!named) {
-    return INTERPRETERS.contains(first) ? QString() : first;
+  if (!named && INTERPRETERS.contains(first)) {
+    return {};
   }
-  return first + " " + second;
+  const QString prefix = named ? first + " " + second : first;
+  // Without a sandbox, the rule is the command itself unless what follows the start is only plain words.
+  if (unsandboxed && (!named || !plainWords(words.mid(2)))) {
+    return trimmed;
+  }
+  return prefix;
 }
 
-bool commandMatches(const QString& command, const QString& prefix) {
+bool commandMatches(const QString& command, const QString& prefix, bool unsandboxed) {
   const QString trimmed = command.trimmed();
-  return !prefix.isEmpty() && simpleCommand(trimmed) && (trimmed == prefix || trimmed.startsWith(prefix + " "));
+  if (prefix.isEmpty() || !simpleCommand(trimmed)) {
+    return false;
+  }
+  if (trimmed == prefix) {
+    return true;
+  }
+  if (!trimmed.startsWith(prefix + " ")) {
+    return false;
+  }
+  if (!unsandboxed) {
+    return true;
+  }
+  static const QRegularExpression space(R"(\s+)");
+  return prefix.contains(' ') && plainWords(trimmed.mid(prefix.size()).split(space, Qt::SkipEmptyParts));
 }
 
 void AllowedTools::setConfigured(const QStringList& allow, const QStringList& deny) {
@@ -201,7 +229,7 @@ bool AllowedTools::contains(const QString& tool) const {
 
 bool AllowedTools::allows(const QString& tool, const QJsonObject& input, bool unsandboxed) const {
   QMutexLocker lock(&m_mutex);
-  return covers(m_configured, tool, input, !unsandboxed) || covers(m_remembered, tool, input, !unsandboxed);
+  return covers(m_configured, tool, input, unsandboxed) || covers(m_remembered, tool, input, unsandboxed);
 }
 
 bool AllowedTools::denies(const QString& tool, const QJsonObject& input) const {

@@ -888,7 +888,7 @@ ToolResult Agent::runTool(const ToolCall& call, const CancelPtr& cancel) {
       request.sandboxDescription = sandbox->describe(m_options.cwd);
     }
     request.canAllowAlways = !unsandboxed;
-    request.similar = tool->name == BASH_TOOL ? commandPrefix(args.value("command").toString()) : QString();
+    request.similar = tool->name == BASH_TOOL ? commandPrefix(args.value("command").toString(), unsandboxed) : QString();
     request.remembered = m_pAlwaysAllowed->remembers();
     ApprovalDecision decision = requestApproval(request, cancel);
     // An answer that wasn't on offer allows only this call.

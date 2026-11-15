@@ -136,7 +136,9 @@ TypeScript version doesn't have them.
   `preferences.json`), and for a shell command there is a third answer, `s`: always allow commands
   that start the same way (`npm test`, `git status`). Such a rule covers one program and its
   arguments, never a command that chains or substitutes others (`;`, `|`, `&&`, `$(...)`), and unlike
-  "always allow bash" it also applies with `--sandbox off`. `/permissions` lists what runs without
+  "always allow bash" it also applies with `--sandbox off`, more narrowly: there an option or a quoted
+  argument can make a program run anything (`git -c`, `find -exec`), so the rule offered keeps the
+  command's own, and only plain arguments (names and paths) can follow it. `/permissions` lists what runs without
   asking; `/permissions reset` forgets what you allowed. The config file takes rules too:
 
   ```json

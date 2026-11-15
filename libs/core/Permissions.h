@@ -13,11 +13,14 @@ namespace Smith {
 // cover: "npm test" for "npm test -- --watch". Empty when no such rule is
 // offered: for a command that chains or substitutes others (; | && $( ...),
 // where a harmless start says nothing about the rest, and for programs that
-// only run another (sudo, env, bash -c).
-QString commandPrefix(const QString& command);
+// only run another (sudo, env, bash -c). With no sandbox, the options and
+// quoted arguments stay in it: there they can run anything (git -c, find -exec).
+QString commandPrefix(const QString& command, bool unsandboxed = false);
 // Whether a rule for commands starting with `prefix` covers a command: the
 // command is that, or goes on with more arguments, and does nothing else.
-bool commandMatches(const QString& command, const QString& prefix);
+// With no sandbox the arguments it adds may only be plain words (no options,
+// no quotes), and a rule for a program alone covers only itself.
+bool commandMatches(const QString& command, const QString& prefix, bool unsandboxed = false);
 
 // What runs without asking. A rule is a tool's name ("edit_file"), or for bash
 // the start of a command ("bash:npm test"). Rules come from the config file,

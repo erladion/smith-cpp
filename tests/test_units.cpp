@@ -65,6 +65,7 @@ private Q_SLOTS:
   void messagesNameTheirImages();
   void permissionRulesCoverCommands();
   void denyRulesFindTheCommandAnywhere();
+  void rulesWithoutSandboxTakeOnlyPlainArguments();
 
 private:
   std::unique_ptr<TempDir> m_pData;
@@ -476,7 +477,8 @@ void TestUnits::permissionRulesCoverCommands() {
   QCOMPARE(saved, QStringList({"bash:npm test", "bash"}));
   QVERIFY(allowed.allows("bash", bash("anything | at all"), false));
   QVERIFY(!allowed.allows("bash", bash("anything | at all"), true));
-  QVERIFY(allowed.allows("bash", bash("make test"), true));
+  QVERIFY(allowed.allows("bash", bash("npm test src/a.test.js"), true));
+  QVERIFY2(!allowed.allows("bash", bash("make test"), true), "a rule for a program alone covers only itself without a sandbox");
 
   allowed.forget();
   QCOMPARE(saved, QStringList());
@@ -501,6 +503,36 @@ void TestUnits::denyRulesFindTheCommandAnywhere() {
                                  "git pushd", "rmdir build", "ls"}) {
     QVERIFY2(!denied(command), qPrintable(command));
   }
+}
+
+void TestUnits::rulesWithoutSandboxTakeOnlyPlainArguments() {
+  // With no sandbox an option or a quoted argument can run anything (git -c, find -exec, sed 'e ...'),
+  // so the rule offered keeps them, and what follows it may only be names and paths.
+  QCOMPARE(commandPrefix("npm test src/a.test.js", true), QString("npm test"));
+  QCOMPARE(commandPrefix("npm test -- --watch", true), QString("npm test -- --watch"));
+  QCOMPARE(commandPrefix("git -c core.pager=less status", true), QString("git -c core.pager=less status"));
+  QCOMPARE(commandPrefix("ls -la", true), QString("ls -la"));
+  QCOMPARE(commandPrefix("grep \"a b\" file", true), QString("grep \"a b\" file"));
+  QCOMPARE(commandPrefix("sudo make install", true), QString());
+  QCOMPARE(commandPrefix("git -c core.pager=less status", false), QString("git"));
+
+  QVERIFY(commandMatches("npm test", "npm test", true));
+  QVERIFY(commandMatches("npm test src/b.test.js", "npm test", true));
+  QVERIFY(!commandMatches("npm test --config=evil.js", "npm test", true));
+  QVERIFY(!commandMatches("npm test 'x'", "npm test", true));
+  QVERIFY(commandMatches("ls -la src", "ls -la", true));
+  QVERIFY(commandMatches("git", "git", true));
+  QVERIFY(!commandMatches("git fetch", "git", true));
+  QVERIFY(!commandMatches("git -c core.sshCommand=evil fetch", "git", true));
+  QVERIFY(!commandMatches("sed 'e rm -rf ~' x", "sed", true));
+  QVERIFY(!commandMatches("find . -exec python3 x.py +", "find .", true));
+  QVERIFY2(commandMatches("find . -exec python3 x.py +", "find .", false), "in the sandbox, as before");
+
+  AllowedTools allowed;
+  allowed.setConfigured({"bash:git"}, {});
+  const QJsonObject fetch{{"command", "git -c core.sshCommand=evil fetch"}};
+  QVERIFY(allowed.allows("bash", fetch, false));
+  QVERIFY(!allowed.allows("bash", fetch, true));
 }
 
 void TestUnits::messagesNameTheirImages() {
