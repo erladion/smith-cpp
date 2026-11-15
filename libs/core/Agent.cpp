@@ -396,9 +396,9 @@ QList<ToolResult> Agent::runTools(const QList<ToolCall>& calls, const CancelPtr&
       std::atomic<int> next{i};
       QList<QThread*> threads;
       for (int n = std::min(end - i, MAX_PARALLEL_TOOLS); n > 0; n--) {
-        QThread* thread = QThread::create([this, &group, &calls, &next, i, end, cancel]() {
+        QThread* thread = QThread::create([this, &group, &calls, &next, &interrupted, i, end, cancel]() {
           for (int j = next.fetch_add(1); j < end; j = next.fetch_add(1)) {
-            group[j - i] = runTool(calls[j], cancel);
+            group[j - i] = cancelled(cancel) ? interrupted : runTool(calls[j], cancel);
           }
         });
         threads.append(thread);
