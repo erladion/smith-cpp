@@ -143,6 +143,10 @@ TypeScript version doesn't have them.
   "permissions": { "allow": ["edit_file", "bash:npm test"], "deny": ["bash:git push"] }
   ```
 
+  A deny rule refuses the command wherever it runs in a command line and however it is written
+  (`cd x && git push`, `bash -c 'git push'`, `/usr/bin/git -C . push`). It guards against mistakes,
+  not against everything: a script or a git alias that pushes isn't seen.
+
 - **Tools of your own.** A folder with a `tool.json` is a tool the model can call: in
   `~/.config/smith/tools/<name>/` for yours, or `.agents/tools/<name>/` in a project.
 

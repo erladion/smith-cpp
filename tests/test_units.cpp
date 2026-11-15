@@ -64,6 +64,7 @@ private Q_SLOTS:
   void runLaterSeesGitFolders();
   void messagesNameTheirImages();
   void permissionRulesCoverCommands();
+  void denyRulesFindTheCommandAnywhere();
 
 private:
   std::unique_ptr<TempDir> m_pData;
@@ -481,6 +482,25 @@ void TestUnits::permissionRulesCoverCommands() {
   QCOMPARE(saved, QStringList());
   QVERIFY(!allowed.allows("bash", bash("npm test"), false));
   QVERIFY2(allowed.allows("bash", bash("make"), false), "the config file's rules stay");
+}
+
+void TestUnits::denyRulesFindTheCommandAnywhere() {
+  AllowedTools allowed;
+  allowed.setConfigured({}, {"bash:git push", "bash:rm"});
+  auto denied = [&](const QString& command) { return allowed.denies("bash", QJsonObject{{"command", command}}); };
+  // However it is written, and wherever in the line it runs.
+  for (const QString command : {"git push", "git  push origin", "git push; echo done", "cd . && git push", "make || git push", "echo x | git push",
+                                 "/usr/bin/git push", "\\git push", "g''it pu\"\"sh", "git -C . push", "git -c a=b push --force", "FOO=1 git push",
+                                 "env FOO=1 git push", "sudo -u bob git push", "timeout 5 git push", "nohup git push &", "(git push)", "{ git push; }",
+                                 "echo $(git push)", "echo `git push`", "echo \"$(git push)\"", "bash -c 'git push'", "sh -c \"cd x && git push\"",
+                                 "eval 'git push'", "find . -exec git push \\;", "git status\ngit push", "rm -rf build", "/bin/rm x", "xargs rm < list"}) {
+    QVERIFY2(denied(command), qPrintable(command));
+  }
+  // Other commands of the same program, and the words only mentioned.
+  for (const QString command : {"git status", "git log --oneline", "git commit -m 'push it later'", "grep -r rm src", "echo rm", "npm run rmdir",
+                                 "git pushd", "rmdir build", "ls"}) {
+    QVERIFY2(!denied(command), qPrintable(command));
+  }
 }
 
 void TestUnits::messagesNameTheirImages() {

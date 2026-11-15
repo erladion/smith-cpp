@@ -19,6 +19,117 @@ bool simpleCommand(const QString& command) {
   return !command.isEmpty() && !shell.match(command).hasMatch();
 }
 
+// Reading a command line for deny rules: close enough to the shell that a
+// command can't slip past one by how it is written.
+constexpr int MAX_QUOTE_DEPTH = 4;
+
+// The simple commands in a command line, each as its words, quotes and
+// backslashes taken out as the shell does. Quoted text is read as a command
+// line too, as `bash -c '...'`, `eval "..."` and "$(...)" run it.
+void readCommands(const QString& line, int depth, QList<QStringList>& commands) {
+  static const QString SEPARATORS = ";&|()`{}<>\n\r";
+  QStringList words;
+  QString word;
+  bool inWord = false;
+  auto endWord = [&]() {
+    if (inWord) {
+      words << word;
+    }
+    word.clear();
+    inWord = false;
+  };
+  auto endCommand = [&]() {
+    endWord();
+    if (!words.isEmpty()) {
+      commands << words;
+    }
+    words.clear();
+  };
+  auto quoted = [&](const QString& text) {
+    word += text;
+    inWord = true;
+    if (depth < MAX_QUOTE_DEPTH) {
+      readCommands(text, depth + 1, commands);
+    }
+  };
+  for (int i = 0; i < line.size(); i++) {
+    const QChar ch = line[i];
+    if (ch == '\\') {
+      if (i + 1 < line.size()) {
+        word += line[++i];
+        inWord = true;
+      }
+    } else if (ch == '\'') {
+      const int end = line.indexOf('\'', i + 1);
+      const int stop = end < 0 ? line.size() : end;
+      quoted(line.mid(i + 1, stop - i - 1));
+      i = stop;
+    } else if (ch == '"') {
+      QString text;
+      int j = i + 1;
+      for (; j < line.size() && line[j] != '"'; j++) {
+        if (line[j] == '\\' && j + 1 < line.size()) {
+          j++;
+        }
+        text += line[j];
+      }
+      quoted(text);
+      i = j;
+    } else if (ch == '#' && !inWord) {
+      // A comment, to the end of the line.
+      while (i + 1 < line.size() && line[i + 1] != '\n') {
+        i++;
+      }
+    } else if (ch.isSpace() && ch != '\n' && ch != '\r') {
+      endWord();
+    } else if (SEPARATORS.contains(ch)) {
+      endCommand();
+    } else {
+      word += ch;
+      inWord = true;
+    }
+  }
+  endCommand();
+}
+
+// The program a word names: "git" for "/usr/bin/git".
+QString programName(const QString& word) {
+  return word.mid(word.lastIndexOf('/') + 1);
+}
+
+// Whether a simple command runs what a rule's words describe: the program,
+// then the rest of the rule's words in order among its arguments ("git -C .
+// push" for "git push"). Behind a wrapper (sudo, xargs, find -exec) the
+// program can be any of the words.
+bool runsRule(const QStringList& words, const QStringList& rule) {
+  int start = 0;
+  // Variables set for the command: FOO=1 git push.
+  while (start < words.size() && words[start].indexOf('=') > 0) {
+    start++;
+  }
+  if (start >= words.size()) {
+    return false;
+  }
+  const bool wrapped = WRAPPERS.contains(programName(words[start])) || words.contains("-exec") || words.contains("-execdir") || words.contains("-ok");
+  for (int at = start; at < words.size(); at++) {
+    if (words[at] == rule[0] || programName(words[at]) == rule[0]) {
+      int next = 1;
+      for (int i = at + 1; i < words.size() && next < rule.size(); i++) {
+        if (words[i] == rule[next]) {
+          next++;
+        }
+      }
+      if (next == rule.size()) {
+        return true;
+      }
+    }
+    if (!wrapped) {
+      break;
+    }
+  }
+  return false;
+}
+
 struct Rule {
   QString tool;
   // For bash: the start of the command; empty for the whole tool.
@@ -95,16 +206,23 @@ bool AllowedTools::allows(const QString& tool, const QJsonObject& input, bool un
 
 bool AllowedTools::denies(const QString& tool, const QJsonObject& input) const {
   QMutexLocker lock(&m_mutex);
-  const QString command = input.value("command").toString().trimmed();
+  QList<QStringList> commands;
+  readCommands(input.value("command").toString(), 0, commands);
+  static const QRegularExpression space(R"(\s+)");
   for (const QString& text : m_denied) {
     const Rule rule = parseRule(text);
     if (rule.tool != tool) {
       continue;
     }
-    // Looser than allowing: whatever starts that way is refused, whatever follows it (an argument, a ';').
-    const QChar next = command.size() > rule.prefix.size() ? command.at(rule.prefix.size()) : QChar(' ');
-    if (rule.prefix.isEmpty() || (command.startsWith(rule.prefix) && !next.isLetterOrNumber() && next != '-' && next != '_')) {
+    if (rule.prefix.isEmpty()) {
       return true;
+    }
+    // Looser than allowing: the command is refused wherever in the line it runs, however it is written.
+    const QStringList words = rule.prefix.split(space, Qt::SkipEmptyParts);
+    for (const QStringList& command : commands) {
+      if (runsRule(command, words)) {
+        return true;
+      }
     }
   }
   return false;
