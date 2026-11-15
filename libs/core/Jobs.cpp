@@ -155,11 +155,11 @@ void BackgroundJobs::startOnThread(const std::shared_ptr<Job>& job, const QStrin
       end(127, {});
     }
   });
+  // No waiting for it to start: that would hold up every other job's output.
+  // The process id is there once start() has forked; a failure to start arrives as errorOccurred.
   process->start();
-  if (process->waitForStarted(30000)) {
-    QMutexLocker lock(&m_mutex);
-    job->pid = process->processId();
-  }
+  QMutexLocker lock(&m_mutex);
+  job->pid = process->processId();
 }
 
 QList<JobStatus> BackgroundJobs::list() const {
