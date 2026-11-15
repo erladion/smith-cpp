@@ -20,6 +20,11 @@ add_executable(test_worktrees test_worktrees.cpp TestUtil.h FakeServer.h)
 target_link_libraries(test_worktrees PRIVATE smith_frontend Qt::Test)
 add_test(NAME worktrees COMMAND test_worktrees)
 
+# What both apps use to run turns and ask the user.
+add_executable(test_frontend test_frontend.cpp TestUtil.h)
+target_link_libraries(test_frontend PRIVATE smith_frontend Qt::Test)
+add_test(NAME frontend COMMAND test_frontend)
+
 # The desktop app's QML against the fake server, offscreen.
 if(SMITH_BUILD_DESKTOP)
   add_executable(test_desktop test_desktop.cpp TestUtil.h FakeServer.h)

@@ -201,32 +201,29 @@ int runHeadless(const std::function<std::shared_ptr<Agent>(const AgentHooks&)>& 
   AgentHooks hooks;
   hooks.onEvent = [&, lock](const AgentEvent& event) {
     QMutexLocker guard(lock.get());
-    switch (event.type) {
-    case AgentEvent::Type::Delta:
-      if (event.kind == BlockKind::Text) {
-        std::fputs(event.text.toUtf8().constData(), stdout);
-        std::fflush(stdout);
-      }
-      break;
-    case AgentEvent::Type::ResponseEnd:
-      std::fputs("\n", stdout);
-      std::fflush(stdout);
-      break;
-    case AgentEvent::Type::ToolEnd:
-      toolCalls++;
-      err(QString("[%1 %2] %3\n").arg(event.isError ? "✗" : "✓", event.name, event.summary));
-      break;
-    case AgentEvent::Type::Notice: {
-      const QString level = event.level == NoticeLevel::Info ? "info" : event.level == NoticeLevel::Warn ? "warn" : "error";
-      err(QString("[%1] %2\n").arg(level, event.text));
-      break;
-    }
-    case AgentEvent::Type::Done:
-      reason = doneReasonName(event.reason);
-      break;
-    default:
-      break;
-    }
+    std::visit(Overloaded{
+                   [](const Event::Delta& delta) {
+                     if (delta.kind == BlockKind::Text) {
+                       std::fputs(delta.text.toUtf8().constData(), stdout);
+                       std::fflush(stdout);
+                     }
+                   },
+                   [](const Event::ResponseEnd&) {
+                     std::fputs("\n", stdout);
+                     std::fflush(stdout);
+                   },
+                   [&](const Event::ToolEnd& tool) {
+                     toolCalls++;
+                     err(QString("[%1 %2] %3\n").arg(tool.isError ? "✗" : "✓", tool.name, tool.summary));
+                   },
+                   [&](const Event::Notice& notice) {
+                     const QString level = notice.level == NoticeLevel::Info ? "info" : notice.level == NoticeLevel::Warn ? "warn" : "error";
+                     err(QString("[%1] %2\n").arg(level, notice.text));
+                   },
+                   [&](const Event::Done& done) { reason = doneReasonName(done.reason); },
+                   [](const auto&) {},
+               },
+               event);
   };
   hooks.approve = [allowAll](const ApprovalRequest& request) {
     if (allowAll) {

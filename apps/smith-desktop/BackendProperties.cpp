@@ -31,10 +31,10 @@ QStringList Backend::queued() const {
 }
 
 QVariantMap Backend::approval() const {
-  if (!m_approval) {
+  if (!m_prompts.approval()) {
     return {};
   }
-  const ApprovalRequest& request = m_approval->request;
+  const ApprovalRequest& request = *m_prompts.approval();
   QVariantMap map{
       {"tool", request.tool},
       {"summary", request.summary},
@@ -61,10 +61,11 @@ QVariantMap Backend::approval() const {
 }
 
 QVariantMap Backend::question() const {
-  if (!m_question) {
+  const Question* asked = m_prompts.question();
+  if (!asked) {
     return {};
   }
-  return QVariantMap{{"question", m_question->question.question}, {"options", m_question->question.options}};
+  return QVariantMap{{"question", asked->question}, {"options", asked->options}};
 }
 
 QString Backend::endpoint() const {
@@ -178,7 +179,7 @@ QVariantList Backend::recentProjects() const {
 }
 
 bool Backend::canUndo() const {
-  return m_pAgent && !m_busy && m_pAgent->canUndo();
+  return m_pAgent && !m_turns.busy() && m_pAgent->canUndo();
 }
 
 QVariantList Backend::suggest(const QString& input) const {

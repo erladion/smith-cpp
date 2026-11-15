@@ -43,8 +43,7 @@ void Backend::startOver(bool resumed, const std::optional<QDateTime>& lastUsed, 
     all.prepend(Entry::notice(NoticeLevel::Info, QString("Stopped %1 from the previous session.").arg(plural(stopped, "background job"))));
   }
   m_transcript.clear();
-  m_contextTokens = 0;
-  m_contextLimit = 0;
+  m_turns.forgetContext();
   printBanner(resumed, lastUsed);
   for (const Entry& entry : all) {
     m_transcript.append(entry);
@@ -77,7 +76,7 @@ std::optional<QList<Entry>> Backend::enterProject(const QString& folder) {
 }
 
 void Backend::newSession(const QString& folder) {
-  if (!m_pAgent || m_busy) {
+  if (!m_pAgent || m_turns.busy()) {
     return;
   }
   startNewSession(folder, {});
@@ -119,7 +118,7 @@ void Backend::openProject(const QString& folder) {
 }
 
 void Backend::openSession(const QString& id) {
-  if (!m_pAgent || m_busy || id == sessionId()) {
+  if (!m_pAgent || m_turns.busy() || id == sessionId()) {
     return;
   }
   QString folder;

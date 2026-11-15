@@ -68,7 +68,7 @@ void App::runCommand(const QString& text) {
   } else if (command == "/jobs") {
     manageJobs(arg);
   } else if (command == "/compact") {
-    setCompacting(true);
+    m_turns.setCompacting(true);
     const std::shared_ptr<Agent> current = m_pAgent;
     runBusy("Compacting…", [current](const CancelPtr& cancel) { current->compactNow(cancel); });
   } else if (command == "/redpill") {
@@ -95,26 +95,7 @@ void App::undo() {
     print(Entry::notice(NoticeLevel::Info, "Nothing to undo."));
     return;
   }
-  const QString cwd = m_project.cwd;
-  auto rel = [&](const QStringList& files) {
-    QStringList out;
-    for (const QString& file : files) {
-      out << (file.startsWith(cwd + "/") ? file.mid(cwd.size() + 1) : file);
-    }
-    return out.join(", ");
-  };
-  QStringList lines{"Undid the last turn and removed it from the conversation."};
-  if (!result->restored.isEmpty()) {
-    lines << "Restored: " + rel(result->restored);
-  }
-  if (!result->skipped.isEmpty()) {
-    lines << "Left alone because they changed afterwards: " + rel(result->skipped);
-  }
-  if (!result->untracked.isEmpty()) {
-    lines << QString("Not undone: anything changed by %1 commands.").arg(result->untracked.join(", "));
-  }
-  const bool warn = !result->skipped.isEmpty() || !result->untracked.isEmpty();
-  print(Entry::notice(warn ? NoticeLevel::Warn : NoticeLevel::Info, lines.join('\n')));
+  print(undoNotice(*result, m_project.cwd));
   m_editor.setValue(result->prompt);
 }
 

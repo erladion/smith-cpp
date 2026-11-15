@@ -1,19 +1,17 @@
 #pragma once
 
+#include "frontend/Prompts.h"
 #include "frontend/Runtime.h"
+#include "frontend/Turns.h"
 #include "frontend/Worktrees.h"
 #include "Palette.h"
 #include "TranscriptModel.h"
 
-#include <QElapsedTimer>
-#include <QMap>
 #include <QObject>
-#include <QThread>
 #include <QVariantList>
 #include <QVariantMap>
 #include <QtQml/qqmlregistration.h>
 
-#include <atomic>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -105,11 +103,11 @@ public:
   QString version() const;
   TranscriptModel* transcript() { return &m_transcript; }
 
-  bool busy() const { return m_busy; }
-  bool agentRunning() const { return m_busy && m_pCancel != nullptr; }
-  QString activity() const { return m_activity; }
-  bool compacting() const { return m_compacting; }
-  qint64 turnStartedAt() const { return m_turnStartedAt; }
+  bool busy() const { return m_turns.busy(); }
+  bool agentRunning() const { return m_turns.agentRunning(); }
+  QString activity() const { return m_turns.activity(); }
+  bool compacting() const { return m_turns.compacting(); }
+  qint64 turnStartedAt() const { return m_turns.startedAt(); }
   QVariantList todos() const;
   QStringList queued() const;
   QVariantMap approval() const;
@@ -121,8 +119,8 @@ public:
   QString model() const;
   QVariantList models() const { return m_models; }
   QString reasoning() const;
-  qint64 contextTokens() const { return m_contextTokens; }
-  int contextLimit() const { return m_contextLimit; }
+  qint64 contextTokens() const { return m_turns.tokens().value_or(0); }
+  int contextLimit() const { return m_turns.limit().value_or(0); }
   bool sandboxActive() const;
   QString sandboxKind() const;
   QString sandboxDescription() const;
@@ -204,22 +202,12 @@ Q_SIGNALS:
   void confirmDrop(const QString& path);
 
 private:
-  struct PendingApproval {
-    ApprovalRequest request;
-    std::shared_ptr<Pending<ApprovalDecision>> answer;
-  };
-  struct PendingQuestion {
-    Question question;
-    std::shared_ptr<Pending<Answer>> answer;
-  };
-
   void ready();
   void printBanner(bool resumed, const std::optional<QDateTime>& lastUsed);
   void notice(NoticeLevel level, const QString& text);
   void onEvent(const AgentEvent& event);
-  ApprovalDecision approveFromWorker(const ApprovalRequest& request);
-  Answer askFromWorker(const Question& question);
-  void runTurn(const QString& activity, std::function<void(const CancelPtr&)> work, std::function<void()> then = {});
+  // Runs an agent turn; `then` follows on the GUI thread. A timed turn is one the user sent.
+  void runTurn(const QString& activity, std::function<void(const CancelPtr&)> work, std::function<void()> then = {}, bool timed = false);
   // Runs `work` on a worker thread with `activity` showing; its result runs on the GUI thread.
   void background(const QString& activity, std::function<std::function<void()>()> work);
   void runCommand(const QString& text);
@@ -227,8 +215,7 @@ private:
   void switchEndpoint(const QString& name, const QString& preferredModel = {});
   std::optional<QList<Entry>> enterProject(const QString& folder);
   void startOver(bool resumed, const std::optional<QDateTime>& lastUsed, const QList<Entry>& entries);
-  QThread* launch(std::function<void()> work, std::function<void()> finished);
-  void setCompacting(bool on);
+  void launch(std::function<void()> work, std::function<void()> finished);
   void startNewSession(const QString& folder, const QList<Entry>& extra);
   void openSessionIn(const QString& id, const QString& folder, const QList<Entry>& extra);
   void resumeIn(const QString& folder, const QList<Entry>& extra = {});
@@ -254,21 +241,10 @@ private:
 
   QString m_state = "starting";
   QString m_startupError;
-  bool m_busy = false;
-  CancelPtr m_pCancel;
-  QString m_activity;
-  bool m_compacting = false;
-  qint64 m_turnStartedAt = 0;
-  QElapsedTimer m_turnClock;
-  int m_turnToolCalls = 0;
-  QString m_turnReason;
-  QMap<QString, QString> m_running;
-  QStringList m_runningOrder;
-  std::optional<PendingApproval> m_approval;
-  std::optional<PendingQuestion> m_question;
+  // Approvals and questions from the agent, and the turn or task under way.
+  Prompts m_prompts;
+  TurnRunner m_turns;
   QVariantList m_models;
-  qint64 m_contextTokens = 0;
-  int m_contextLimit = 0;
   bool m_allSessions = false;
   QVariantList m_sessions;
   QList<Worktree> m_worktreeList;
@@ -285,9 +261,7 @@ private:
   };
   std::optional<Landing> m_landingState;
   QVariantMap m_landing;
-  QList<QThread*> m_workers;
   bool m_closed = false;
-  std::atomic<bool> m_closing{false};
 };
 
 } // namespace Smith::Desktop

@@ -82,20 +82,26 @@ namespace {
 QString textOf(const QList<AgentEvent>& events, BlockKind kind) {
   QString text;
   for (const AgentEvent& event : events) {
-    if (event.type == AgentEvent::Type::Delta && event.kind == kind) {
-      text += event.text;
+    const auto* delta = std::get_if<Event::Delta>(&event);
+    if (delta && delta->kind == kind) {
+      text += delta->text;
     }
   }
   return text;
 }
 
 bool endsWithDone(const QList<AgentEvent>& events, DoneReason reason) {
-  return !events.isEmpty() && events.last().type == AgentEvent::Type::Done && events.last().reason == reason;
+  if (events.isEmpty()) {
+    return false;
+  }
+  const auto* done = std::get_if<Event::Done>(&events.last());
+  return done && done->reason == reason;
 }
 
 bool hasNotice(const QList<AgentEvent>& events, const QString& pattern) {
   for (const AgentEvent& event : events) {
-    if (event.type == AgentEvent::Type::Notice && matches(event.text, pattern)) {
+    const auto* notice = std::get_if<Event::Notice>(&event);
+    if (notice && matches(notice->text, pattern)) {
       return true;
     }
   }
@@ -225,9 +231,9 @@ void TestAgent::runsStreamedToolCallAndFeedsResultBack() {
   QCOMPARE(h->approvals, QStringList({"echo hello"}));
   bool sawEnd = false;
   for (const AgentEvent& event : h->events) {
-    if (event.type == AgentEvent::Type::ToolEnd) {
-      QCOMPARE(event.output, QString("hello"));
-      QVERIFY(!event.isError);
+    if (const auto* end = std::get_if<Event::ToolEnd>(&event)) {
+      QCOMPARE(end->output, QString("hello"));
+      QVERIFY(!end->isError);
       sawEnd = true;
     }
   }
@@ -357,8 +363,8 @@ void TestAgent::recoversFromContextOverflow() {
   // The server's n_ctx was learned from the error.
   std::optional<int> limit;
   for (const AgentEvent& event : h->events) {
-    if (event.type == AgentEvent::Type::Context) {
-      limit = event.limit;
+    if (const auto* context = std::get_if<Event::Context>(&event)) {
+      limit = context->limit;
     }
   }
   QCOMPARE(limit, std::optional<int>(8192));
@@ -503,7 +509,7 @@ void TestAgent::messageTypedDuringToolCallIsDelivered() {
         QMutexLocker lock(&harness.mutex);
         harness.events.append(event);
       }
-      if (event.type == AgentEvent::Type::ToolStart && agentRef) {
+      if (std::holds_alternative<Event::ToolStart>(event) && agentRef) {
         agentRef->queue("actually, only look in src/");
       }
     };
@@ -516,7 +522,8 @@ void TestAgent::messageTypedDuringToolCallIsDelivered() {
   QCOMPARE(sent.last().toObject(), QJsonObject({{"role", "user"}, {"content", "actually, only look in src/"}}));
   bool delivered = false;
   for (const AgentEvent& event : h->events) {
-    delivered = delivered || (event.type == AgentEvent::Type::UserMessage && event.text == "actually, only look in src/");
+    const auto* message = std::get_if<Event::UserMessage>(&event);
+    delivered = delivered || (message && message->text == "actually, only look in src/");
   }
   QVERIFY(delivered);
   QVERIFY(h->agent->queuedMessages().isEmpty());
@@ -532,7 +539,7 @@ void TestAgent::messageTypedDuringAnswerKeepsTurnGoing() {
         QMutexLocker lock(&harness.mutex);
         harness.events.append(event);
       }
-      if (event.type == AgentEvent::Type::Delta && !queued && agentRef) {
+      if (std::holds_alternative<Event::Delta>(event) && !queued && agentRef) {
         queued = true;
         agentRef->queue("also mention the tests");
       }
@@ -569,7 +576,8 @@ void TestAgent::subagentReportsBack() {
   QVERIFY2(!QJsonDocument(parentAfter).toJson().contains("s1"), "the sub-agent's own tool calls stay out of the main conversation");
   bool activity = false;
   for (const AgentEvent& event : h->events) {
-    activity = activity || (event.type == AgentEvent::Type::Activity && matches(event.text, "find config › grep"));
+    const auto* progress = std::get_if<Event::Activity>(&event);
+    activity = activity || (progress && matches(progress->text, "find config › grep"));
   }
   QVERIFY(activity);
 }
@@ -727,7 +735,7 @@ void TestAgent::todoWriteAndReminder() {
   QCOMPARE(todos[1].status, TodoStatus::InProgress);
   int todoEvents = 0;
   for (const AgentEvent& event : h->events) {
-    todoEvents += event.type == AgentEvent::Type::Todos ? 1 : 0;
+    todoEvents += std::holds_alternative<Event::Todos>(event) ? 1 : 0;
   }
   QCOMPARE(todoEvents, 2);
   QVERIFY(hasNotice(h->events, "Reminded the agent of 2 unfinished todos"));
@@ -840,8 +848,9 @@ void TestAgent::runLaterFilesAskAndAreReported() {
   QCOMPARE(asked[1].second, QString());
   QString notice;
   for (const AgentEvent& event : h->events) {
-    if (event.type == AgentEvent::Type::Notice && event.level == NoticeLevel::Warn && notice.isEmpty()) {
-      notice = event.text;
+    const auto* warning = std::get_if<Event::Notice>(&event);
+    if (warning && warning->level == NoticeLevel::Warn && notice.isEmpty()) {
+      notice = warning->text;
     }
   }
   QVERIFY_MATCH(notice, "This turn changed files that run outside the sandbox later:\\n- \\.envrc \\(created\\): direnv runs it");

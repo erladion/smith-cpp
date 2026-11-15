@@ -6,6 +6,7 @@
 #include <QString>
 
 #include <optional>
+#include <variant>
 
 namespace Smith {
 
@@ -17,73 +18,82 @@ enum class BlockKind { Text, Reasoning };
 enum class NoticeLevel { Info, Warn, Error };
 enum class DoneReason { Stop, Interrupted, Length, MaxSteps };
 
-struct AgentEvent {
-  enum class Type {
-    // Messages you typed while the agent worked, now handed to the model.
-    UserMessage,
-    // A streamed chunk of assistant text or reasoning.
-    Delta,
-    // The model finished streaming one response; flush any live text.
-    ResponseEnd,
-    // The model has started emitting a call to this tool (arguments still streaming).
-    ToolPrepare,
-    ToolStart,
-    ToolEnd,
-    // How full the context window is; `limit` is unknown for servers that don't report it.
-    Context,
-    // Background work worth showing in a status line; `compacting` while summarizing.
-    Activity,
-    Notice,
-    // The model rewrote its checklist (todo_write), or it was cleared or restored.
-    Todos,
-    Done,
-  };
+// One struct per kind of event, each with only what that event carries.
+namespace Event {
 
-  Type type = Type::Notice;
+// Messages you typed while the agent worked, now handed to the model.
+struct UserMessage {
   QString text;
+};
+
+// A streamed chunk of assistant text or reasoning.
+struct Delta {
   BlockKind kind = BlockKind::Text;
+  QString text;
+};
+
+// The model finished streaming one response; flush any live text.
+struct ResponseEnd {};
+
+// The model has started emitting a call to this tool (arguments still streaming).
+struct ToolPrepare {
+  QString name;
+};
+
+struct ToolStart {
+  QString id;
+  QString name;
+  QString summary;
+};
+
+struct ToolEnd {
   QString id;
   QString name;
   QString summary;
   QString output;
   bool isError = false;
   std::optional<Diff> diff;
+};
+
+// How full the context window is; `limit` is unknown for servers that don't report it.
+struct Context {
   qint64 tokens = 0;
   std::optional<int> limit;
-  bool compacting = false;
-  NoticeLevel level = NoticeLevel::Info;
-  TodoList todos;
-  DoneReason reason = DoneReason::Stop;
-
-  static AgentEvent notice(NoticeLevel level, const QString& text) {
-    AgentEvent event;
-    event.type = Type::Notice;
-    event.level = level;
-    event.text = text;
-    return event;
-  }
-
-  static AgentEvent done(DoneReason reason) {
-    AgentEvent event;
-    event.type = Type::Done;
-    event.reason = reason;
-    return event;
-  }
-
-  static AgentEvent simple(Type type) {
-    AgentEvent event;
-    event.type = type;
-    return event;
-  }
-
-  static AgentEvent activity(const QString& text, bool compacting = false) {
-    AgentEvent event;
-    event.type = Type::Activity;
-    event.text = text;
-    event.compacting = compacting;
-    return event;
-  }
 };
+
+// Background work worth showing in a status line; `compacting` while summarizing.
+struct Activity {
+  QString text;
+  bool compacting = false;
+};
+
+struct Notice {
+  NoticeLevel level = NoticeLevel::Info;
+  QString text;
+};
+
+// The model rewrote its checklist (todo_write), or it was cleared or restored.
+struct Todos {
+  TodoList todos;
+};
+
+struct Done {
+  DoneReason reason = DoneReason::Stop;
+};
+
+} // namespace Event
+
+using AgentEvent = std::variant<Event::UserMessage, Event::Delta, Event::ResponseEnd, Event::ToolPrepare, Event::ToolStart, Event::ToolEnd,
+                                Event::Context, Event::Activity, Event::Notice, Event::Todos, Event::Done>;
+
+// For std::visit over an AgentEvent: one lambda per event, e.g.
+//   std::visit(Overloaded{[](const Event::Delta& delta) { ... }, [](const auto&) {}}, event);
+template <typename... Handlers>
+struct Overloaded : Handlers... {
+  using Handlers::operator()...;
+};
+template <typename... Handlers>
+Overloaded(Handlers...) -> Overloaded<Handlers...>;
 
 inline QString doneReasonName(DoneReason reason) {
   switch (reason) {

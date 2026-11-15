@@ -27,7 +27,8 @@ ctest --test-dir build
 
 The tests are a port of the original TypeScript suite, one QtTest suite per original file
 (`units`, `tools`, `sandbox`, `features`, `agent`, `ui`), plus `worktrees` for task
-worktrees and `desktop` for the desktop app. Each original case keeps its name
+worktrees, `frontend` for what the two apps share to run turns, and `desktop` for the
+desktop app. Each original case keeps its name
 and assertions. The agent tests run the real loop against a scripted fake server
 (`tests/FakeServer.h`), and the sandbox tests run real commands through bubblewrap. Tests
 that need something missing here skip themselves: bwrap, ripgrep, or docker with the ubi9
@@ -142,6 +143,8 @@ libs/tui/                 terminal toolkit: raw mode and signals, inline rendere
                           editor, Markdown, pickers, digital rain. Includes nothing else.
 libs/frontend/            what both apps share: Runtime (server, model, sandbox, project,
                           session and agents from the flags and config), the frontend hooks,
+                          running turns on worker threads with what to show meanwhile (Turns),
+                          approvals and questions (Prompts),
                           transcript entries and session replay, commands and completion,
                           task worktrees (git), greetings, spinner frames, durations
 apps/smith/               the terminal app: App (screen and turns in App.cpp, drawing and agent

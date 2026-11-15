@@ -43,7 +43,10 @@ void App::render() {
     return;
   }
   // The animations only need a timer while one is on screen.
-  const bool animating = (!m_activity.isEmpty() && !prompting()) || streaming();
+  if (!m_turns.compacting()) {
+    m_pStrip.reset();
+  }
+  const bool animating = (!m_turns.activity().isEmpty() && !prompting()) || streaming();
   if (animating && !m_ticker.isActive()) {
     m_ticker.start();
   } else if (!animating && m_ticker.isActive()) {
@@ -63,9 +66,10 @@ QList<Line> App::liveLines() {
       lines.append(wrap(Line{Span{m_live->text, REASONING}}, w));
     }
   }
-  if (!m_activity.isEmpty() && !prompting()) {
-    const QString elapsed = m_turn ? " · " + formatDuration(m_turn->started.elapsed()) : QString();
-    if (m_compacting && matrix() && Tui::colorsEnabled()) {
+  const QString activity = m_turns.activity();
+  if (!activity.isEmpty() && !prompting()) {
+    const QString elapsed = m_turns.elapsed() ? " · " + formatDuration(*m_turns.elapsed()) : QString();
+    if (m_turns.compacting() && matrix() && Tui::colorsEnabled()) {
       // A strip of rain, with the activity beside its middle row.
       if (!m_pStrip) {
         Tui::Rain::Options options;
@@ -85,35 +89,35 @@ QList<Line> App::liveLines() {
     } else {
       const Spinner& spinner = spinnerFor(m_options.theme);
       lines.append(Line{});
-      lines.append(truncate(Line{Span{spinner.frames[m_frame % spinner.frames.size()], fg(spinner.color)}, Span{" " + m_activity + elapsed, DIM}}, w));
+      lines.append(truncate(Line{Span{spinner.frames[m_frame % spinner.frames.size()], fg(spinner.color)}, Span{" " + activity + elapsed, DIM}}, w));
     }
     // The step the agent is on, from its checklist.
     const TodoList todos = m_pAgent->todos();
     for (const Todo& todo : todos) {
-      if (todo.status == TodoStatus::InProgress && m_busy) {
+      if (todo.status == TodoStatus::InProgress && m_turns.busy()) {
         const int done = todos.size() - unfinished(todos).size();
         lines.append(truncate(Line{Span{QString("  ▶ %1/%2 ").arg(done + 1).arg(todos.size()), fg(Color::Yellow)}, Span{todo.content, DIM}}, w));
         break;
       }
     }
   }
-  if (m_approval) {
+  if (const ApprovalRequest* approval = m_prompts.approval()) {
     lines.append(Line{});
-    lines.append(approvalBox(m_approval->request, w, m_terminal.rows()));
-  } else if (m_question) {
+    lines.append(approvalBox(*approval, w, m_terminal.rows()));
+  } else if (const Question* question = m_prompts.question()) {
     lines.append(Line{});
-    lines.append(questionBox(m_question->question, m_question->selected, w));
+    lines.append(questionBox(*question, m_questionSelected, w));
     const QList<Line> answer = prefixed(Line{Span{"› ", fg(Color::Cyan)}}, Line{Span{"  ", {}}}, m_editor.render("Your answer"), w - 4);
     lines.append(box(answer, Color::Gray, w, true));
   } else if (m_picker) {
     lines.append(Line{});
     lines.append(box(m_picker->picker->lines(), Color::Cyan, w));
-  } else if (m_textPrompt && !m_busy) {
+  } else if (m_textPrompt && !m_turns.busy()) {
     lines.append(Line{});
     lines.append(truncate(Line{Span{m_textPrompt->title, Style{.bold = true}}, Span{"  enter to confirm · esc cancels", DIM}}, w));
     const QList<Line> prompt = prefixed(Line{Span{"› ", fg(Color::Yellow)}}, Line{Span{"  ", {}}}, m_editor.render({}), w - 4);
     lines.append(box(prompt, Color::Yellow, w, true));
-  } else if (!m_busy || agentRunning()) {
+  } else if (!m_turns.busy() || agentRunning()) {
     const QStringList queued = m_pAgent->queuedMessages();
     if (!queued.isEmpty()) {
       lines.append(Line{});
@@ -122,7 +126,7 @@ QList<Line> App::liveLines() {
       }
       lines.append(Line{Span{"  queued: the agent gets this at its next step", Style{.dim = true, .italic = true}}});
     }
-    const QString placeholder = m_busy ? "Type to add to what the agent is doing (enter queues it)" : "Ask for something, or /help";
+    const QString placeholder = m_turns.busy() ? "Type to add to what the agent is doing (enter queues it)" : "Ask for something, or /help";
     const QList<Line> prompt = prefixed(Line{Span{"› ", fg(Color::Cyan)}}, Line{Span{"  ", {}}}, m_editor.render(placeholder), w - 4);
     lines.append(Line{});
     lines.append(box(prompt, Color::Gray, w, true));
@@ -132,12 +136,12 @@ QList<Line> App::liveLines() {
   status.endpoint = m_pServer->name();
   status.model = m_pAgent->model();
   status.reasoning = m_pAgent->reasoning();
-  status.tokens = m_tokens;
-  status.limit = m_limit;
+  status.tokens = m_turns.tokens();
+  status.limit = m_turns.limit();
   status.sandboxActive = m_options.sandbox->active();
   status.sandboxType = m_options.sandbox->type();
   status.network = m_options.sandbox->network();
-  status.busy = m_busy;
+  status.busy = m_turns.busy();
   status.queueing = agentRunning();
   status.jobs = m_options.jobs ? m_options.jobs->running() : 0;
   status.worktreeBranch = m_project.worktreeBranch;
@@ -155,90 +159,15 @@ void App::onEvent(const AgentEvent& event) {
   if (m_closed) {
     return;
   }
-  switch (event.type) {
-  case AgentEvent::Type::Delta:
-    setCompacting(false);
-    m_activity.clear();
-    appendDelta(event.kind, event.text);
-    break;
-  case AgentEvent::Type::ResponseEnd:
+  const std::optional<Entry> entry = m_turns.apply(event);
+  if (const auto* delta = std::get_if<Event::Delta>(&event)) {
+    appendDelta(delta->kind, delta->text);
+  } else if (entry || std::holds_alternative<Event::ResponseEnd>(event) || std::holds_alternative<Event::ToolPrepare>(event)) {
+    // What streamed so far goes above whatever comes next.
     flushLive();
-    break;
-  case AgentEvent::Type::ToolPrepare:
-    setCompacting(false);
-    flushLive();
-    m_activity = "Preparing " + event.name + "…";
-    break;
-  case AgentEvent::Type::UserMessage:
-    flushLive();
-    print(Entry::simple(Entry::Kind::User, event.text));
-    break;
-  case AgentEvent::Type::ToolStart:
-    setCompacting(false);
-    m_running.insert(event.id, event.name + " " + event.summary);
-    m_runningOrder.removeAll(event.id);
-    m_runningOrder << event.id;
-    {
-      QStringList labels;
-      for (const QString& id : m_runningOrder) {
-        labels << m_running.value(id);
-      }
-      m_activity = runningLabel(labels);
-    }
-    break;
-  case AgentEvent::Type::ToolEnd: {
-    setCompacting(false);
-    if (m_turn) {
-      m_turn->toolCalls++;
-    }
-    m_running.remove(event.id);
-    m_runningOrder.removeAll(event.id);
-    QStringList labels;
-    for (const QString& id : m_runningOrder) {
-      labels << m_running.value(id);
-    }
-    m_activity = runningLabel(labels);
-    // The checklist itself was printed when it changed.
-    if (event.name == TODO_TOOL && !event.isError) {
-      break;
-    }
-    Entry entry;
-    entry.kind = Entry::Kind::Tool;
-    entry.name = event.name;
-    entry.summary = event.summary;
-    entry.output = event.output;
-    entry.isError = event.isError;
-    entry.diff = event.diff;
-    print(entry);
-    break;
   }
-  case AgentEvent::Type::Context:
-    m_tokens = event.tokens;
-    m_limit = event.limit;
-    break;
-  case AgentEvent::Type::Activity:
-    setCompacting(event.compacting);
-    // Progress from inside a tool (a sub-agent); say so when several run at once.
-    m_activity = m_running.size() > 1 ? QString("%1 in parallel · %2").arg(m_running.size()).arg(event.text) : event.text;
-    break;
-  case AgentEvent::Type::Notice:
-    flushLive();
-    print(Entry::notice(event.level, event.text));
-    break;
-  case AgentEvent::Type::Todos:
-    if (m_busy) {
-      flushLive();
-      Entry entry;
-      entry.kind = Entry::Kind::Todos;
-      entry.todos = event.todos;
-      print(entry);
-    }
-    break;
-  case AgentEvent::Type::Done:
-    if (m_turn) {
-      m_turn->reason = doneReasonName(event.reason);
-    }
-    break;
+  if (entry) {
+    print(*entry);
   }
   requestRender();
 }
@@ -280,13 +209,6 @@ void App::flushLive() {
     print(Entry::simple(m_live->kind == BlockKind::Text ? Entry::Kind::Text : Entry::Kind::Reasoning, text));
   }
   m_live.reset();
-}
-
-void App::setCompacting(bool on) {
-  m_compacting = on;
-  if (!on) {
-    m_pStrip.reset();
-  }
 }
 
 } // namespace Smith::Ui

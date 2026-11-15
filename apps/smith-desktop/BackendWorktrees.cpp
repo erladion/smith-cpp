@@ -110,7 +110,7 @@ void Backend::setLanding(const QVariantMap& landing) {
 }
 
 void Backend::createWorktree(const QString& task) {
-  if (!m_pAgent || m_busy) {
+  if (!m_pAgent || m_turns.busy()) {
     return;
   }
   const QString name = task.trimmed();
@@ -145,7 +145,7 @@ void Backend::createWorktree(const QString& task) {
 }
 
 void Backend::switchToWorktree(const QString& path) {
-  if (!m_pAgent || m_busy) {
+  if (!m_pAgent || m_turns.busy()) {
     return;
   }
   const std::optional<Worktree> worktree = worktreeAt(path);
@@ -155,7 +155,7 @@ void Backend::switchToWorktree(const QString& path) {
 }
 
 void Backend::reviewLanding(const QString& path) {
-  if (!m_pAgent || m_busy) {
+  if (!m_pAgent || m_turns.busy()) {
     return;
   }
   const std::optional<Worktree> found = worktreeAt(path);
@@ -222,7 +222,7 @@ void Backend::reviewLanding(const QString& path) {
 }
 
 void Backend::land(const QString& mode, const QString& message) {
-  if (!m_landingState || m_busy) {
+  if (!m_landingState || m_turns.busy()) {
     return;
   }
   const Landing landing = *m_landingState;
@@ -280,7 +280,7 @@ void Backend::closeLanding() {
 }
 
 void Backend::removeWorktree(const QString& path, bool discard) {
-  if (!m_pAgent || m_busy) {
+  if (!m_pAgent || m_turns.busy()) {
     return;
   }
   const std::optional<Worktree> found = worktreeAt(path);

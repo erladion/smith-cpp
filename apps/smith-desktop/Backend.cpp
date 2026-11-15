@@ -29,8 +29,10 @@ Backend::Backend(const LaunchOptions& launch, QObject* parent) : QObject(parent)
 
   // The agent calls these from its own threads.
   m_hooks.onEvent = [this](const AgentEvent& event) { QMetaObject::invokeMethod(this, [this, event]() { onEvent(event); }, Qt::QueuedConnection); };
-  m_hooks.approve = [this](const ApprovalRequest& request) { return approveFromWorker(request); };
-  m_hooks.ask = [this](const Question& question) { return askFromWorker(question); };
+  m_hooks.approve = [this](const ApprovalRequest& request) { return m_prompts.approve(request); };
+  m_hooks.ask = [this](const Question& question) { return m_prompts.ask(question); };
+  connect(&m_prompts, &Prompts::changed, this, &Backend::promptChanged);
+  connect(&m_turns, &TurnRunner::changed, this, &Backend::changed);
 }
 
 Backend::~Backend() {
@@ -60,18 +62,8 @@ QString Backend::version() const {
 
 // ---- startup ----
 
-QThread* Backend::launch(std::function<void()> work, std::function<void()> finished) {
-  QThread* thread = QThread::create(std::move(work));
-  m_workers << thread;
-  connect(thread, &QThread::finished, this, [this, thread, finished]() {
-    m_workers.removeAll(thread);
-    thread->deleteLater();
-    if (!m_closed && finished) {
-      finished();
-    }
-  });
-  thread->start();
-  return thread;
+void Backend::launch(std::function<void()> work, std::function<void()> finished) {
+  m_turns.launch(std::move(work), std::move(finished));
 }
 
 void Backend::start() {
@@ -169,180 +161,52 @@ void Backend::onEvent(const AgentEvent& event) {
   if (m_closed) {
     return;
   }
-  auto label = [this]() {
-    QStringList labels;
-    for (const QString& id : m_runningOrder) {
-      labels << m_running.value(id);
-    }
-    return runningLabel(labels);
-  };
-  switch (event.type) {
-  case AgentEvent::Type::Delta:
-    setCompacting(false);
-    m_activity = event.kind == BlockKind::Text ? "Writing…" : "Thinking…";
-    m_transcript.appendLive(event.kind, event.text);
-    break;
-  case AgentEvent::Type::ResponseEnd:
+  const std::optional<Entry> entry = m_turns.apply(event);
+  if (const auto* delta = std::get_if<Event::Delta>(&event)) {
+    m_turns.setActivity(delta->kind == BlockKind::Text ? "Writing…" : "Thinking…");
+    m_transcript.appendLive(delta->kind, delta->text);
+  } else if (std::holds_alternative<Event::ResponseEnd>(event) || std::holds_alternative<Event::ToolPrepare>(event)) {
     m_transcript.finishLive();
-    break;
-  case AgentEvent::Type::ToolPrepare:
-    setCompacting(false);
-    m_transcript.finishLive();
-    m_activity = "Preparing " + event.name + "…";
-    break;
-  case AgentEvent::Type::UserMessage:
-    m_transcript.append(Entry::simple(Entry::Kind::User, event.text));
-    break;
-  case AgentEvent::Type::ToolStart:
-    setCompacting(false);
-    m_running.insert(event.id, event.name + " " + event.summary);
-    m_runningOrder.removeAll(event.id);
-    m_runningOrder << event.id;
-    m_activity = label();
-    break;
-  case AgentEvent::Type::ToolEnd: {
-    setCompacting(false);
-    m_turnToolCalls++;
-    m_running.remove(event.id);
-    m_runningOrder.removeAll(event.id);
-    m_activity = label();
-    // The checklist itself was shown when it changed.
-    if (event.name == TODO_TOOL && !event.isError) {
-      break;
-    }
-    Entry entry;
-    entry.kind = Entry::Kind::Tool;
-    entry.name = event.name;
-    entry.summary = event.summary;
-    entry.output = event.output;
-    entry.isError = event.isError;
-    entry.diff = event.diff;
-    m_transcript.append(entry);
-    break;
   }
-  case AgentEvent::Type::Context:
-    m_contextTokens = event.tokens;
-    m_contextLimit = event.limit.value_or(0);
-    break;
-  case AgentEvent::Type::Activity:
-    setCompacting(event.compacting);
-    // Progress from inside a tool (a sub-agent); say so when several run at once.
-    m_activity = m_running.size() > 1 ? QString("%1 in parallel · %2").arg(m_running.size()).arg(event.text) : event.text;
-    break;
-  case AgentEvent::Type::Notice:
-    notice(event.level, event.text);
-    break;
-  case AgentEvent::Type::Todos:
-    if (m_busy) {
-      Entry entry;
-      entry.kind = Entry::Kind::Todos;
-      entry.todos = event.todos;
-      m_transcript.append(entry);
-    }
-    break;
-  case AgentEvent::Type::Done:
-    m_turnReason = doneReasonName(event.reason);
-    break;
+  if (entry) {
+    m_transcript.append(*entry);
   }
   Q_EMIT changed();
 }
 
-void Backend::setCompacting(bool on) {
-  m_compacting = on;
-}
-
-ApprovalDecision Backend::approveFromWorker(const ApprovalRequest& request) {
-  auto pending = std::make_shared<Pending<ApprovalDecision>>();
-  QMetaObject::invokeMethod(
-      this,
-      [this, request, pending]() {
-        if (m_closed) {
-          pending->resolve(ApprovalDecision::Deny);
-          return;
-        }
-        m_approval = PendingApproval{request, pending};
-        Q_EMIT promptChanged();
-      },
-      Qt::QueuedConnection);
-  // Once the app has closed, nobody will answer.
-  return pending->wait([this]() { return m_closing.load(); }, ApprovalDecision::Deny);
-}
-
-Answer Backend::askFromWorker(const Question& question) {
-  auto pending = std::make_shared<Pending<Answer>>();
-  QMetaObject::invokeMethod(
-      this,
-      [this, question, pending]() {
-        if (m_closed) {
-          pending->resolve(Answer{});
-          return;
-        }
-        m_question = PendingQuestion{question, pending};
-        Q_EMIT promptChanged();
-      },
-      Qt::QueuedConnection);
-  return pending->wait([this]() { return m_closing.load(); }, Answer{});
-}
-
 void Backend::decide(const QString& decision) {
-  if (!m_approval) {
+  if (!m_prompts.approval()) {
     return;
   }
-  const auto pending = m_approval->answer;
-  m_approval.reset();
-  Q_EMIT promptChanged();
   if (decision == "allow") {
-    pending->resolve(ApprovalDecision::Allow);
+    m_prompts.decide(ApprovalDecision::Allow);
   } else if (decision == "always") {
-    pending->resolve(ApprovalDecision::AllowAlways);
+    m_prompts.decide(ApprovalDecision::AllowAlways);
   } else {
-    pending->resolve(ApprovalDecision::Deny);
-    if (decision == "interrupt" && m_pCancel) {
-      m_pCancel->cancel();
+    m_prompts.decide(ApprovalDecision::Deny);
+    if (decision == "interrupt") {
+      m_turns.interrupt();
     }
   }
 }
 
 void Backend::answerOption(int index) {
-  if (!m_question) {
-    return;
-  }
-  const auto pending = m_question->answer;
-  m_question.reset();
-  Q_EMIT promptChanged();
-  pending->resolve(Answer{Answer::Kind::Option, index, {}});
+  m_prompts.answer(Answer{Answer::Kind::Option, index, {}});
 }
 
 void Backend::answerText(const QString& text) {
-  if (!m_question || text.trimmed().isEmpty()) {
-    return;
+  if (!text.trimmed().isEmpty()) {
+    m_prompts.answer(Answer{Answer::Kind::Text, 0, text.trimmed()});
   }
-  const auto pending = m_question->answer;
-  m_question.reset();
-  Q_EMIT promptChanged();
-  pending->resolve(Answer{Answer::Kind::Text, 0, text.trimmed()});
 }
 
 void Backend::dismissQuestion() {
-  if (!m_question) {
-    return;
-  }
-  const auto pending = m_question->answer;
-  m_question.reset();
-  Q_EMIT promptChanged();
-  pending->resolve(Answer{});
+  m_prompts.answer(Answer{});
 }
 
 void Backend::interrupt() {
-  if (m_approval) {
-    decide("deny");
-  }
-  if (m_question) {
-    dismissQuestion();
-  }
-  if (m_pCancel) {
-    m_pCancel->cancel();
-  }
+  m_prompts.dismiss();
+  m_turns.interrupt();
 }
 
 // ---- turns ----
@@ -352,7 +216,7 @@ void Backend::submit(const QString& value) {
   if (text.isEmpty() || m_state != "ready") {
     return;
   }
-  if (m_busy) {
+  if (m_turns.busy()) {
     if (text.startsWith('/')) {
       notice(NoticeLevel::Warn, "Commands work once the agent is done. Your command is still in the input box.");
       Q_EMIT restoreInput(value);
@@ -370,51 +234,28 @@ void Backend::submit(const QString& value) {
     return;
   }
   m_transcript.append(Entry::simple(Entry::Kind::User, text));
-  m_turnClock.start();
-  m_turnStartedAt = QDateTime::currentMSecsSinceEpoch();
-  m_turnToolCalls = 0;
-  m_turnReason.clear();
   const std::shared_ptr<Agent> agent = m_pAgent;
-  runTurn("Thinking…", [agent, text](const CancelPtr& cancel) { agent->send(text, cancel); },
-          [this]() {
-            m_transcript.append(Entry::simple(Entry::Kind::Meta, turnSummary(m_turnReason, m_turnClock.elapsed(), m_turnToolCalls)));
-            if (m_turnReason == "interrupted" && matrix()) {
-              m_transcript.append(Entry::simple(Entry::Kind::Quote, INTERRUPTED));
-            }
-            m_turnStartedAt = 0;
-            refreshSessions();
-          });
+  runTurn(
+      "Thinking…", [agent, text](const CancelPtr& cancel) { agent->send(text, cancel); },
+      [this]() {
+        const TurnStats& turn = m_turns.lastTurn();
+        m_transcript.append(Entry::simple(Entry::Kind::Meta, turnSummary(turn.reason, turn.elapsedMs, turn.toolCalls)));
+        if (turn.reason == "interrupted" && matrix()) {
+          m_transcript.append(Entry::simple(Entry::Kind::Quote, INTERRUPTED));
+        }
+        refreshSessions();
+      },
+      true);
 }
 
-void Backend::runTurn(const QString& activity, std::function<void(const CancelPtr&)> work, std::function<void()> then) {
-  const CancelPtr cancel = makeCancel();
-  m_pCancel = cancel;
-  m_busy = true;
-  m_activity = activity;
-  Q_EMIT changed();
-  auto error = std::make_shared<QString>();
-  const QString baseUrl = m_pServer->baseUrl();
-  launch(
-      [work, cancel, error, baseUrl]() {
-        try {
-          work(cancel);
-        } catch (const std::exception& failure) {
-          *error = describeError(failure, baseUrl);
-        } catch (...) {
-          *error = "Unexpected error.";
-        }
-      },
-      [this, error, then]() {
+void Backend::runTurn(const QString& activity, std::function<void(const CancelPtr&)> work, std::function<void()> then, bool timed) {
+  m_turns.runTurn(
+      activity, m_pServer->baseUrl(), std::move(work),
+      [this, then](const QString& error) {
         m_transcript.finishLive();
-        if (!error->isEmpty()) {
-          notice(NoticeLevel::Error, *error);
+        if (!error.isEmpty()) {
+          notice(NoticeLevel::Error, error);
         }
-        m_pCancel.reset();
-        m_activity.clear();
-        m_running.clear();
-        m_runningOrder.clear();
-        setCompacting(false);
-        m_busy = false;
         // Messages the agent never got (interrupted, error, step limit) go back into the input.
         const QStringList undelivered = m_pAgent->takeQueued();
         if (!undelivered.isEmpty()) {
@@ -424,35 +265,13 @@ void Backend::runTurn(const QString& activity, std::function<void(const CancelPt
         if (then) {
           then();
         }
-        Q_EMIT changed();
-      });
+      },
+      timed);
 }
 
 void Backend::background(const QString& activity, std::function<std::function<void()>()> work) {
-  m_busy = true;
-  m_activity = activity;
-  Q_EMIT changed();
-  auto next = std::make_shared<std::function<void()>>();
-  auto error = std::make_shared<QString>();
-  const QString baseUrl = m_pServer ? m_pServer->baseUrl() : QString();
-  launch(
-      [work, next, error, baseUrl]() {
-        try {
-          *next = work();
-        } catch (const std::exception& failure) {
-          *error = describeError(failure, baseUrl);
-        }
-      },
-      [this, next, error]() {
-        m_activity.clear();
-        m_busy = false;
-        if (!error->isEmpty()) {
-          notice(NoticeLevel::Error, *error);
-        } else if (*next) {
-          (*next)();
-        }
-        Q_EMIT changed();
-      });
+  m_turns.runTask(activity, m_pServer ? m_pServer->baseUrl() : QString(), std::move(work),
+                  [this](const QString& error) { notice(NoticeLevel::Error, error); });
 }
 
 // ---- shutdown ----
@@ -462,20 +281,9 @@ void Backend::quit() {
     return;
   }
   m_closed = true;
-  m_closing = true;
-  if (m_pCancel) {
-    m_pCancel->cancel();
-  }
-  if (m_approval) {
-    m_approval->answer->resolve(ApprovalDecision::Deny);
-  }
-  if (m_question) {
-    m_question->answer->resolve(Answer{});
-  }
-  // The agent's threads stop at their next check of the cancel token.
-  for (QThread* thread : m_workers) {
-    thread->wait();
-  }
+  m_turns.interrupt();
+  m_prompts.close();
+  m_turns.close();
   if (m_pRuntime) {
     m_pRuntime->shutdown();
   }

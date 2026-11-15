@@ -25,8 +25,16 @@ App::App(TuiOptions options, QObject* parent)
 
   // The agent calls these from its own threads.
   m_hooks.onEvent = [this](const AgentEvent& event) { QMetaObject::invokeMethod(this, [this, event]() { onEvent(event); }, Qt::QueuedConnection); };
-  m_hooks.approve = [this](const ApprovalRequest& request) { return approveFromWorker(request); };
-  m_hooks.ask = [this](const Question& question) { return askFromWorker(question); };
+  m_hooks.approve = [this](const ApprovalRequest& request) { return m_prompts.approve(request); };
+  m_hooks.ask = [this](const Question& question) { return m_prompts.ask(question); };
+  connect(&m_prompts, &Prompts::questionAsked, this, [this]() {
+    // Whatever was typed meanwhile (to queue) stays for after; the answer starts empty.
+    m_stashed = m_editor.value();
+    m_editor.setValue({});
+    m_questionSelected = 0;
+  });
+  connect(&m_prompts, &Prompts::changed, this, &App::requestRender);
+  connect(&m_turns, &TurnRunner::changed, this, &App::requestRender);
 
   m_pAgent = m_options.createAgent(m_hooks, std::nullopt);
   m_pConnection = std::make_unique<ConnectionCommands>(*this);
@@ -104,7 +112,7 @@ void App::run() {
 
 void App::refreshModels() {
   const ServerPtr target = m_pServer;
-  auto* thread = QThread::create([this, target]() {
+  m_turns.launch([this, target]() {
     try {
       const QList<ModelInfo> models = target->listModels();
       QStringList ids;
@@ -116,12 +124,6 @@ void App::refreshModels() {
       // Completion just won't offer models.
     }
   });
-  m_workers << thread;
-  connect(thread, &QThread::finished, this, [this, thread]() {
-    m_workers.removeAll(thread);
-    thread->deleteLater();
-  });
-  thread->start();
 }
 
 void App::print(const Entry& entry) {
@@ -141,8 +143,7 @@ void App::startOver(const Start& start, const QList<Entry>& entries) {
   m_renderer.reset();
   m_transcript.clear();
   m_live.reset();
-  m_tokens.reset();
-  m_limit.reset();
+  m_turns.forgetContext();
   printBanner(start);
   for (const Entry& entry : all) {
     print(entry);
@@ -153,7 +154,7 @@ void App::startOver(const Start& start, const QList<Entry>& entries) {
 
 void App::refreshTasks() {
   const QString cwd = m_project.cwd;
-  auto* thread = QThread::create([this, cwd]() {
+  m_turns.launch([this, cwd]() {
     QStringList tasks;
     try {
       for (const Worktree& worktree : listWorktrees(cwd)) {
@@ -166,12 +167,6 @@ void App::refreshTasks() {
     }
     QMetaObject::invokeMethod(this, [this, tasks]() { m_suggestions.tasks = tasks; }, Qt::QueuedConnection);
   });
-  m_workers << thread;
-  connect(thread, &QThread::finished, this, [this, thread]() {
-    m_workers.removeAll(thread);
-    thread->deleteLater();
-  });
-  thread->start();
 }
 
 void App::promptText(const QString& title, const QString& initial, std::function<void(const QString&)> onSubmit) {
@@ -187,36 +182,7 @@ void App::openPicker(std::unique_ptr<Tui::Picker> picker, std::function<void(con
 }
 
 void App::withActivity(const QString& activity, std::function<std::function<void()>()> work) {
-  m_busy = true;
-  m_activity = activity;
-  requestRender();
-  auto next = std::make_shared<std::function<void()>>();
-  auto error = std::make_shared<QString>();
-  const QString baseUrl = m_pServer->baseUrl();
-  auto* thread = QThread::create([work, next, error, baseUrl]() {
-    try {
-      *next = work();
-    } catch (const std::exception& failure) {
-      *error = describeError(failure, baseUrl);
-    }
-  });
-  m_workers << thread;
-  connect(thread, &QThread::finished, this, [this, thread, next, error]() {
-    m_workers.removeAll(thread);
-    thread->deleteLater();
-    if (m_closed) {
-      return;
-    }
-    m_activity.clear();
-    m_busy = false;
-    if (!error->isEmpty()) {
-      print(Entry::notice(NoticeLevel::Error, *error));
-    } else if (*next) {
-      (*next)();
-    }
-    requestRender();
-  });
-  thread->start();
+  m_turns.runTask(activity, m_pServer->baseUrl(), std::move(work), [this](const QString& error) { print(Entry::notice(NoticeLevel::Error, error)); });
 }
 
 void App::printBanner(const Start& start) {
@@ -303,16 +269,8 @@ void App::exitApp() {
     return;
   }
   m_closed = true;
-  m_closing = true;
-  if (m_pCancel) {
-    m_pCancel->cancel();
-  }
-  if (m_approval) {
-    m_approval->answer->resolve(ApprovalDecision::Deny);
-  }
-  if (m_question) {
-    m_question->answer->resolve(Answer{});
-  }
+  m_turns.interrupt();
+  m_prompts.close();
   m_ticker.stop();
   m_renderTimer.stop();
   m_resizeTimer.stop();
@@ -324,10 +282,7 @@ void App::exitApp() {
   m_renderer.finish();
   restoreTerminal();
   m_terminal.setReading(false);
-  // The agent's threads stop at their next check of the cancel token.
-  for (QThread* thread : m_workers) {
-    thread->wait();
-  }
+  m_turns.close();
   Q_EMIT finished();
 }
 
@@ -336,7 +291,7 @@ bool App::matrix() const {
 }
 
 bool App::streaming() const {
-  return matrix() && m_options.codeStream && Tui::colorsEnabled() && !m_busy;
+  return matrix() && m_options.codeStream && Tui::colorsEnabled() && !m_turns.busy();
 }
 
 int App::width() const {
@@ -344,11 +299,11 @@ int App::width() const {
 }
 
 bool App::prompting() const {
-  return m_approval.has_value() || m_question.has_value();
+  return m_prompts.waiting();
 }
 
 bool App::agentRunning() const {
-  return m_busy && m_pCancel != nullptr;
+  return m_turns.agentRunning();
 }
 
 // ---- turns and commands ----
@@ -376,73 +331,43 @@ void App::submit(const QString& value) {
     return;
   }
   print(Entry::simple(Entry::Kind::User, text));
-  m_turn = TurnInfo{};
-  m_turn->started.start();
   const std::shared_ptr<Agent> current = m_pAgent;
-  runBusy("Thinking…", [current, text](const CancelPtr& cancel) { current->send(text, cancel); },
-          [this]() {
-            const std::optional<TurnInfo> turn = m_turn;
-            m_turn.reset();
-            if (turn && !m_closed) {
-              print(Entry::simple(Entry::Kind::Meta, turnSummary(turn->reason, turn->started.elapsed(), turn->toolCalls)));
-              if (turn->reason == "interrupted" && matrix()) {
-                print(Entry::simple(Entry::Kind::Quote, INTERRUPTED));
-              }
-            }
-          });
+  runBusy(
+      "Thinking…", [current, text](const CancelPtr& cancel) { current->send(text, cancel); },
+      [this]() {
+        const TurnStats& turn = m_turns.lastTurn();
+        print(Entry::simple(Entry::Kind::Meta, turnSummary(turn.reason, turn.elapsedMs, turn.toolCalls)));
+        if (turn.reason == "interrupted" && matrix()) {
+          print(Entry::simple(Entry::Kind::Quote, INTERRUPTED));
+        }
+      },
+      true);
 }
 
-void App::runBusy(const QString& activity, std::function<void(const CancelPtr&)> work, std::function<void()> then) {
-  const CancelPtr cancel = makeCancel();
-  m_pCancel = cancel;
-  m_busy = true;
-  m_activity = activity;
-  requestRender();
-  auto error = std::make_shared<QString>();
-  const QString baseUrl = m_pServer->baseUrl();
-  auto* thread = QThread::create([work, cancel, error, baseUrl]() {
-    try {
-      work(cancel);
-    } catch (const std::exception& failure) {
-      *error = describeError(failure, baseUrl);
-    } catch (...) {
-      *error = "Unexpected error.";
-    }
-  });
-  m_workers << thread;
-  connect(thread, &QThread::finished, this, [this, thread, error, then]() {
-    m_workers.removeAll(thread);
-    thread->deleteLater();
-    if (m_closed) {
-      return;
-    }
-    flushLive();
-    if (!error->isEmpty()) {
-      print(Entry::notice(NoticeLevel::Error, *error));
-    }
-    m_pCancel.reset();
-    m_activity.clear();
-    m_running.clear();
-    m_runningOrder.clear();
-    setCompacting(false);
-    m_busy = false;
-    // Messages the agent never got (interrupted, error, step limit) go back into the input.
-    const QStringList undelivered = m_pAgent->takeQueued();
-    if (!undelivered.isEmpty()) {
-      QStringList all = undelivered;
-      const QString typing = m_editor.value().trimmed();
-      if (!typing.isEmpty()) {
-        all << typing;
-      }
-      m_editor.setValue(all.join("\n\n"));
-      print(Entry::notice(NoticeLevel::Warn, "Your queued message wasn't delivered, so it's back in the input box."));
-    }
-    if (then) {
-      then();
-    }
-    requestRender();
-  });
-  thread->start();
+void App::runBusy(const QString& activity, std::function<void(const CancelPtr&)> work, std::function<void()> then, bool timed) {
+  m_turns.runTurn(
+      activity, m_pServer->baseUrl(), std::move(work),
+      [this, then](const QString& error) {
+        flushLive();
+        if (!error.isEmpty()) {
+          print(Entry::notice(NoticeLevel::Error, error));
+        }
+        // Messages the agent never got (interrupted, error, step limit) go back into the input.
+        const QStringList undelivered = m_pAgent->takeQueued();
+        if (!undelivered.isEmpty()) {
+          QStringList all = undelivered;
+          const QString typing = m_editor.value().trimmed();
+          if (!typing.isEmpty()) {
+            all << typing;
+          }
+          m_editor.setValue(all.join("\n\n"));
+          print(Entry::notice(NoticeLevel::Warn, "Your queued message wasn't delivered, so it's back in the input box."));
+        }
+        if (then) {
+          then();
+        }
+      },
+      timed);
 }
 
 void App::playRain(const Tui::Rain::Options& options, std::function<void()> then) {

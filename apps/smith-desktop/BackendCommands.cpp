@@ -115,7 +115,7 @@ void Backend::runCommand(const QString& text) {
 }
 
 void Backend::setReasoning(const QString& level) {
-  if (!m_pAgent || m_busy) {
+  if (!m_pAgent || m_turns.busy()) {
     return;
   }
   if (!isReasoningLevel(level)) {
@@ -132,7 +132,7 @@ void Backend::setReasoning(const QString& level) {
 }
 
 void Backend::setModel(const QString& id) {
-  if (!m_pAgent || m_busy || id.isEmpty() || id == m_pAgent->model()) {
+  if (!m_pAgent || m_turns.busy() || id.isEmpty() || id == m_pAgent->model()) {
     return;
   }
   switchModel(id);
@@ -151,7 +151,7 @@ void Backend::switchModel(const QString& id) {
 }
 
 void Backend::setEndpoint(const QString& name) {
-  if (!m_pRuntime || m_busy || name == endpoint()) {
+  if (!m_pRuntime || m_turns.busy() || name == endpoint()) {
     return;
   }
   switchEndpoint(name);
@@ -225,7 +225,7 @@ void Backend::setNetwork(bool on) {
 }
 
 void Backend::undo() {
-  if (!m_pAgent || m_busy) {
+  if (!m_pAgent || m_turns.busy()) {
     return;
   }
   const std::optional<UndoResult> result = m_pAgent->undo();
@@ -233,34 +233,16 @@ void Backend::undo() {
     notice(NoticeLevel::Info, "Nothing to undo.");
     return;
   }
-  const QString cwd = m_project.cwd;
-  auto rel = [&](const QStringList& files) {
-    QStringList out;
-    for (const QString& file : files) {
-      out << (file.startsWith(cwd + "/") ? file.mid(cwd.size() + 1) : file);
-    }
-    return out.join(", ");
-  };
-  QStringList lines{"Undid the last turn and removed it from the conversation."};
-  if (!result->restored.isEmpty()) {
-    lines << "Restored: " + rel(result->restored);
-  }
-  if (!result->skipped.isEmpty()) {
-    lines << "Left alone because they changed afterwards: " + rel(result->skipped);
-  }
-  if (!result->untracked.isEmpty()) {
-    lines << QString("Not undone: anything changed by %1 commands.").arg(result->untracked.join(", "));
-  }
-  notice(result->skipped.isEmpty() && result->untracked.isEmpty() ? NoticeLevel::Info : NoticeLevel::Warn, lines.join('\n'));
+  m_transcript.append(undoNotice(*result, m_project.cwd));
   Q_EMIT restoreInput(result->prompt);
   Q_EMIT changed();
 }
 
 void Backend::compact() {
-  if (!m_pAgent || m_busy) {
+  if (!m_pAgent || m_turns.busy()) {
     return;
   }
-  setCompacting(true);
+  m_turns.setCompacting(true);
   const std::shared_ptr<Agent> agent = m_pAgent;
   runTurn("Compacting…", [agent](const CancelPtr& cancel) { agent->compactNow(cancel); });
 }

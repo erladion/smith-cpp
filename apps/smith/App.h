@@ -7,16 +7,15 @@
 #include "tui/Renderer.h"
 #include "tui/Terminal.h"
 #include "Entries.h"
+#include "frontend/Prompts.h"
+#include "frontend/Turns.h"
 #include "Suggestions.h"
 #include "Types.h"
 
 #include <QElapsedTimer>
 #include <QMap>
 #include <QObject>
-#include <QThread>
 #include <QTimer>
-
-#include <atomic>
 
 #include <functional>
 #include <memory>
@@ -89,17 +88,6 @@ private:
     QString text;
   };
 
-  struct PendingApproval {
-    ApprovalRequest request;
-    std::shared_ptr<Pending<ApprovalDecision>> answer;
-  };
-
-  struct PendingQuestion {
-    Question question;
-    int selected = 0;
-    std::shared_ptr<Pending<Answer>> answer;
-  };
-
   struct OpenPicker {
     std::unique_ptr<Tui::Picker> picker;
     std::function<void(const QString&)> onPick;
@@ -111,12 +99,6 @@ private:
     std::function<void(const QString&)> onSubmit;
     // What was in the input box, put back afterwards.
     QString stashed;
-  };
-
-  struct TurnInfo {
-    QElapsedTimer started;
-    int toolCalls = 0;
-    QString reason;
   };
 
   void printBanner(const Start& start);
@@ -138,11 +120,8 @@ private:
   void onEvent(const AgentEvent& event);
   void appendDelta(BlockKind kind, const QString& text);
   void flushLive();
-  void setCompacting(bool on);
 
-  ApprovalDecision approveFromWorker(const ApprovalRequest& request);
-  Answer askFromWorker(const Question& question);
-  void decide(ApprovalDecision decision);
+  // Answers the question on screen and puts back what was in the input box.
   void answer(const Answer& answer);
   void onQuestionKey(const Tui::Key& key);
 
@@ -151,7 +130,8 @@ private:
   void queueMessage(const QString& value);
   void submit(const QString& value);
   void runCommand(const QString& text);
-  void runBusy(const QString& activity, std::function<void(const CancelPtr&)> work, std::function<void()> then = {});
+  // Runs an agent turn; `then` follows on the UI thread. A timed turn is one the user sent.
+  void runBusy(const QString& activity, std::function<void(const CancelPtr&)> work, std::function<void()> then = {}, bool timed = false);
 
   // Full-screen digital rain until it ends or a key is pressed; then `then`.
   void playRain(const Tui::Rain::Options& options, std::function<void()> then);
@@ -176,21 +156,15 @@ private:
   std::unique_ptr<SessionCommands> m_pSessions;
   std::unique_ptr<WorktreeCommands> m_pWorktrees;
 
+  // Approvals and questions from the agent, and the turn or task under way.
+  Prompts m_prompts;
+  TurnRunner m_turns;
+  // The option highlighted in the question on screen.
+  int m_questionSelected = 0;
+
   std::optional<Live> m_live;
-  QString m_activity;
-  std::optional<PendingApproval> m_approval;
   std::optional<OpenPicker> m_picker;
-  std::optional<PendingQuestion> m_question;
   std::optional<TextPrompt> m_textPrompt;
-  bool m_busy = false;
-  CancelPtr m_pCancel;
-  std::optional<qint64> m_tokens;
-  std::optional<int> m_limit;
-  std::optional<TurnInfo> m_turn;
-  // Tools running right now (several when read-only tools run in parallel), by call id.
-  QMap<QString, QString> m_running;
-  QStringList m_runningOrder;
-  bool m_compacting = false;
   std::unique_ptr<Tui::Rain> m_pStrip;
   // A full-screen animation has the terminal: no drawing, keys end it.
   std::unique_ptr<Tui::Rain> m_pFullRain;
@@ -207,9 +181,6 @@ private:
   QTimer m_ticker;
   QTimer m_renderTimer;
   bool m_closed = false;
-  // m_closed for the agent's threads: once set, nobody will answer their questions.
-  std::atomic<bool> m_closing{false};
-  QList<QThread*> m_workers;
 };
 
 } // namespace Smith::Ui

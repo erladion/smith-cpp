@@ -9,78 +9,29 @@ using Tui::KeyName;
 
 // ---- approvals and questions ----
 
-ApprovalDecision App::approveFromWorker(const ApprovalRequest& request) {
-  auto pending = std::make_shared<Pending<ApprovalDecision>>();
-  QMetaObject::invokeMethod(
-      this,
-      [this, request, pending]() {
-        if (m_closed) {
-          pending->resolve(ApprovalDecision::Deny);
-          return;
-        }
-        m_approval = PendingApproval{request, pending};
-        requestRender();
-      },
-      Qt::QueuedConnection);
-  // Once the app has closed, nobody will answer.
-  return pending->wait([this]() { return m_closing.load(); }, ApprovalDecision::Deny);
-}
-
-Answer App::askFromWorker(const Question& question) {
-  auto pending = std::make_shared<Pending<Answer>>();
-  QMetaObject::invokeMethod(
-      this,
-      [this, question, pending]() {
-        if (m_closed) {
-          pending->resolve(Answer{});
-          return;
-        }
-        // Whatever was typed meanwhile (to queue) stays for after; the answer starts empty.
-        m_stashed = m_editor.value();
-        m_editor.setValue({});
-        m_question = PendingQuestion{question, 0, pending};
-        requestRender();
-      },
-      Qt::QueuedConnection);
-  return pending->wait([this]() { return m_closing.load(); }, Answer{});
-}
-
-void App::decide(ApprovalDecision decision) {
-  if (!m_approval) {
-    return;
-  }
-  const auto pending = m_approval->answer;
-  m_approval.reset();
-  pending->resolve(decision);
-}
-
 void App::answer(const Answer& value) {
-  if (!m_question) {
+  if (!m_prompts.question()) {
     return;
   }
-  const auto pending = m_question->answer;
-  m_question.reset();
   m_editor.setValue(m_stashed);
   m_stashed.clear();
-  pending->resolve(value);
+  m_prompts.answer(value);
 }
 
 void App::onQuestionKey(const Key& key) {
-  PendingQuestion& q = *m_question;
+  const Question& question = *m_prompts.question();
   const bool typing = !m_editor.value().isEmpty();
-  const int n = q.question.options.size();
+  const int n = question.options.size();
   static const QRegularExpression digit("^[1-9]$");
   if (key.name == KeyName::Escape) {
     answer(Answer{});
-    if (m_pCancel) {
-      m_pCancel->cancel();
-    }
+    m_turns.interrupt();
   } else if (!typing && n > 0 && (key.name == KeyName::Up || key.name == KeyName::Down)) {
-    q.selected = (q.selected + (key.name == KeyName::Up ? n - 1 : 1)) % n;
+    m_questionSelected = (m_questionSelected + (key.name == KeyName::Up ? n - 1 : 1)) % n;
   } else if (!typing && key.name == KeyName::Text && digit.match(key.text).hasMatch() && key.text.toInt() <= n) {
     answer(Answer{Answer::Kind::Option, key.text.toInt() - 1, {}});
   } else if (!typing && key.name == KeyName::Return && n > 0) {
-    answer(Answer{Answer::Kind::Option, q.selected, {}});
+    answer(Answer{Answer::Kind::Option, m_questionSelected, {}});
   } else if (m_editor.handle(key)) {
     const QString text = m_editor.commit().trimmed();
     if (!text.isEmpty()) {
@@ -92,7 +43,7 @@ void App::onQuestionKey(const Key& key) {
 // ---- keys ----
 
 QList<Suggestion> App::currentSuggestions() const {
-  if (m_busy || prompting() || m_picker || m_textPrompt) {
+  if (m_turns.busy() || prompting() || m_picker || m_textPrompt) {
     return {};
   }
   QStringList endpoints;
@@ -108,24 +59,22 @@ void App::onKey(const Key& key) {
     return;
   }
 
-  if (m_approval) {
+  if (const ApprovalRequest* approval = m_prompts.approval()) {
     const QString letter = key.name == KeyName::Text ? key.text.toLower() : QString();
     if (letter == "y") {
-      decide(ApprovalDecision::Allow);
-    } else if (letter == "a" && m_approval->request.canAllowAlways) {
-      decide(ApprovalDecision::AllowAlways);
+      m_prompts.decide(ApprovalDecision::Allow);
+    } else if (letter == "a" && approval->canAllowAlways) {
+      m_prompts.decide(ApprovalDecision::AllowAlways);
     } else if (letter == "n") {
-      decide(ApprovalDecision::Deny);
+      m_prompts.decide(ApprovalDecision::Deny);
     } else if (key.name == KeyName::Escape) {
-      decide(ApprovalDecision::Deny);
-      if (m_pCancel) {
-        m_pCancel->cancel();
-      }
+      m_prompts.decide(ApprovalDecision::Deny);
+      m_turns.interrupt();
     }
     return;
   }
 
-  if (m_question) {
+  if (m_prompts.question()) {
     onQuestionKey(key);
     return;
   }
@@ -167,11 +116,9 @@ void App::onKey(const Key& key) {
     return;
   }
 
-  if (m_busy) {
+  if (m_turns.busy()) {
     if (key.name == KeyName::Escape) {
-      if (m_pCancel) {
-        m_pCancel->cancel();
-      }
+      m_turns.interrupt();
     } else if (agentRunning() && m_editor.handle(key)) {
       queueMessage(m_editor.commit());
     }

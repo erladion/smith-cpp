@@ -250,8 +250,8 @@ void Agent::reportRunLater(const QMap<QString, QString>& before) {
   if (lines.isEmpty()) {
     return;
   }
-  emitEvent(AgentEvent::notice(NoticeLevel::Warn, "This turn changed files that run outside the sandbox later:\n" + lines.join('\n') +
-                                                      "\nLook at the changes (git diff) before you do any of that."));
+  emitEvent(Event::Notice{NoticeLevel::Warn, "This turn changed files that run outside the sandbox later:\n" + lines.join('\n') +
+                                                      "\nLook at the changes (git diff) before you do any of that."});
 }
 
 void Agent::compactNow(const CancelPtr& cancel) {
@@ -265,8 +265,8 @@ void Agent::interruptible(const CancelPtr& cancel, const std::function<void()>& 
     if (!cancelled(cancel)) {
       throw;
     }
-    emitEvent(AgentEvent::simple(AgentEvent::Type::ResponseEnd));
-    emitEvent(AgentEvent::done(DoneReason::Interrupted));
+    emitEvent(Event::ResponseEnd{});
+    emitEvent(Event::Done{DoneReason::Interrupted});
   }
 }
 
@@ -296,15 +296,15 @@ void Agent::loop(const CancelPtr& cancel) {
         QMutexLocker lock(&m_mutex);
         m_contextSize = overflow->contextSize;
       }
-      emitEvent(AgentEvent::simple(AgentEvent::Type::ResponseEnd));
-      emitEvent(AgentEvent::notice(NoticeLevel::Warn, "The conversation no longer fits the server's context window."));
+      emitEvent(Event::ResponseEnd{});
+      emitEvent(Event::Notice{NoticeLevel::Warn, "The conversation no longer fits the server's context window."});
       if (!compact(cancel, "overflow")) {
         throw;
       }
       continue;
     }
     retriedOverflow = false;
-    emitEvent(AgentEvent::simple(AgentEvent::Type::ResponseEnd));
+    emitEvent(Event::ResponseEnd{});
     append(assistantMessage(response));
     if (response.totalTokens) {
       QMutexLocker lock(&m_mutex);
@@ -322,17 +322,17 @@ void Agent::loop(const CancelPtr& cancel) {
       const TodoList left = unfinished(current);
       if (!left.isEmpty() && !reminded && response.finishReason != "length") {
         reminded = true;
-        emitEvent(AgentEvent::notice(NoticeLevel::Info, QString("Reminded the agent of %1.").arg(plural(left.size(), "unfinished todo"))));
+        emitEvent(Event::Notice{NoticeLevel::Info, QString("Reminded the agent of %1.").arg(plural(left.size(), "unfinished todo"))});
         append(userMessage(TODO_REMINDER + "\n" + formatTodos(current) +
                            "\n\nContinue with them. If they're done or no longer needed, update the list with todo_write. If you need something "
                            "from the user, ask them."));
         continue;
       }
       if (response.finishReason == "length") {
-        emitEvent(AgentEvent::notice(NoticeLevel::Warn, "The response hit the server's token limit and was cut off."));
-        emitEvent(AgentEvent::done(DoneReason::Length));
+        emitEvent(Event::Notice{NoticeLevel::Warn, "The response hit the server's token limit and was cut off."});
+        emitEvent(Event::Done{DoneReason::Length});
       } else {
-        emitEvent(AgentEvent::done(DoneReason::Stop));
+        emitEvent(Event::Done{DoneReason::Stop});
       }
       return;
     }
@@ -345,15 +345,15 @@ void Agent::loop(const CancelPtr& cancel) {
       append(toolMessage(response.toolCalls[i].id, result.isError ? "Error: " + result.content : result.content));
     }
     if (cancelled(cancel)) {
-      emitEvent(AgentEvent::done(DoneReason::Interrupted));
+      emitEvent(Event::Done{DoneReason::Interrupted});
       return;
     }
   }
 
-  emitEvent(AgentEvent::notice(NoticeLevel::Warn, QString("Stopped after %1 model calls without a final answer. Send a message (e.g. \"continue\") to "
+  emitEvent(Event::Notice{NoticeLevel::Warn, QString("Stopped after %1 model calls without a final answer. Send a message (e.g. \"continue\") to "
                                                           "let it go on, or raise maxSteps in the config file.")
-                                                      .arg(maxSteps)));
-  emitEvent(AgentEvent::done(DoneReason::MaxSteps));
+                                                      .arg(maxSteps)});
+  emitEvent(Event::Done{DoneReason::MaxSteps});
 }
 
 void Agent::deliverQueued() {
@@ -362,10 +362,7 @@ void Agent::deliverQueued() {
     return;
   }
   for (const QString& text : texts) {
-    AgentEvent event;
-    event.type = AgentEvent::Type::UserMessage;
-    event.text = text;
-    emitEvent(event);
+    emitEvent(Event::UserMessage{text});
   }
   append(userMessage(texts.join("\n\n")));
 }
@@ -456,14 +453,14 @@ ToolResult Agent::runSubagent(const TaskInput& input, const CancelPtr& cancel) {
     }
   };
   child.onEvent = [this, description, &reason](const AgentEvent& event) {
-    if (event.type == AgentEvent::Type::ToolStart) {
-      emitEvent(AgentEvent::activity(QString("%1 › %2 %3").arg(description, event.name, event.summary)));
-    } else if (event.type == AgentEvent::Type::Done) {
-      reason = event.reason;
+    if (const auto* start = std::get_if<Event::ToolStart>(&event)) {
+      emitEvent(Event::Activity{QString("%1 › %2 %3").arg(description, start->name, start->summary)});
+    } else if (const auto* done = std::get_if<Event::Done>(&event)) {
+      reason = done->reason;
     }
   };
   Agent agent(child);
-  emitEvent(AgentEvent::activity(description + " › thinking…"));
+  emitEvent(Event::Activity{description + " › thinking…"});
   try {
     agent.send(input.prompt, cancel);
   } catch (const std::exception& error) {
@@ -498,11 +495,7 @@ qint64 Agent::estimateContext() const {
 }
 
 void Agent::emitContext() const {
-  AgentEvent event;
-  event.type = AgentEvent::Type::Context;
-  event.tokens = estimateContext();
-  event.limit = contextLimit();
-  emitEvent(event);
+  emitEvent(Event::Context{estimateContext(), contextLimit()});
 }
 
 void Agent::maybeCompact(const CancelPtr& cancel) {
@@ -522,8 +515,8 @@ bool Agent::compact(const CancelPtr& cancel, const QString& reason) {
   const TrimResult trimmed = trimOldToolResults(history.mid(1));
   if (reason == "auto" && trimmed.count > 0 && fixedCost + estimateTokens(trimmed.messages) < limit * TRIM_TARGET) {
     replaceHistory(trimmed.messages);
-    emitEvent(AgentEvent::notice(NoticeLevel::Info, QString("Cleared %1 old tool outputs to free context (~%2 → ~%3 tokens).")
-                                                        .arg(QString::number(trimmed.count), formatNumber(before), formatNumber(estimateContext()))));
+    emitEvent(Event::Notice{NoticeLevel::Info, QString("Cleared %1 old tool outputs to free context (~%2 → ~%3 tokens).")
+                                                        .arg(QString::number(trimmed.count), formatNumber(before), formatNumber(estimateContext()))});
     emitContext();
     return true;
   }
@@ -534,7 +527,7 @@ bool Agent::compact(const CancelPtr& cancel, const QString& reason) {
   const Messages tail = messages.mid(tailStart);
   if (head.isEmpty()) {
     if (trimmed.count == 0) {
-      emitEvent(AgentEvent::notice(NoticeLevel::Warn, "Nothing to compact: the conversation is only the latest messages."));
+      emitEvent(Event::Notice{NoticeLevel::Warn, "Nothing to compact: the conversation is only the latest messages."});
       return false;
     }
     replaceHistory(messages);
@@ -542,7 +535,7 @@ bool Agent::compact(const CancelPtr& cancel, const QString& reason) {
     return true;
   }
 
-  emitEvent(AgentEvent::activity("Summarizing the conversation to free context…", true));
+  emitEvent(Event::Activity{"Summarizing the conversation to free context…", true});
   const int maxChars = int(std::max<double>(8000, std::floor((limit - fixedCost - 4096) * CHARS_PER_TOKEN * 0.8)));
   const QString summary = summarize(head, maxChars, cancel);
   // The checklist lives in the tool calls being summarized away; carry it over.
@@ -568,8 +561,8 @@ bool Agent::compact(const CancelPtr& cancel, const QString& reason) {
     m_turns.clear();
   }
   const QString undoNote = hadUndo ? QString(" Earlier turns can no longer be undone.") : QString();
-  emitEvent(AgentEvent::notice(NoticeLevel::Info, QString("Summarized %1 earlier messages (~%2 → ~%3 tokens).%4")
-                                                      .arg(QString::number(head.size()), formatNumber(before), formatNumber(estimateContext()), undoNote)));
+  emitEvent(Event::Notice{NoticeLevel::Info, QString("Summarized %1 earlier messages (~%2 → ~%3 tokens).%4")
+                                                      .arg(QString::number(head.size()), formatNumber(before), formatNumber(estimateContext()), undoNote)});
   emitContext();
   return true;
 }
@@ -663,11 +656,7 @@ Agent::StreamedResponse Agent::streamResponse(const CancelPtr& cancel) {
     } else {
       result.reasoning += text;
     }
-    AgentEvent event;
-    event.type = AgentEvent::Type::Delta;
-    event.kind = kind;
-    event.text = text;
-    emitEvent(event);
+    emitEvent(Event::Delta{kind, text});
   };
 
   const ServerPtr target = server();
@@ -714,10 +703,7 @@ Agent::StreamedResponse Agent::streamResponse(const CancelPtr& cancel) {
       const QString name = function.value("name").toString();
       if (!name.isEmpty()) {
         if (slot.name.isEmpty()) {
-          AgentEvent event;
-          event.type = AgentEvent::Type::ToolPrepare;
-          event.name = name;
-          emitEvent(event);
+          emitEvent(Event::ToolPrepare{name});
         }
         slot.name += name;
       }
@@ -738,9 +724,9 @@ Agent::StreamedResponse Agent::streamResponse(const CancelPtr& cancel) {
     output(segment.kind, segment.text);
   }
   if (skipped > 0) {
-    emitEvent(AgentEvent::notice(NoticeLevel::Warn, QString("The server sent %1 that couldn't be read as JSON; %2 skipped, so this response may be "
+    emitEvent(Event::Notice{NoticeLevel::Warn, QString("The server sent %1 that couldn't be read as JSON; %2 skipped, so this response may be "
                                                             "incomplete.")
-                                                        .arg(plural(skipped, "chunk"), skipped == 1 ? "it was" : "they were")));
+                                                        .arg(plural(skipped, "chunk"), skipped == 1 ? "it was" : "they were")});
   }
 
   // Some local servers omit tool-call ids; the protocol needs them to pair results.
@@ -800,14 +786,7 @@ ToolResult Agent::runTool(const ToolCall& call, const CancelPtr& cancel) {
     }
   };
   auto fail = [&](const QString& content, const QString& summary, const QString& status) {
-    AgentEvent event;
-    event.type = AgentEvent::Type::ToolEnd;
-    event.id = call.id;
-    event.name = call.name;
-    event.summary = summary;
-    event.output = content;
-    event.isError = true;
-    emitEvent(event);
+    emitEvent(Event::ToolEnd{call.id, call.name, summary, content, true, std::nullopt});
     log(status, content, 0);
     return ToolResult::error(content);
   };
@@ -887,12 +866,7 @@ ToolResult Agent::runTool(const ToolCall& call, const CancelPtr& cancel) {
     }
   }
 
-  AgentEvent start;
-  start.type = AgentEvent::Type::ToolStart;
-  start.id = call.id;
-  start.name = tool->name;
-  start.summary = summary;
-  emitEvent(start);
+  emitEvent(Event::ToolStart{call.id, tool->name, summary});
 
   QElapsedTimer clock;
   clock.start();
@@ -904,15 +878,7 @@ ToolResult Agent::runTool(const ToolCall& call, const CancelPtr& cancel) {
   }
   log(result.isError ? "error" : "ok", result.content, clock.elapsed());
 
-  AgentEvent end;
-  end.type = AgentEvent::Type::ToolEnd;
-  end.id = call.id;
-  end.name = tool->name;
-  end.summary = summary;
-  end.output = result.content;
-  end.isError = result.isError;
-  end.diff = result.diff;
-  emitEvent(end);
+  emitEvent(Event::ToolEnd{call.id, tool->name, summary, result.content, result.isError, result.diff});
   return result;
 }
 
@@ -958,10 +924,7 @@ void Agent::setTodos(const TodoList& todos) {
     m_todos = todos;
   }
   if (changed) {
-    AgentEvent event;
-    event.type = AgentEvent::Type::Todos;
-    event.todos = todos;
-    emitEvent(event);
+    emitEvent(Event::Todos{todos});
   }
 }
 
