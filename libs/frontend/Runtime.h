@@ -49,8 +49,9 @@ QString resolveFolder(const QString& folder, const QString& base);
 class Runtime : public std::enable_shared_from_this<Runtime> {
 public:
   // Picks the server, model and sandbox, and opens or starts the session.
-  // Blocks (it asks the server for its models); throws SmithError.
-  static std::shared_ptr<Runtime> start(const LaunchOptions& options);
+  // Blocks (it asks the server for its models) until done or `cancel` is set;
+  // throws SmithError, or AbortError once cancelled.
+  static std::shared_ptr<Runtime> start(const LaunchOptions& options, const CancelPtr& cancel = {});
   ~Runtime();
 
   const Config& config() const { return m_config; }

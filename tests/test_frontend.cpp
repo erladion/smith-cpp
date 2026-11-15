@@ -3,10 +3,13 @@
 // agent events. New in the port.
 #include "TestUtil.h"
 #include "core/Errors.h"
+#include "core/Server.h"
 #include "frontend/Prompts.h"
 #include "frontend/Turns.h"
 
 #include <QCoreApplication>
+#include <QElapsedTimer>
+#include <QTcpServer>
 #include <QThread>
 
 #include <atomic>
@@ -22,6 +25,7 @@ private Q_SLOTS:
   void questionWaitsForTheAnswer();
   void dismissAnswersNo();
   void closedPromptsRefuse();
+  void promptsRefuseWhileInterrupted();
   void eventsBecomeActivityAndEntries();
   void todosOnlyShowDuringATurn();
   void timedTurnReportsStats();
@@ -29,6 +33,7 @@ private Q_SLOTS:
   void interruptCancelsTheTurn();
   void taskRunsItsFollowUpOrReportsFailure();
   void closeWaitsAndDropsCallbacks();
+  void closeStopsRequestsGivenItsToken();
   void undoNoticeListsWhatHappened();
 };
 
@@ -132,6 +137,31 @@ void TestFrontend::closedPromptsRefuse() {
   Asker<Answer> question([&]() { return prompts.ask(Question{"Still there?", {}}); });
   question.thread->wait();
   QCOMPARE(question.result.kind, Answer::Kind::Dismissed);
+}
+
+void TestFrontend::promptsRefuseWhileInterrupted() {
+  Prompts prompts;
+  bool interrupted = true;
+  int changes = 0;
+  prompts.refuseWhen([&]() { return interrupted; });
+  connect(&prompts, &Prompts::changed, this, [&]() { changes++; });
+
+  // Asked by a turn that hasn't noticed the interrupt yet: refused, never shown.
+  Asker<ApprovalDecision> approval([&]() { return prompts.approve(request("read_file", "/etc/hostname")); });
+  QTRY_VERIFY(approval.done);
+  QCOMPARE(approval.result, ApprovalDecision::Deny);
+  Asker<Answer> question([&]() { return prompts.ask(Question{"Which one?", {}}); });
+  QTRY_VERIFY(question.done);
+  QCOMPARE(question.result.kind, Answer::Kind::Dismissed);
+  QVERIFY(!prompts.waiting());
+  QCOMPARE(changes, 0);
+
+  interrupted = false;
+  Asker<ApprovalDecision> next([&]() { return prompts.approve(request("bash", "ls")); });
+  QTRY_VERIFY(prompts.approval());
+  prompts.decide(ApprovalDecision::Allow);
+  QTRY_VERIFY(next.done);
+  QCOMPARE(next.result, ApprovalDecision::Allow);
 }
 
 void TestFrontend::eventsBecomeActivityAndEntries() {
@@ -264,9 +294,12 @@ void TestFrontend::interruptCancelsTheTurn() {
         sawCancel = cancelled(cancel);
       },
       [&](const QString&) { finished = true; });
+  QVERIFY(!turns.interrupted());
   turns.interrupt();
+  QVERIFY(turns.interrupted());
   QTRY_VERIFY(finished);
   QVERIFY(sawCancel);
+  QVERIFY(!turns.interrupted());
   // Nothing runs: interrupting is harmless.
   turns.interrupt();
 }
@@ -318,6 +351,30 @@ void TestFrontend::closeWaitsAndDropsCallbacks() {
   QCoreApplication::processEvents();
   QVERIFY2(!finished && !launched, "nothing is called back after close");
   turns->close();
+}
+
+void TestFrontend::closeStopsRequestsGivenItsToken() {
+  // Accepts connections and never answers, like a server that hangs.
+  QTcpServer silent;
+  QVERIFY(silent.listen(QHostAddress::LocalHost));
+  const auto server = std::make_shared<Server>(QString("http://127.0.0.1:%1/v1").arg(silent.serverPort()), "x");
+
+  TurnRunner turns;
+  std::atomic<bool> aborted{false};
+  turns.launch([&aborted, server, closing = turns.closing()]() {
+    try {
+      server->listModels(true, closing);
+    } catch (const AbortError&) {
+      aborted = true;
+    } catch (const std::exception&) {
+    }
+  });
+  QTest::qWait(100);
+  QElapsedTimer clock;
+  clock.start();
+  turns.close();
+  QVERIFY2(aborted, "the request was aborted, not left to time out");
+  QVERIFY2(clock.elapsed() < 5000, "close didn't wait for the server");
 }
 
 void TestFrontend::undoNoticeListsWhatHappened() {

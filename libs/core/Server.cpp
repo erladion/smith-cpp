@@ -31,7 +31,7 @@ QString Server::url(const QString& path) const {
   return base + path;
 }
 
-QList<ModelInfo> Server::listModels(bool refresh) {
+QList<ModelInfo> Server::listModels(bool refresh, const CancelPtr& cancel) {
   {
     QMutexLocker lock(&m_mutex);
     if (!refresh && m_models) {
@@ -39,7 +39,7 @@ QList<ModelInfo> Server::listModels(bool refresh) {
     }
   }
   // Don't cache failures; the server may come up later.
-  const QJsonValue response = Http::getJson(url("/models"), m_apiKey, 60000);
+  const QJsonValue response = Http::getJson(url("/models"), m_apiKey, 60000, cancel);
   QList<ModelInfo> models;
   for (const QJsonValue& value : response.toObject().value("data").toArray()) {
     const QJsonObject model = value.toObject();
@@ -59,10 +59,12 @@ std::optional<QList<ModelInfo>> Server::cachedModels() const {
   return m_models;
 }
 
-QString Server::chooseModel(const QStringList& preferred) {
+QString Server::chooseModel(const QStringList& preferred, const CancelPtr& cancel) {
   QList<ModelInfo> models;
   try {
-    models = listModels();
+    models = listModels(false, cancel);
+  } catch (const AbortError&) {
+    throw;
   } catch (const ConnectionError& error) {
     if (!m_options.model.isEmpty()) {
       return m_options.model;
@@ -95,12 +97,12 @@ QString Server::chooseModel(const QStringList& preferred) {
   throw SmithError(QString("%1 lists no models. Pass --model.").arg(m_baseUrl));
 }
 
-std::optional<int> Server::contextSize(const QString& model) {
+std::optional<int> Server::contextSize(const QString& model, const CancelPtr& cancel) {
   if (m_options.contextSize) {
     return m_options.contextSize;
   }
   try {
-    for (const ModelInfo& info : listModels()) {
+    for (const ModelInfo& info : listModels(false, cancel)) {
       if (info.id == model && info.contextSize) {
         return info.contextSize;
       }
@@ -111,7 +113,7 @@ std::optional<int> Server::contextSize(const QString& model) {
   QString root = m_baseUrl;
   root.remove(QRegularExpression("/v1/?$"));
   try {
-    const QJsonValue props = Http::getJson(QString("%1/props?model=%2").arg(root, utf8(QUrl::toPercentEncoding(model))), m_apiKey, 3000);
+    const QJsonValue props = Http::getJson(QString("%1/props?model=%2").arg(root, utf8(QUrl::toPercentEncoding(model))), m_apiKey, 3000, cancel);
     const QJsonObject object = props.toObject();
     QJsonValue n = object.value("default_generation_settings").toObject().value("n_ctx");
     if (!n.isDouble()) {

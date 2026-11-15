@@ -19,8 +19,8 @@ ConnectionCommands::ConnectionCommands(App& app) : m_app(app) {}
 
 void ConnectionCommands::switchModel(const QString& id) {
   const ServerPtr server = m_app.server();
-  m_app.withActivity(QString("Checking %1…").arg(id), [this, server, id]() -> std::function<void()> {
-    const std::optional<int> contextSize = server->contextSize(id);
+  m_app.withActivity(QString("Checking %1…").arg(id), [this, server, id, closing = m_app.closing()]() -> std::function<void()> {
+    const std::optional<int> contextSize = server->contextSize(id, closing);
     return [this, server, id, contextSize]() {
       m_app.agent()->setModel(id, contextSize);
       m_app.opts().savePreferences(PreferenceUpdate{server, id, {}});
@@ -59,10 +59,10 @@ void ConnectionCommands::switchEndpoint(const QString& name, const QString& pref
   }
   const Endpoint chosen = *endpoint;
   const auto remembered = m_app.opts().rememberedModel;
-  m_app.withActivity(QString("Connecting to %1…").arg(name), [this, chosen, preferredModel, remembered]() -> std::function<void()> {
+  m_app.withActivity(QString("Connecting to %1…").arg(name), [this, chosen, preferredModel, remembered, closing = m_app.closing()]() -> std::function<void()> {
     const ServerPtr next = Server::fromEndpoint(chosen);
-    const QString model = next->chooseModel({preferredModel, remembered(next->baseUrl())});
-    const std::optional<int> contextSize = next->contextSize(model);
+    const QString model = next->chooseModel({preferredModel, remembered(next->baseUrl())}, closing);
+    const std::optional<int> contextSize = next->contextSize(model, closing);
     return [this, next, model, contextSize]() {
       m_app.agent()->setModel(model, contextSize, next);
       m_app.setServer(next);
@@ -94,8 +94,8 @@ void ConnectionCommands::openEndpointPicker() {
 
 void ConnectionCommands::openModelPicker() {
   const ServerPtr server = m_app.server();
-  m_app.withActivity("Loading models…", [this, server]() -> std::function<void()> {
-    const QList<ModelInfo> models = server->listModels(true);
+  m_app.withActivity("Loading models…", [this, server, closing = m_app.closing()]() -> std::function<void()> {
+    const QList<ModelInfo> models = server->listModels(true, closing);
     return [this, models]() {
       if (models.isEmpty()) {
         m_app.print(Entry::notice(NoticeLevel::Warn, "The server lists no models. Use /model <name> to set one directly."));

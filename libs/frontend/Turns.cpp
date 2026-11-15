@@ -199,7 +199,8 @@ void TurnRunner::close() {
   }
   m_closed = true;
   interrupt();
-  // The agent's threads stop at their next check of the cancel token.
+  m_pClosing->cancel();
+  // The threads stop at their next check of their cancel token.
   for (QThread* thread : m_workers) {
     thread->wait();
   }

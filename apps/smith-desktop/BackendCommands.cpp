@@ -140,8 +140,8 @@ void Backend::setModel(const QString& id) {
 
 void Backend::switchModel(const QString& id) {
   const ServerPtr server = m_pServer;
-  background(QString("Checking %1…").arg(id), [this, server, id]() -> std::function<void()> {
-    const std::optional<int> contextSize = server->contextSize(id);
+  background(QString("Checking %1…").arg(id), [this, server, id, closing = m_turns.closing()]() -> std::function<void()> {
+    const std::optional<int> contextSize = server->contextSize(id, closing);
     return [this, server, id, contextSize]() {
       m_pAgent->setModel(id, contextSize);
       m_pRuntime->savePreferences(PreferenceUpdate{server, id, {}});
@@ -165,10 +165,10 @@ void Backend::switchEndpoint(const QString& name, const QString& preferredModel)
     return;
   }
   const Endpoint chosen = *found;
-  background(QString("Connecting to %1…").arg(name), [this, chosen, preferredModel]() -> std::function<void()> {
+  background(QString("Connecting to %1…").arg(name), [this, chosen, preferredModel, closing = m_turns.closing()]() -> std::function<void()> {
     const ServerPtr next = Server::fromEndpoint(chosen);
-    const QString model = next->chooseModel({preferredModel, Runtime::rememberedModel(next->baseUrl())});
-    const std::optional<int> contextSize = next->contextSize(model);
+    const QString model = next->chooseModel({preferredModel, Runtime::rememberedModel(next->baseUrl())}, closing);
+    const std::optional<int> contextSize = next->contextSize(model, closing);
     return [this, next, model, contextSize]() {
       m_pAgent->setModel(model, contextSize, next);
       m_pServer = next;
@@ -187,9 +187,9 @@ void Backend::refreshModels() {
   const ServerPtr server = m_pServer;
   auto models = std::make_shared<QVariantList>();
   launch(
-      [server, models]() {
+      [server, models, closing = m_turns.closing()]() {
         try {
-          for (const ModelInfo& info : server->listModels(true)) {
+          for (const ModelInfo& info : server->listModels(true, closing)) {
             models->append(QVariantMap{{"id", info.id}, {"context", info.contextSize.value_or(0)}});
           }
         } catch (const std::exception&) {

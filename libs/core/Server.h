@@ -46,17 +46,17 @@ public:
   QString url(const QString& path) const;
 
   // Models the server advertises. Cached; pass refresh to ask again. Throws on failure.
-  QList<ModelInfo> listModels(bool refresh = false);
+  QList<ModelInfo> listModels(bool refresh = false, const CancelPtr& cancel = {});
   // The cached listing, if there is one, without asking.
   std::optional<QList<ModelInfo>> cachedModels() const;
 
   // Picks a model: the first of `preferred` the server lists, then the
   // endpoint's configured model, then the first model listed.
-  QString chooseModel(const QStringList& preferred);
+  QString chooseModel(const QStringList& preferred, const CancelPtr& cancel = {});
 
   // The context window for a model, if known: configured, then the model
   // listing (vLLM), then llama.cpp's /props.
-  std::optional<int> contextSize(const QString& model);
+  std::optional<int> contextSize(const QString& model, const CancelPtr& cancel = {});
 
 private:
   QString m_baseUrl;

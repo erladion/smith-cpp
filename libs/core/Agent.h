@@ -192,8 +192,8 @@ private:
   static Message assistantMessage(const StreamedResponse& response);
 
   ToolResult runTool(const ToolCall& call, const CancelPtr& cancel);
-  ApprovalDecision requestApproval(const ApprovalRequest& request);
-  Answer askUser(const Question& question);
+  ApprovalDecision requestApproval(const ApprovalRequest& request, const CancelPtr& cancel);
+  Answer askUser(const Question& question, const CancelPtr& cancel);
   QString runLaterWarning(const ToolDef& tool, const QJsonObject& args) const;
   void setTodos(const TodoList& todos);
   ToolContext toolContext(const ToolDef& tool, const CancelPtr& cancel);

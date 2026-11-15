@@ -72,6 +72,11 @@ public:
 
   // Stops the agent turn under way at its next check.
   void interrupt();
+  // The turn under way was interrupted and hasn't ended yet.
+  bool interrupted() const { return cancelled(m_pCancel); }
+  // Cancelled by `close`. Give it to slow work started with `runTask` or
+  // `launch` (a request to the server), so closing doesn't wait for it.
+  const CancelPtr& closing() const { return m_pClosing; }
   // Interrupts, then waits for every thread. Nothing given to this object is called afterwards.
   void close();
 
@@ -100,6 +105,7 @@ private:
   TurnStats m_last;
 
   QList<QThread*> m_workers;
+  CancelPtr m_pClosing = makeCancel();
   bool m_closed = false;
 };
 

@@ -149,7 +149,7 @@ QString resolveFolder(const QString& folder, const QString& base) {
   return dir;
 }
 
-std::shared_ptr<Runtime> Runtime::start(const LaunchOptions& options) {
+std::shared_ptr<Runtime> Runtime::start(const LaunchOptions& options, const CancelPtr& cancel) {
   std::shared_ptr<Runtime> runtime(new Runtime);
   if (!options.folder.isEmpty()) {
     QDir::setCurrent(resolveFolder(options.folder, QDir::currentPath()));
@@ -190,13 +190,16 @@ std::shared_ptr<Runtime> Runtime::start(const LaunchOptions& options) {
     model = firstEnv({"SMITH_MODEL", "AGENT_MODEL"});
   }
   if (model.isEmpty()) {
-    model = runtime->m_pServer->chooseModel({resumed ? resumed->session->model() : QString(), prefs.models.value(runtime->m_pServer->baseUrl())});
+    model = runtime->m_pServer->chooseModel({resumed ? resumed->session->model() : QString(), prefs.models.value(runtime->m_pServer->baseUrl())}, cancel);
   }
   runtime->m_model = model;
   if (const auto flag = parseNumber(options.contextSize, "--context-size")) {
     runtime->m_contextSize = int(*flag);
   } else {
-    runtime->m_contextSize = runtime->m_pServer->contextSize(model);
+    runtime->m_contextSize = runtime->m_pServer->contextSize(model, cancel);
+    if (cancelled(cancel)) {
+      throw AbortError();
+    }
   }
 
   QString sandboxName = options.sandbox.isEmpty() ? sandboxTypeName(config.sandbox.type) : options.sandbox;

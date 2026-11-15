@@ -233,10 +233,10 @@ void SessionCommands::switchSession(const QString& id, const QString& folder, co
   } else if (opened.model != m_app.agent()->model()) {
     const ServerPtr server = m_app.server();
     const QString model = opened.model;
-    m_app.withActivity(QString("Checking %1…").arg(model), [this, server, model]() -> std::function<void()> {
+    m_app.withActivity(QString("Checking %1…").arg(model), [this, server, model, closing = m_app.closing()]() -> std::function<void()> {
       bool served = false;
       try {
-        for (const ModelInfo& info : server->listModels()) {
+        for (const ModelInfo& info : server->listModels(false, closing)) {
           served = served || info.id == model;
         }
       } catch (const std::exception&) {

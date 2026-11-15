@@ -69,7 +69,7 @@ Agent::Agent(AgentOptions options) : m_options(std::move(options)) {
     m_tools.append(createTodoTool([this](const TodoList& todos) { setTodos(todos); }));
   }
   if (m_options.ask) {
-    m_tools.append(askTool([this](const Question& question) { return askUser(question); }));
+    m_tools.append(askTool([this](const Question& question, const ToolContext& ctx) { return askUser(question, ctx.cancel); }));
   }
   for (const ToolDef& tool : m_tools) {
     m_apiTools.append(toApiTool(tool));
@@ -440,10 +440,10 @@ ToolResult Agent::runSubagent(const TaskInput& input, const CancelPtr& cancel) {
   child.alwaysAllowed = m_pAlwaysAllowed;
   const QString description = input.description;
   // Its tools are read-only, but reading outside the project still asks you.
-  child.approve = [this, description](const ApprovalRequest& request) {
+  child.approve = [this, description, cancel](const ApprovalRequest& request) {
     ApprovalRequest forwarded = request;
     forwarded.note = QString("Sub-agent \"%1\": %2").arg(description, request.note).trimmed();
-    return requestApproval(forwarded);
+    return requestApproval(forwarded, cancel);
   };
   child.onToolRun = [this, description](const ToolRun& run) {
     if (m_options.onToolRun) {
@@ -852,7 +852,7 @@ ToolResult Agent::runTool(const ToolCall& call, const CancelPtr& cancel) {
       request.sandboxDescription = sandbox->describe(m_options.cwd);
     }
     request.canAllowAlways = !unsandboxed;
-    ApprovalDecision decision = requestApproval(request);
+    ApprovalDecision decision = requestApproval(request, cancel);
     if (decision == ApprovalDecision::AllowAlways && unsandboxed) {
       decision = ApprovalDecision::Allow;
     }
@@ -882,10 +882,13 @@ ToolResult Agent::runTool(const ToolCall& call, const CancelPtr& cancel) {
   return result;
 }
 
-ApprovalDecision Agent::requestApproval(const ApprovalRequest& request) {
+ApprovalDecision Agent::requestApproval(const ApprovalRequest& request, const CancelPtr& cancel) {
   // One at a time. A request that waited may no longer need asking: an
-  // earlier answer can have been "always allow".
+  // earlier answer can have been "always allow", or the user interrupted.
   QMutexLocker lock(&m_approvalMutex);
+  if (cancelled(cancel)) {
+    return ApprovalDecision::Deny;
+  }
   if (request.canAllowAlways && m_pAlwaysAllowed->contains(request.tool) && request.warning.isEmpty()) {
     return ApprovalDecision::Allow;
   }
@@ -895,9 +898,12 @@ ApprovalDecision Agent::requestApproval(const ApprovalRequest& request) {
   return m_options.approve(request);
 }
 
-Answer Agent::askUser(const Question& question) {
+Answer Agent::askUser(const Question& question, const CancelPtr& cancel) {
   // Questions wait their turn with approvals, so only one prompt shows at a time.
   QMutexLocker lock(&m_approvalMutex);
+  if (cancelled(cancel)) {
+    return Answer{};
+  }
   return m_options.ask(question);
 }
 

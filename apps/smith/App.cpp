@@ -33,6 +33,7 @@ App::App(TuiOptions options, QObject* parent)
     m_editor.setValue({});
     m_questionSelected = 0;
   });
+  m_prompts.refuseWhen([this]() { return m_turns.interrupted(); });
   connect(&m_prompts, &Prompts::changed, this, &App::requestRender);
   connect(&m_turns, &TurnRunner::changed, this, &App::requestRender);
 
@@ -112,9 +113,10 @@ void App::run() {
 
 void App::refreshModels() {
   const ServerPtr target = m_pServer;
-  m_turns.launch([this, target]() {
+  const CancelPtr closing = m_turns.closing();
+  m_turns.launch([this, target, closing]() {
     try {
-      const QList<ModelInfo> models = target->listModels();
+      const QList<ModelInfo> models = target->listModels(false, closing);
       QStringList ids;
       for (const ModelInfo& model : models) {
         ids << model.id;

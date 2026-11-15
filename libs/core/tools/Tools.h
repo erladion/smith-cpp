@@ -55,6 +55,6 @@ struct Answer {
 
 inline const QString ASK_TOOL = QStringLiteral("ask_user");
 
-ToolDef askTool(std::function<Answer(const Question&)> ask);
+ToolDef askTool(std::function<Answer(const Question&, const ToolContext&)> ask);
 
 } // namespace Smith

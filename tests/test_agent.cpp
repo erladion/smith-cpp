@@ -41,6 +41,7 @@ private Q_SLOTS:
   void subagentReportsBack();
   void outsideReadsAskOneAtATime();
   void subagentAsksThroughMainAgent();
+  void interruptStopsFurtherApprovals();
   void loadingConversationIsntRecorded();
   void resumedHistoryIsRepaired();
   void everyToolCallIsLogged();
@@ -621,6 +622,28 @@ void TestAgent::outsideReadsAskOneAtATime() {
   for (const QString& result : results) {
     QVERIFY2(!result.startsWith("Error"), qPrintable(result));
   }
+}
+
+void TestAgent::interruptStopsFurtherApprovals() {
+  m_pFake->setScript({
+      FakeServer::stream({FakeServer::callDelta(0, "r1", "read_file", {{"path", "/etc/hostname"}}),
+                          FakeServer::callDelta(1, "r2", "read_file", {{"path", "/etc/os-release"}})},
+                         "tool_calls"),
+      FakeServer::text("unused"),
+  });
+  const CancelPtr cancel = makeCancel();
+  std::atomic<int> asked{0};
+  auto h = make(ApprovalDecision::Allow, [&](AgentOptions& options, Harness&) {
+    // The user presses esc at the first prompt, while the other read waits to ask.
+    options.approve = [&](const ApprovalRequest&) {
+      asked++;
+      QThread::msleep(50);
+      cancel->cancel();
+      return ApprovalDecision::Deny;
+    };
+  });
+  h->agent->send("read", cancel);
+  QCOMPARE(asked.load(), 1);
 }
 
 void TestAgent::subagentAsksThroughMainAgent() {

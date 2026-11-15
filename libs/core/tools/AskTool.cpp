@@ -4,7 +4,7 @@
 
 namespace Smith {
 
-ToolDef askTool(std::function<Answer(const Question&)> ask) {
+ToolDef askTool(std::function<Answer(const Question&, const ToolContext&)> ask) {
   ToolDef tool;
   tool.name = ASK_TOOL;
   tool.description = "Ask the user a question and wait for the answer. Use it when the request is ambiguous or needs a decision only the user can "
@@ -19,12 +19,12 @@ ToolDef askTool(std::function<Answer(const Question&)> ask) {
       {"question"});
   tool.readOnly = true;
   tool.summarize = [](const QJsonObject& input) { return input.value("question").toString(); };
-  tool.run = [ask](const QJsonObject& input, const ToolContext&) {
+  tool.run = [ask](const QJsonObject& input, const ToolContext& ctx) {
     Question question{input.value("question").toString(), {}};
     for (const QJsonValue& option : input.value("options").toArray()) {
       question.options << option.toString();
     }
-    const Answer answer = ask(question);
+    const Answer answer = ask(question, ctx);
     switch (answer.kind) {
     case Answer::Kind::Dismissed:
       return ToolResult::error("The user dismissed the question without answering.");

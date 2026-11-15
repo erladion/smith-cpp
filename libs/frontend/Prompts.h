@@ -5,6 +5,7 @@
 #include <QObject>
 
 #include <atomic>
+#include <functional>
 #include <memory>
 #include <optional>
 
@@ -27,6 +28,10 @@ public:
   Answer ask(const Question& question);
 
   // ---- on the UI thread ----
+
+  // While `refuse` says so, whatever is asked gets a no without being shown:
+  // a turn the user interrupted may still ask before it notices.
+  void refuseWhen(std::function<bool()> refuse) { m_refuse = std::move(refuse); }
 
   // What is waiting for an answer, or null.
   const ApprovalRequest* approval() const;
@@ -59,6 +64,9 @@ private:
 
   std::optional<WaitingApproval> m_approval;
   std::optional<WaitingQuestion> m_question;
+  bool refusing() const { return m_closed || (m_refuse && m_refuse()); }
+
+  std::function<bool()> m_refuse;
   bool m_closed = false;
   // m_closed for the agent's threads: once set, nobody will answer them.
   std::atomic<bool> m_closing{false};

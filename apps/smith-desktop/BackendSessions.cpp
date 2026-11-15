@@ -160,10 +160,10 @@ void Backend::openSessionIn(const QString& id, const QString& folder, const QLis
   } else if (!opened.model.isEmpty() && opened.model != m_pAgent->model()) {
     const ServerPtr server = m_pServer;
     const QString model = opened.model;
-    background(QString("Checking %1…").arg(model), [this, server, model]() -> std::function<void()> {
+    background(QString("Checking %1…").arg(model), [this, server, model, closing = m_turns.closing()]() -> std::function<void()> {
       bool served = false;
       try {
-        for (const ModelInfo& info : server->listModels()) {
+        for (const ModelInfo& info : server->listModels(false, closing)) {
           served = served || info.id == model;
         }
       } catch (const std::exception&) {

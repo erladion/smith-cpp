@@ -9,7 +9,7 @@ ApprovalDecision Prompts::approve(const ApprovalRequest& request) {
   QMetaObject::invokeMethod(
       this,
       [this, request, pending]() {
-        if (m_closed) {
+        if (refusing()) {
           pending->resolve(ApprovalDecision::Deny);
           return;
         }
@@ -25,7 +25,7 @@ Answer Prompts::ask(const Question& question) {
   QMetaObject::invokeMethod(
       this,
       [this, question, pending]() {
-        if (m_closed) {
+        if (refusing()) {
           pending->resolve(Answer{});
           return;
         }

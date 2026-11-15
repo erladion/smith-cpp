@@ -73,6 +73,8 @@ public:
   // Shows a spinner while `work` runs on a worker thread. It returns what to
   // do next on the UI thread; an exception is printed instead.
   void withActivity(const QString& activity, std::function<std::function<void()>()> work);
+  // Cancelled when the app closes; for requests `work` makes, so quitting doesn't wait for them.
+  CancelPtr closing() const { return m_turns.closing(); }
   // Fetches the server's model list again, for completing /model.
   void refreshModels();
   // Lists the repository's task worktrees again, for completing /land and /drop.

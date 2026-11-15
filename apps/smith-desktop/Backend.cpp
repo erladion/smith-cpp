@@ -31,6 +31,7 @@ Backend::Backend(const LaunchOptions& launch, QObject* parent) : QObject(parent)
   m_hooks.onEvent = [this](const AgentEvent& event) { QMetaObject::invokeMethod(this, [this, event]() { onEvent(event); }, Qt::QueuedConnection); };
   m_hooks.approve = [this](const ApprovalRequest& request) { return m_prompts.approve(request); };
   m_hooks.ask = [this](const Question& question) { return m_prompts.ask(question); };
+  m_prompts.refuseWhen([this]() { return m_turns.interrupted(); });
   connect(&m_prompts, &Prompts::changed, this, &Backend::promptChanged);
   connect(&m_turns, &TurnRunner::changed, this, &Backend::changed);
 }
@@ -77,9 +78,9 @@ void Backend::start() {
   auto error = std::make_shared<QString>();
   const LaunchOptions options = m_launch;
   launch(
-      [runtime, error, options]() {
+      [runtime, error, options, closing = m_turns.closing()]() {
         try {
-          *runtime = Runtime::start(options);
+          *runtime = Runtime::start(options, closing);
         } catch (const std::exception& failure) {
           *error = errorMessage(failure);
         }
