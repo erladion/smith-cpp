@@ -64,8 +64,13 @@ QSizeF RainItem::cellSize() const {
   return {metrics.horizontalAdvance('M'), metrics.height()};
 }
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 void RainItem::geometryChange(const QRectF& newGeometry, const QRectF& oldGeometry) {
   QQuickPaintedItem::geometryChange(newGeometry, oldGeometry);
+#else
+void RainItem::geometryChanged(const QRectF& newGeometry, const QRectF& oldGeometry) {
+  QQuickPaintedItem::geometryChanged(newGeometry, oldGeometry);
+#endif
   if (newGeometry.size() != oldGeometry.size()) {
     rebuild();
   }

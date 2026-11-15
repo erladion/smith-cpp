@@ -16,19 +16,19 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # The terminal app alone, against the distribution's Qt 5.
+          # The distribution's Qt 5.
           - name: Qt 5.15
             qt: 5
-          # Both apps.
           - name: Qt 6.8
             qt: 6
-          # Memory errors, leaks and undefined behaviour, on the terminal app and the libraries.
+          # Memory errors, leaks and undefined behaviour.
           - name: Qt 5.15, ASan and UBSan
             qt: 5
             sanitize: address,undefined
     env:
       QT_QPA_PLATFORM: offscreen
       UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+      LSAN_OPTIONS: suppressions=${{ github.workspace }}/tests/lsan.supp
     steps:
       - uses: actions/checkout@v4
 
@@ -39,7 +39,10 @@ jobs:
 
       - name: Install Qt 5
         if: matrix.qt == 5
-        run: sudo apt-get install -y qtbase5-dev
+        run: >
+          sudo apt-get install -y qtbase5-dev qtdeclarative5-dev qtquickcontrols2-5-dev
+          qml-module-qtquick2 qml-module-qtquick-controls2 qml-module-qtquick-layouts qml-module-qtquick-window2
+          qml-module-qt-labs-qmlmodels qml-module-qt-labs-platform fonts-dejavu-core
 
       - name: Install Qt 6
         if: matrix.qt == 6
@@ -64,7 +67,6 @@ jobs:
 
       # CMake leaves the desktop app out quietly when Qt Quick isn't found.
       - name: Check the desktop app was built
-        if: matrix.qt == 6
         run: test -x build/apps/smith-desktop/smith-desktop
 
       - name: Test

@@ -1,7 +1,7 @@
-import QtQuick
-import QtQuick.Controls.Basic
-import QtQuick.Layouts
-import Smith.Desktop
+import QtQuick 2.15
+import QtQuick.Controls 2.15
+import QtQuick.Layouts 1.15
+import Smith.Desktop 1.0
 
 // What the agent talks to and how: endpoint, model, reasoning, the sandbox's
 // network; and the turn controls, undo and compact.

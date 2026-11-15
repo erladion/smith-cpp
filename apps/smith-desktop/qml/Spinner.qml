@@ -1,5 +1,5 @@
-import QtQuick
-import Smith.Desktop
+import QtQuick 2.15
+import Smith.Desktop 1.0
 
 // The TUI's spinner: half-width katakana with the matrix theme, braille dots otherwise.
 Text {

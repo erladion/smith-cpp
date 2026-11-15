@@ -1,7 +1,7 @@
 pragma Singleton
 
-import QtQuick
-import Smith.Desktop
+import QtQuick 2.15
+import Smith.Desktop 1.0
 
 // The colors and fonts, from the backend's palette for the config's theme.
 QtObject {

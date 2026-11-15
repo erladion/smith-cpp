@@ -1,7 +1,7 @@
-import QtQuick
-import QtQuick.Controls.Basic
-import QtQuick.Layouts
-import Smith.Desktop
+import QtQuick 2.15
+import QtQuick.Controls 2.15
+import QtQuick.Layouts 1.15
+import Smith.Desktop 1.0
 
 // The input box. Enter sends (or, while the agent works, queues the message
 // for its next step); shift+enter adds a line; esc interrupts; ↑/↓ in an

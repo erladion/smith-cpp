@@ -1,6 +1,6 @@
-import QtQuick
-import QtQuick.Controls.Basic
-import QtQuick.Layouts
+import QtQuick 2.15
+import QtQuick.Controls 2.15
+import QtQuick.Layouts 1.15
 
 // A list moved through with ↑/↓ and narrowed down by typing, like the TUI's
 // pickers. Items are {value, label, hint}; `current` is marked.

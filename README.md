@@ -1,6 +1,6 @@
 # Smith (C++/Qt)
 
-A C++20/Qt 6 port of [smith](https://github.com/erladion/smith): a small agentic coding harness
+A C++20/Qt port of [smith](https://github.com/erladion/smith): a small agentic coding harness
 with a terminal UI. It talks to any OpenAI-compatible `/v1/chat/completions` endpoint
 (llama.cpp's `llama-server`, vLLM, Ollama, LM Studio).
 
@@ -11,11 +11,16 @@ commands and security apply unchanged. Both versions read and write the same
 
 ## Building
 
-Needs CMake 3.21+, a C++20 compiler and Qt 6.6+ (Core, Network; Test for the tests;
+Needs CMake 3.21+, a C++20 compiler and Qt 6.6+ or Qt 5.15 (Core, Network; Test for the tests;
 Quick and Quick Controls 2 for the desktop app, which is skipped when they're missing).
-The terminal app also builds with Qt 5.15 (on Debian/Ubuntu, `qtbase5-dev`); the desktop
-app needs Qt 6. Qt 6.6+ is used when both are found, so leave `CMAKE_PREFIX_PATH` out to build
-against a system Qt 5; a Qt 6 older than 6.6 (Ubuntu 24.04's 6.4) is passed over for Qt 5.
+Qt 6.6+ is used when both are found, so leave `CMAKE_PREFIX_PATH` out to build against a
+system Qt 5; a Qt 6 older than 6.6 (Ubuntu 24.04's 6.4) is passed over for Qt 5.
+
+With Qt 5.15 on Debian/Ubuntu, the terminal app needs `qtbase5-dev`. The desktop app also
+needs `qtdeclarative5-dev` and `qtquickcontrols2-5-dev` to build, and these QML modules to
+run: `qml-module-qtquick2`, `qml-module-qtquick-controls2`, `qml-module-qtquick-layouts`,
+`qml-module-qtquick-window2`, `qml-module-qt-labs-qmlmodels` and
+`qml-module-qt-labs-platform`.
 
 ```sh
 cmake -S . -B build -G Ninja -DCMAKE_PREFIX_PATH=~/Qt/6.11.2/gcc_64
@@ -33,8 +38,9 @@ and assertions. The agent tests run the real loop against a scripted fake server
 (`tests/FakeServer.h`), and the sandbox tests run real commands through bubblewrap. Tests
 that need something missing here skip themselves: bwrap, ripgrep, or docker with the ubi9
 images for the container tests. CI (`.github/workflows/ci.yml`) builds and runs them against
-Qt 5.15 (terminal app only) and Qt 6.8 (both apps) on every push, and once more with
-AddressSanitizer and UBSan. `-DSMITH_SANITIZE=address,undefined` gives the same build locally.
+Qt 5.15 and Qt 6.8 on every push, and once more with
+AddressSanitizer and UBSan. `-DSMITH_SANITIZE=address,undefined` gives the same build locally
+(with `LSAN_OPTIONS=suppressions=$PWD/tests/lsan.supp` for the leaks in Qt's offscreen plugin).
 `-DSMITH_SANITIZE=thread` builds with ThreadSanitizer, which is only useful against a Qt that
 was built with it too; the `ThreadSanitizer` workflow (run by hand) builds one first.
 
@@ -158,7 +164,8 @@ apps/smith/               the terminal app: App (screen and turns in App.cpp, dr
 apps/smith-desktop/       the desktop app: Backend (the QML-facing controller: startup, agent
                           events and turns in Backend.cpp, then BackendProperties.cpp,
                           BackendCommands.cpp, BackendSessions.cpp, BackendWorktrees.cpp), the
-                          transcript model, palette, Markdown to rich text, the rain item, qml/
+                          transcript model, palette, Markdown to rich text, the rain item,
+                          Window (loads the QML for Qt 5 or Qt 6), qml/
 tests/                    QtTest suites; FakeServer.h is a scripted streaming server
 ```
 
@@ -189,6 +196,11 @@ apps never include each other.
 - **Without a sandbox** (`--sandbox off`), commands are asked about every time ("always allow"
   isn't offered for `bash`), and they get the same short list of environment variables as
   in the sandbox instead of your whole environment; `sandbox.env` in the config passes more.
+- **Qt 5 and Qt 6 for the desktop app.** The QML is the same for both, with versioned
+  imports; only the folder dialog has a file for each (`qml/qt5/`), and with Qt 5 the QML
+  goes into a resource file and `Window.cpp` registers the C++ types, where Qt 6 has its
+  QML module. The Qt 5 build's `main()` makes a `QApplication`, for the folder dialog's
+  Qt Widgets fallback.
 - **Deployment.** The binary links Qt dynamically. To run it on another machine, ship the Qt
   libraries with it (or build against a static Qt) instead of the Node single-binary builds.
 

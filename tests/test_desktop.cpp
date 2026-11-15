@@ -9,11 +9,14 @@
 #include "core/Dirs.h"
 #include "core/Sandbox.h"
 #include "Backend.h"
+#include "Window.h"
 
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
-#include <QQuickStyle>
+#include <QQuickItem>
+#include <QQuickItemGrabResult>
 #include <QQuickWindow>
+#include <QSignalSpy>
 
 using namespace Smith;
 using namespace TestUtil;
@@ -95,11 +98,10 @@ void TestDesktop::initTestCase() {
     launch.sandbox = "off";
   }
 
-  QQuickStyle::setStyle("Basic");
   m_pBackend = std::make_unique<Desktop::Backend>(launch);
   Desktop::Backend::setInstance(m_pBackend.get());
   m_pEngine = std::make_unique<QQmlApplicationEngine>();
-  m_pEngine->loadFromModule("Smith.Desktop", "Main");
+  Desktop::loadWindow(*m_pEngine);
   QVERIFY(root());
   if (!m_shots.isEmpty()) {
     QDir().mkpath(m_shots);
@@ -126,7 +128,16 @@ void TestDesktop::shot(const QString& name) {
   }
   auto* window = qobject_cast<QQuickWindow*>(root());
   QTest::qWait(250);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
   window->grabWindow().save(m_shots + "/" + name + ".png");
+#else
+  // Qt 5 can't grab an offscreen window; its content item (popups included) can be.
+  const QSharedPointer<QQuickItemGrabResult> grab = window->contentItem()->grabToImage();
+  QSignalSpy ready(grab.data(), &QQuickItemGrabResult::ready);
+  if (ready.wait(5000)) {
+    grab->image().save(m_shots + "/" + name + ".png");
+  }
+#endif
 }
 
 void TestDesktop::loadsWithoutWarnings() {
@@ -297,7 +308,11 @@ void TestDesktop::landsATaskWorktree() {
 int main(int argc, char** argv) {
   // A window without a display, painted in software so it can be grabbed.
   qputenv("QT_QPA_PLATFORM", "offscreen");
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
   QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
+#else
+  QQuickWindow::setSceneGraphBackend(QSGRendererInterface::Software);
+#endif
   QGuiApplication app(argc, argv);
   TestDesktop test;
   return QTest::qExec(&test, argc, argv);

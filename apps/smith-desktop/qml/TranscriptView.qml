@@ -1,8 +1,8 @@
-import QtQuick
-import QtQuick.Controls.Basic
-import QtQuick.Layouts
-import Qt.labs.qmlmodels
-import Smith.Desktop
+import QtQuick 2.15
+import QtQuick.Controls 2.15
+import QtQuick.Layouts 1.15
+import Qt.labs.qmlmodels 1.0
+import Smith.Desktop 1.0
 
 // The conversation: one card per entry, following new output unless you scrolled up.
 ListView {

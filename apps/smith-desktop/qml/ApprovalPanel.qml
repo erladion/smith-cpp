@@ -1,7 +1,7 @@
-import QtQuick
-import QtQuick.Controls.Basic
-import QtQuick.Layouts
-import Smith.Desktop
+import QtQuick 2.15
+import QtQuick.Controls 2.15
+import QtQuick.Layouts 1.15
+import Smith.Desktop 1.0
 
 // "Allow bash?": what the call does, why it asks, the change it would make,
 // and where it runs. y / a / n / esc answer it, as in the terminal.

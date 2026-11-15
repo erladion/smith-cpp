@@ -1,5 +1,5 @@
-import QtQuick
-import QtQuick.Layouts
+import QtQuick 2.15
+import QtQuick.Layouts 1.15
 
 // A tool call: a status dot, the tool and what it did, then its diff or the
 // start of its output (click to see all of it).

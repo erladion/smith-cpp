@@ -1,6 +1,6 @@
-import QtQuick
-import QtQuick.Layouts
-import Smith.Desktop
+import QtQuick 2.15
+import QtQuick.Layouts 1.15
+import Smith.Desktop 1.0
 
 // The start: with the matrix theme, digital rain that settles into
 // "AGENT SMITH" while Smith connects; any click skips it. If startup fails,

@@ -5,7 +5,11 @@
 namespace Smith::Desktop {
 
 QString pickMonospaceFamily() {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
   const QStringList installed = QFontDatabase::families();
+#else
+  const QStringList installed = QFontDatabase().families();
+#endif
   for (const char* family : {"JetBrains Mono", "Fira Code", "Cascadia Code", "Source Code Pro", "Hack", "DejaVu Sans Mono", "Noto Sans Mono",
                                 "Liberation Mono", "Ubuntu Mono"}) {
     if (installed.contains(family)) {

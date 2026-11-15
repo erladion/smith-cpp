@@ -10,7 +10,7 @@
 #include <QObject>
 #include <QVariantList>
 #include <QVariantMap>
-#include <QtQml/qqmlregistration.h>
+#include <QtQml/qqml.h>
 
 #include <functional>
 #include <memory>

@@ -17,7 +17,7 @@ option(SMITH_BUILD_TESTS "Build the tests" ON)
 # A sanitizer for everything built here, e.g. "thread" or "address,undefined".
 set(SMITH_SANITIZE "" CACHE STRING "Build with -fsanitize=<this>")
 
-# Qt 6.6+, or Qt 5.15 for the terminal app. Qt 6 wins when both are found;
+# Qt 6.6+, or Qt 5.15. Qt 6 wins when both are found;
 # point CMAKE_PREFIX_PATH at one to pick it. An older Qt 6 (a distribution's
 # 6.4, say) is passed over for Qt 5 rather than failing.
 find_package(Qt6 6.6 QUIET COMPONENTS Core)
@@ -27,7 +27,7 @@ if(Qt6_FOUND)
 else()
   find_package(Qt5 5.15 QUIET COMPONENTS Core)
   if(NOT Qt5_FOUND)
-    message(FATAL_ERROR "Smith needs Qt 6.6 or newer, or Qt 5.15 for the terminal app alone; neither was found. "
+    message(FATAL_ERROR "Smith needs Qt 6.6 or newer, or Qt 5.15; neither was found. "
                         "Point CMAKE_PREFIX_PATH at a Qt installation.")
   endif()
   set(QT_VERSION_MAJOR 5)
@@ -36,18 +36,17 @@ endif()
 find_package(Qt${QT_VERSION_MAJOR} ${SMITH_QT_MINIMUM} REQUIRED COMPONENTS Core Network)
 message(STATUS "Building against Qt ${Qt${QT_VERSION_MAJOR}Core_VERSION}")
 
-# The desktop app needs Qt 6 and Qt Quick; without them, only the terminal app is built.
-if(SMITH_BUILD_DESKTOP AND QT_VERSION_MAJOR LESS 6)
-  message(STATUS "Qt 5: smith-desktop needs Qt 6 and is not built")
-  set(SMITH_BUILD_DESKTOP OFF)
-endif()
+# The desktop app needs Qt Quick; without it, only the terminal app is built.
 if(SMITH_BUILD_DESKTOP)
-  find_package(Qt6 6.6 COMPONENTS Gui Qml Quick QuickControls2)
-  if(NOT Qt6Quick_FOUND OR NOT Qt6QuickControls2_FOUND)
-    message(STATUS "Qt Quick not found: smith-desktop is not built")
+  find_package(Qt${QT_VERSION_MAJOR} ${SMITH_QT_MINIMUM} QUIET COMPONENTS Gui Qml Quick QuickControls2)
+  if(NOT Qt${QT_VERSION_MAJOR}Quick_FOUND OR NOT Qt${QT_VERSION_MAJOR}QuickControls2_FOUND)
+    message(STATUS "Qt Quick or Quick Controls 2 not found: smith-desktop is not built")
     set(SMITH_BUILD_DESKTOP OFF)
-  else()
+  elseif(QT_VERSION_MAJOR EQUAL 6)
     qt_standard_project_setup(REQUIRES 6.6)
+  else()
+    # For the folder dialog's fallback; part of qtbase, so it is there when Quick is.
+    find_package(Qt5 5.15 REQUIRED COMPONENTS Widgets)
   endif()
 endif()
 

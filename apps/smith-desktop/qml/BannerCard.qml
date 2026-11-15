@@ -1,5 +1,5 @@
-import QtQuick
-import QtQuick.Layouts
+import QtQuick 2.15
+import QtQuick.Layouts 1.15
 
 // The session's opening card: Agent Smith's greeting, and what this session runs on.
 Rectangle {

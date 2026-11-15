@@ -1,7 +1,7 @@
-import QtQuick
-import QtQuick.Controls.Basic
-import QtQuick.Layouts
-import Smith.Desktop
+import QtQuick 2.15
+import QtQuick.Controls 2.15
+import QtQuick.Layouts 1.15
+import Smith.Desktop 1.0
 
 // The bottom line: where commands run, how full the context is, background
 // jobs, and (matrix theme, idle) a slow stream of glyphs at the right end.

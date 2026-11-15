@@ -1,8 +1,7 @@
-import QtQuick
-import QtQuick.Controls.Basic
-import QtQuick.Dialogs
-import QtQuick.Layouts
-import Smith.Desktop
+import QtQuick 2.15
+import QtQuick.Controls 2.15
+import QtQuick.Layouts 1.15
+import Smith.Desktop 1.0
 
 ApplicationWindow {
     id: window
@@ -96,11 +95,10 @@ ApplicationWindow {
         onClosed: composer.focusInput()
     }
 
-    FolderDialog {
+    ProjectFolderDialog {
         id: folderDialog
-        title: "Open a project folder"
-        currentFolder: "file://" + Backend.projectPath
-        onAccepted: Backend.openProject(selectedFolder.toString())
+        startFolder: "file://" + Backend.projectPath
+        onPicked: folder => Backend.openProject(folder)
     }
 
     Connections {

@@ -1,5 +1,5 @@
-import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick 2.15
+import QtQuick.Controls 2.15
 
 // A flat button in the theme: "normal", "primary" (accent), "danger", or "ghost" (no border).
 Button {

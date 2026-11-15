@@ -1,0 +1,6 @@
+# For builds with -DSMITH_SANITIZE=address:
+#   LSAN_OPTIONS=suppressions=$PWD/tests/lsan.supp ctest ...
+# Qt's offscreen platform plugin, which the desktop test runs on, never frees
+# the screen it creates, nor what a window connects to it.
+leak:libqoffscreen.so
+leak:QQuickWindowPrivate::init

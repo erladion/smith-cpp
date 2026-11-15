@@ -40,7 +40,7 @@ Backend::~Backend() {
 }
 
 Backend* Backend::create(QQmlEngine*, QJSEngine*) {
-  QJSEngine::setObjectOwnership(s_instance, QJSEngine::CppOwnership);
+  QQmlEngine::setObjectOwnership(s_instance, QQmlEngine::CppOwnership);
   return s_instance;
 }
 

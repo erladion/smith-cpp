@@ -1,7 +1,7 @@
-import QtQuick
-import QtQuick.Controls.Basic
-import QtQuick.Layouts
-import Smith.Desktop
+import QtQuick 2.15
+import QtQuick.Controls 2.15
+import QtQuick.Layouts 1.15
+import Smith.Desktop 1.0
 
 // The agent's question (ask_user): pick a suggested answer (click, ↑↓ and
 // enter, or its number), or type your own. Esc dismisses it and interrupts.

@@ -1,6 +1,6 @@
-import QtQuick
-import QtQuick.Layouts
-import Smith.Desktop
+import QtQuick 2.15
+import QtQuick.Layouts 1.15
+import Smith.Desktop 1.0
 
 // What the agent is doing right now: the spinner (or, while compacting with
 // the matrix theme, a strip of rain), how long the turn has run, and the

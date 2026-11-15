@@ -1,5 +1,5 @@
-import QtQuick
-import QtQuick.Layouts
+import QtQuick 2.15
+import QtQuick.Layouts 1.15
 
 // A diff with line numbers: green additions, red removals, dim context,
 // and "⋯ n unchanged lines" between hunks. Shows at most `maxLines`.

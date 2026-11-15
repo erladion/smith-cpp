@@ -1,5 +1,5 @@
-import QtQuick
-import QtQuick.Layouts
+import QtQuick 2.15
+import QtQuick.Layouts 1.15
 
 // The agent's checklist after it changed: done steps dim, the current one bold.
 Rectangle {

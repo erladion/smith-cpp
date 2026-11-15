@@ -1,7 +1,7 @@
-import QtQuick
-import QtQuick.Controls.Basic
-import QtQuick.Layouts
-import Smith.Desktop
+import QtQuick 2.15
+import QtQuick.Controls 2.15
+import QtQuick.Layouts 1.15
+import Smith.Desktop 1.0
 
 // Landing a task worktree: what changed (as diffs), the commit message, and
 // where it goes: cherry-picked onto your branch, merged, or left on the task
@@ -17,7 +17,20 @@ Popup {
     parent: Overlay.overlay
     anchors.centerIn: parent
     width: Math.min(parent.width - 80, 920)
-    height: stage === "review" || stage === "landing" ? Math.min(parent.height - 80, 780) : implicitHeight
+    // Tall while the diffs show, otherwise as tall as its content. Set by hand
+    // rather than bound: in Qt 5 a binding to the content's height loops.
+    function fitHeight() {
+        const tall = stage === "review" || stage === "landing"
+        height = tall ? Math.min(parent.height - 80, 780) : contentItem.implicitHeight + topPadding + bottomPadding
+    }
+    Connections {
+        target: panel.contentItem
+        function onImplicitHeightChanged() { Qt.callLater(panel.fitHeight) }
+    }
+    Connections {
+        target: panel.parent
+        function onHeightChanged() { Qt.callLater(panel.fitHeight) }
+    }
     modal: true
     padding: 20
     closePolicy: working ? Popup.NoAutoClose : Popup.CloseOnEscape
@@ -33,6 +46,8 @@ Popup {
             message.forceActiveFocus()
         }
         previousStage = stage
+        fitHeight()
+        Qt.callLater(fitHeight)
         if (stage.length > 0) {
             open()
         } else {

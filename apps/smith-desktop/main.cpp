@@ -4,19 +4,28 @@
 #include "core/Http.h"
 #include "core/Session.h"
 #include "Backend.h"
+#include "Window.h"
 
 #include <QCommandLineParser>
+#include <QtGlobal>
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+#include <QApplication>
+#endif
 #include <QGuiApplication>
 #include <QIcon>
 #include <QQmlApplicationEngine>
-#include <QQuickStyle>
 
 #include <cstdio>
 
 using namespace Smith;
 
 int main(int argc, char** argv) {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
   QGuiApplication app(argc, argv);
+#else
+  // Qt 5's folder dialog may be the Qt Widgets one, which needs a QApplication.
+  QApplication app(argc, argv);
+#endif
   QGuiApplication::setApplicationName("smith");
   QGuiApplication::setApplicationDisplayName("Smith");
   QGuiApplication::setApplicationVersion(SMITH_VERSION);
@@ -45,14 +54,19 @@ int main(int argc, char** argv) {
   }
   secureSessions();
 
-  // Controls are styled from scratch; Basic is the style meant for that.
-  QQuickStyle::setStyle("Basic");
   Desktop::Backend backend(launch);
   Desktop::Backend::setInstance(&backend);
 
   QQmlApplicationEngine engine;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
   QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app, []() { QCoreApplication::exit(1); }, Qt::QueuedConnection);
-  engine.loadFromModule("Smith.Desktop", "Main");
+  Desktop::loadWindow(engine);
+#else
+  Desktop::loadWindow(engine);
+  if (engine.rootObjects().isEmpty()) {
+    return 1;
+  }
+#endif
   backend.start();
   return app.exec();
 }
