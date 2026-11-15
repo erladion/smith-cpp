@@ -59,6 +59,7 @@ private Q_SLOTS:
   // run-later files
   void runLaterRecognisedByNameAndPlace();
   void runLaterSnapshots();
+  void runLaterSeesGitFolders();
 
 private:
   std::unique_ptr<TempDir> m_pData;
@@ -406,10 +407,11 @@ void TestUnits::deleteAsksFirst() {
 void TestUnits::runLaterRecognisedByNameAndPlace() {
   for (const QString rel : {".envrc", "package.json", "web/package.json", ".vscode/tasks.json", ".husky/pre-commit", ".github/workflows/ci.yml", "Makefile",
                              "lib/foo.mk", "CMakeLists.txt", "pyproject.toml", "requirements-dev.txt", "gradle/wrapper/gradle-wrapper.properties",
-                             "Dockerfile", "compose.yaml", ".devcontainer/devcontainer.json", ".pre-commit-config.yaml", ".gitmodules", ".npmrc"}) {
+                             "Dockerfile", "compose.yaml", ".devcontainer/devcontainer.json", ".pre-commit-config.yaml", ".gitmodules", ".npmrc", ".git",
+                             "vendor/lib/.git", "vendor/lib/.git/hooks/pre-commit"}) {
     QVERIFY2(!runLaterReason(rel).isEmpty(), qPrintable(rel));
   }
-  for (const QString rel : {"src/main.ts", "README.md", "package-lock.json", "docs/Makefile.md", "src/github/workflows.ts"}) {
+  for (const QString rel : {"src/main.ts", "README.md", "package-lock.json", "docs/Makefile.md", "src/github/workflows.ts", ".gitignore", "src/.github.ts"}) {
     QVERIFY2(runLaterReason(rel).isEmpty(), qPrintable(rel));
   }
 }
@@ -430,6 +432,35 @@ void TestUnits::runLaterSnapshots() {
     changes << change.rel + " " + change.kind;
   }
   QCOMPARE(changes, QStringList({".vscode/tasks.json created", "Makefile changed", "package.json deleted"}));
+}
+
+void TestUnits::runLaterSeesGitFolders() {
+  TempDir dir(QDir::tempPath(), "smith-snap-git-");
+  write(dir.file("main.c"), "x");
+  write(dir.file("old/.git/config"), "[core]\n");
+  const QMap<QString, QString> before = snapshotRunLater(dir.path());
+  QCOMPARE(before.keys(), QStringList({"old/.git"}));
+
+  // A repository made where there was none, one that gained a hook, and a .git file pointing at a folder.
+  write(dir.file(".git/config"), "[core]\n\tfsmonitor = ./run-me\n");
+  write(dir.file("old/.git/hooks/pre-commit"), "#!/bin/sh\n");
+  write(dir.file("deep/er/.git"), "gitdir: ../../elsewhere\n");
+  write(dir.file("elsewhere/config"), "[core]\n");
+  const QMap<QString, QString> made = snapshotRunLater(dir.path());
+  QStringList changes;
+  for (const RunLaterChange& change : runLaterChanges(before, made)) {
+    changes << change.rel + " " + change.kind;
+    QVERIFY_MATCH(change.why, "git runs its hooks");
+  }
+  QCOMPARE(changes, QStringList({".git created", "deep/er/.git created", "old/.git changed"}));
+
+  // What a .git file points to counts as well.
+  write(dir.file("elsewhere/hooks/post-checkout"), "#!/bin/sh\n");
+  changes.clear();
+  for (const RunLaterChange& change : runLaterChanges(made, snapshotRunLater(dir.path()))) {
+    changes << change.rel + " " + change.kind;
+  }
+  QCOMPARE(changes, QStringList({"deep/er/.git changed"}));
 }
 
 #endif

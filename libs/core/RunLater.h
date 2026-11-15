@@ -15,6 +15,7 @@ namespace Smith {
 QString runLaterReason(const QString& rel);
 
 // A fingerprint of every such file in the project: relative path → content hash.
+// Git folders are in it too (".git", "vendor/lib/.git"), by their config and hooks.
 QMap<QString, QString> snapshotRunLater(const QString& cwd);
 
 QString hashText(const QString& text);

@@ -55,7 +55,8 @@ GitResult git(const QString& dir, const QStringList& args, const QMap<QString, Q
   }
   RunOptions options;
   options.timeoutMs = GIT_TIMEOUT_MS;
-  const ProcessResult result = runProcess(SpawnSpec{"git", QStringList{"-C", dir} + args, env, {}, {}}, options);
+  // No fsmonitor: nothing here needs it, and it is a command from the repository's config.
+  const ProcessResult result = runProcess(SpawnSpec{"git", QStringList{"-C", dir, "-c", "core.fsmonitor=false"} + args, env, {}, {}}, options);
   if (!result.started) {
     throw SmithError(result.missing ? "git isn't installed." : "Could not run git: " + result.startError);
   }

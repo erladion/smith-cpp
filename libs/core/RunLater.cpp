@@ -8,6 +8,7 @@
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
+#include <QFileInfo>
 #include <QRegularExpression>
 #include <QSet>
 
@@ -30,6 +31,7 @@ const QList<Rule>& rules() {
       {QRegularExpression(R"((^|/)(\.pre-commit-config\.ya?ml|\.?lefthook\.ya?ml|\.lintstagedrc[^/]*|lint-staged\.config\.[^/]+)$)"),
        "it runs when you commit"},
       {QRegularExpression(R"((^|/)\.gitmodules$)"), "git fetches what it points to"},
+      {QRegularExpression(R"((^|/)\.git(/|$))"), "git runs its hooks and what its config names whenever git runs there: a shell prompt, an editor, a commit"},
       {QRegularExpression(
            R"((^|/)(\.github/workflows/|\.gitlab-ci\.ya?ml$|Jenkinsfile$|\.circleci/|azure-pipelines\.ya?ml$|\.travis\.ya?ml$|bitbucket-pipelines\.ya?ml$))"),
        "CI runs it when you push, often with secrets"},
@@ -52,6 +54,7 @@ const QList<Rule>& rules() {
 const QSet<QString> SKIP_DIRS = {".git", "node_modules", "dist", "build", ".venv", "venv", "__pycache__", "target"};
 constexpr int MAX_FILES = 50000;
 constexpr int MAX_HASHED = 2000;
+constexpr int MAX_FOLDERS = 50000;
 
 QString hashFile(const QString& file) {
   QFile handle(file);
@@ -104,6 +107,65 @@ QStringList projectFiles(const QString& cwd) {
   return files;
 }
 
+// Every git folder in the project (".git", "vendor/lib/.git"), relative. A
+// sandboxed command can make one anywhere it can write, with hooks and config
+// of its own; git doesn't list them, so this walks the folders.
+QStringList gitFolders(const QString& cwd) {
+  QStringList found;
+  QStringList stack{""};
+  int seen = 0;
+  while (!stack.isEmpty() && seen < MAX_FOLDERS) {
+    const QString dir = stack.takeLast();
+    const QString abs = dir.isEmpty() ? cwd : cwd + "/" + dir;
+    const QFileInfo git(abs + "/.git");
+    if (git.exists() || git.isSymLink()) {
+      found << (dir.isEmpty() ? QString(".git") : dir + "/.git");
+    }
+    for (const QString& name : QDir(abs).entryList(QDir::Dirs | QDir::Hidden | QDir::NoDotAndDotDot | QDir::NoSymLinks)) {
+      seen++;
+      if (name != ".git") {
+        stack << (dir.isEmpty() ? name : dir + "/" + name);
+      }
+    }
+  }
+  return found;
+}
+
+QByteArray readStart(const QString& file, qint64 max = 1 << 20) {
+  QFile handle(file);
+  return handle.open(QIODevice::ReadOnly) ? handle.read(max) : QByteArray();
+}
+
+// What git would run from a git folder: its config and its hooks.
+void addGitDir(QCryptographicHash& hash, const QString& dir) {
+  hash.addData(readStart(dir + "/config"));
+  for (const QString& name : QDir(dir + "/hooks").entryList(QDir::Files | QDir::Hidden | QDir::System, QDir::Name)) {
+    hash.addData(name.toUtf8());
+    hash.addData(hashFile(dir + "/hooks/" + name).toLatin1());
+  }
+}
+
+// A fingerprint of a git folder, or of the one a .git file points to.
+QString hashGit(const QString& path) {
+  QCryptographicHash hash(QCryptographicHash::Sha1);
+  QString dir = path;
+  if (QFileInfo(path).isFile()) {
+    const QByteArray pointer = readStart(path, 4096);
+    hash.addData(pointer);
+    if (!pointer.startsWith("gitdir:")) {
+      return QString::fromLatin1(hash.result().toHex());
+    }
+    dir = QDir::cleanPath(QDir(QFileInfo(path).path()).absoluteFilePath(utf8(pointer.mid(7)).trimmed()));
+  }
+  addGitDir(hash, dir);
+  // A linked worktree's config and hooks are in the repository it belongs to.
+  const QString common = utf8(readStart(dir + "/commondir", 4096)).trimmed();
+  if (!common.isEmpty()) {
+    addGitDir(hash, QDir::cleanPath(QDir(dir).absoluteFilePath(common)));
+  }
+  return QString::fromLatin1(hash.result().toHex());
+}
+
 } // namespace
 
 QString runLaterReason(const QString& rel) {
@@ -117,8 +179,12 @@ QString runLaterReason(const QString& rel) {
 
 QMap<QString, QString> snapshotRunLater(const QString& cwd) {
   QMap<QString, QString> snapshot;
+  for (const QString& rel : gitFolders(cwd)) {
+    snapshot.insert(rel, hashGit(cwd + "/" + rel));
+  }
   for (const QString& rel : projectFiles(cwd)) {
-    if (runLaterReason(rel).isEmpty()) {
+    // A .git file is in there already, by what it points to.
+    if (runLaterReason(rel).isEmpty() || snapshot.contains(rel)) {
       continue;
     }
     const QString hash = hashFile(cwd + "/" + rel);
