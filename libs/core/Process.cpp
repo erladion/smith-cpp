@@ -6,6 +6,8 @@
 #include <QFileInfo>
 #include <QStandardPaths>
 
+#include <algorithm>
+
 #include <signal.h>
 
 namespace Smith {
@@ -51,10 +53,21 @@ ProcessResult runProcess(const SpawnSpec& spec, const RunOptions& options) {
 
   QElapsedTimer clock;
   clock.start();
+  const qint64 half = options.maxCapture / 2;
+  QByteArray tail;
   auto collect = [&]() {
     const QByteArray out = process.readAllStandardOutput();
     const QByteArray err = options.mergeChannels ? QByteArray() : process.readAllStandardError();
-    if (options.maxCapture < 0 || result.out.size() < options.maxCapture) {
+    if (options.keepEnd && options.maxCapture >= 0) {
+      // The first half fills up once; the rest goes through `tail`, cut back to the last half as it grows.
+      const qint64 room = std::max<qint64>(0, half - result.out.size());
+      result.out += out.left(room);
+      tail += out.mid(room);
+      if (tail.size() > 2 * half) {
+        result.omitted += tail.size() - half;
+        tail = tail.right(half);
+      }
+    } else if (options.maxCapture < 0 || result.out.size() < options.maxCapture) {
       result.out += out;
     }
     if (options.maxCapture < 0 || result.err.size() < options.maxCapture) {
@@ -89,6 +102,12 @@ ProcessResult runProcess(const SpawnSpec& spec, const RunOptions& options) {
   }
   process.waitForFinished(5000);
   collect();
+  if (tail.size() > half) {
+    result.omitted += tail.size() - half;
+    tail = tail.right(half);
+  }
+  result.omittedAt = result.out.size();
+  result.out += tail;
   result.crashed = process.exitStatus() == QProcess::CrashExit;
   result.exitCode = result.crashed ? -1 : process.exitCode();
   return result;

@@ -14,7 +14,7 @@ namespace {
 constexpr int DEFAULT_TIMEOUT_MS = 300000;
 constexpr int MAX_TIMEOUT_MS = 600000;
 constexpr int MAX_OUTPUT_CHARS = 20000;
-// Stop buffering far past what we would show, so a runaway command can't eat memory.
+// Keep far more than we would show, but not everything, so a runaway command can't eat memory. Past it the middle goes, not the end.
 constexpr qint64 MAX_CAPTURE_CHARS = 1000000;
 
 const QString DESCRIPTION = QString("Run a shell command with bash in the working directory and return its combined stdout and stderr. Commands run "
@@ -47,11 +47,16 @@ ToolResult runCommand(const QJsonObject& input, const ToolContext& ctx) {
   options.timeoutMs = timeoutMs;
   options.cancel = ctx.cancel;
   options.maxCapture = MAX_CAPTURE_CHARS;
+  options.keepEnd = true;
   const ProcessResult result = runProcess(spec, options);
   if (!result.started) {
     return ToolResult::error(QString("Failed to start %1: %2").arg(spec.file, result.startError));
   }
-  const QString output = utf8(result.out);
+  QString output = utf8(result.out);
+  if (result.omitted > 0) {
+    output = utf8(result.out.left(result.omittedAt)) + QString("\n[... %1 bytes of output left out here ...]\n").arg(result.omitted) +
+             utf8(result.out.mid(result.omittedAt));
+  }
   QString body = truncateLog(trimEnd(output), MAX_OUTPUT_CHARS);
   if (body.isEmpty()) {
     body = "(no output)";

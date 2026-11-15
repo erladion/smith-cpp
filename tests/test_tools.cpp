@@ -65,6 +65,7 @@ private Q_SLOTS:
   void librariesDontIncludeApps();
   void appsDontIncludeEachOther();
   void desktopTextIsPlain();
+  void bashKeepsTheEndOfLongOutput();
 
   // config file
   void configMissingFile();
@@ -397,6 +398,14 @@ void TestTools::desktopTextIsPlain() {
   }
   QVERIFY(seen > 50);
   QVERIFY2(offenders.isEmpty(), qPrintable("Text without a textFormat (use Text.PlainText): " + offenders.join(", ")));
+}
+
+void TestTools::bashKeepsTheEndOfLongOutput() {
+  // 1.8 MB, past what is kept: the start and the end both survive, with a note between.
+  const ToolResult res = call(bashTool({}), {{"command", "echo THE-START; yes 0123456789 | head -n 160000; echo THE-END"}});
+  QVERIFY2(!res.isError, qPrintable(res.content.left(300)));
+  QVERIFY_MATCH(res.content, "^THE-START");
+  QVERIFY_MATCH(res.content, "THE-END$");
 }
 
 namespace {

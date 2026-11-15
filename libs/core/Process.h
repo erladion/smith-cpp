@@ -33,6 +33,8 @@ struct RunOptions {
   CancelPtr cancel;
   // Stop keeping output beyond this many bytes; -1 for no limit.
   qint64 maxCapture = -1;
+  // Past maxCapture, keep the first and the last half of stdout instead of only the start: the end of a long build is where it says what failed.
+  bool keepEnd = false;
   // Kill the process once maxCapture is reached (for listings that can be cut short).
   bool stopAtCapture = false;
   // Used when the spec has no cwd of its own.
@@ -50,6 +52,9 @@ struct ProcessResult {
   bool crashed = false;
   QByteArray out;
   QByteArray err;
+  // With keepEnd: how many bytes were left out of `out`, and where in it.
+  qint64 omitted = 0;
+  qint64 omittedAt = 0;
   Stop stoppedBy = Stop::None;
   // The process id it ran with, for reports; 0 if it never started.
   qint64 pid = 0;
