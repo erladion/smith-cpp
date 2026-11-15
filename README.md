@@ -132,7 +132,8 @@ TypeScript version doesn't have them.
 
 ## New in this port
 
-- **edit_file** keeps the encoding of files that aren't UTF-8.
+- **edit_file** takes several replacements in one call (`edits`), all or nothing, and keeps the
+  encoding of files that aren't UTF-8.
 
 ## Layout
 

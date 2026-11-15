@@ -13,6 +13,7 @@ namespace {
 constexpr int MAX_OUTPUT_CHARS = 20000;
 constexpr int DEFAULT_LINE_LIMIT = 500;
 constexpr int MAX_LINE_CHARS = 1000;
+constexpr int MAX_EDITS = 50;
 
 // Reads and writes happen inside the sandbox when it's active, so the file
 // tools can reach exactly what shell commands can. The path checks come
@@ -105,6 +106,22 @@ WritePlan planWrite(const QJsonObject& input, const ToolContext& ctx) {
   return WritePlan{file, encode(content, encoding), !before.has_value(), diffLines(old.text, content)};
 }
 
+struct Replacement {
+  QString oldString;
+  QString newString;
+  bool all = false;
+};
+
+// The replacements a call asks for: its own, then those in `edits`.
+QList<Replacement> replacements(const QJsonObject& input) {
+  QList<Replacement> list{{input.value("old_string").toString(), input.value("new_string").toString(), input.value("replace_all").toBool(false)}};
+  for (const QJsonValue& value : input.value("edits").toArray()) {
+    const QJsonObject edit = value.toObject();
+    list.append({edit.value("old_string").toString(), edit.value("new_string").toString(), edit.value("replace_all").toBool(false)});
+  }
+  return list;
+}
+
 struct EditPlan {
   QString file;
   QByteArray content;
@@ -112,15 +129,11 @@ struct EditPlan {
   Diff diff;
 };
 
-// Works out an edit without doing it. Throws with a message for the model if it can't apply.
+// Works out an edit without doing it: every replacement applies, in order, or
+// none does. Throws with a message for the model if one can't.
 EditPlan planEdit(const QJsonObject& input, const ToolContext& ctx) {
   const QString path = input.value("path").toString();
-  const QString oldString = input.value("old_string").toString();
-  const QString newString = input.value("new_string").toString();
-  const bool replaceAll = input.value("replace_all").toBool(false);
-  if (oldString == newString) {
-    throw SmithError("old_string and new_string are identical; nothing to change.");
-  }
+  const QList<Replacement> edits = replacements(input);
   const QString file = resolveInRoot(ctx.cwd, path);
   assertWritable(ctx.cwd, file);
   const QByteArray bytes = readThrough(file, ctx);
@@ -128,30 +141,40 @@ EditPlan planEdit(const QJsonObject& input, const ToolContext& ctx) {
     throw SmithError(QString("%1 looks like a binary file; edit_file only changes text.").arg(path));
   }
   const FileText read = decode(bytes);
-  const QString& text = read.text;
-  const int count = text.count(oldString);
-  if (count == 0) {
-    throw SmithError(QString("old_string was not found in %1. Read the file and copy the text exactly.").arg(path));
-  }
-  if (count > 1 && !replaceAll) {
-    throw SmithError(
-        QString("old_string occurs %1 times in %2. Include more surrounding text to make it unique, or set replace_all.").arg(QString::number(count), path));
-  }
-  if (read.encoding == Encoding::Bytes) {
-    if (const std::optional<QChar> stray = beyondBytes(newString)) {
-      throw SmithError(QString("%1 isn't UTF-8, so its bytes are kept one character each, and new_string has a character that can't be "
-                               "written that way: '%2'. Use only characters the file already has, or change it with a command.")
-                           .arg(path, QString(*stray)));
+  QString updated = read.text;
+  int replaced = 0;
+  for (int i = 0; i < edits.size(); i++) {
+    const Replacement& edit = edits[i];
+    // Which one, when there are several.
+    const QString which = edits.size() > 1 ? QString("Edit %1 of %2: ").arg(i + 1).arg(edits.size()) : QString();
+    const QString after = edits.size() > 1 && i > 0 ? QString(" (after the edits before it)") : QString();
+    if (edit.oldString == edit.newString) {
+      throw SmithError(which + "old_string and new_string are identical; nothing to change.");
     }
+    const int count = updated.count(edit.oldString);
+    if (count == 0) {
+      throw SmithError(which + QString("old_string was not found in %1%2. Read the file and copy the text exactly.").arg(path, after));
+    }
+    if (count > 1 && !edit.all) {
+      throw SmithError(which + QString("old_string occurs %1 times in %2%3. Include more surrounding text to make it unique, or set replace_all.")
+                                   .arg(QString::number(count), path, after));
+    }
+    if (read.encoding == Encoding::Bytes) {
+      if (const std::optional<QChar> stray = beyondBytes(edit.newString)) {
+        throw SmithError(which + QString("%1 isn't UTF-8, so its bytes are kept one character each, and new_string has a character that can't be "
+                                         "written that way: '%2'. Use only characters the file already has, or change it with a command.")
+                                     .arg(path, QString(*stray)));
+      }
+    }
+    if (edit.all) {
+      updated.replace(edit.oldString, edit.newString);
+    } else {
+      const int at = updated.indexOf(edit.oldString);
+      updated = updated.left(at) + edit.newString + updated.mid(at + edit.oldString.size());
+    }
+    replaced += edit.all ? count : 1;
   }
-  QString updated = text;
-  if (replaceAll) {
-    updated.replace(oldString, newString);
-  } else {
-    const int at = text.indexOf(oldString);
-    updated = text.left(at) + newString + text.mid(at + oldString.size());
-  }
-  return EditPlan{file, encode(updated, read.encoding), replaceAll ? count : 1, diffLines(text, updated)};
+  return EditPlan{file, encode(updated, read.encoding), replaced, diffLines(read.text, updated)};
 }
 
 } // namespace
@@ -258,17 +281,30 @@ ToolDef editFileTool() {
   ToolDef tool;
   tool.name = "edit_file";
   tool.description = "Replace an exact string in a file. old_string must match the file exactly, including whitespace and indentation, and must "
-                     "occur exactly once unless replace_all is true. Read the file first so the match is exact.";
+                     "occur exactly once unless replace_all is true. Read the file first so the match is exact. For several changes to one file, "
+                     "put the rest in edits: they apply in order, each to the result of the one before, and either all of them apply or none.";
   tool.schema = Schema::object(
       {
           {"path", Schema::string("File path, relative to the working directory")},
           {"old_string", Schema::string("Exact text to replace", 1)},
           {"new_string", Schema::string("Replacement text")},
           {"replace_all", Schema::boolean("Replace every occurrence instead of exactly one")},
+          {"edits", Schema::array(Schema::object(
+                                      {
+                                          {"old_string", Schema::string("Exact text to replace", 1)},
+                                          {"new_string", Schema::string("Replacement text")},
+                                          {"replace_all", Schema::boolean("Replace every occurrence instead of exactly one")},
+                                      },
+                                      {"old_string", "new_string"}),
+                                  "More replacements to make in the same file, after the first", MAX_EDITS - 1)},
       },
       {"path", "old_string", "new_string"});
   tool.summarize = [](const QJsonObject& input) {
     const QString path = input.value("path").toString();
+    const int edits = input.value("edits").toArray().size() + 1;
+    if (edits > 1) {
+      return QString("%1 (%2 edits)").arg(path).arg(edits);
+    }
     return input.value("replace_all").toBool(false) ? QString("%1 (all occurrences)").arg(path) : path;
   };
   tool.touches = [](const QJsonObject& input) { return QStringList{input.value("path").toString()}; };

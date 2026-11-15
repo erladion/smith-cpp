@@ -67,6 +67,7 @@ private Q_SLOTS:
   void desktopTextIsPlain();
   void editFileKeepsOtherEncodings();
   void bashKeepsTheEndOfLongOutput();
+  void editFileMakesSeveralEdits();
 
   // config file
   void configMissingFile();
@@ -436,6 +437,27 @@ void TestTools::editFileKeepsOtherEncodings() {
   put("plain.txt", QString("na\u00efve = 1\n").toUtf8());
   QVERIFY(!call(editFileTool(), {{"path", "plain.txt"}, {"old_string", "= 1"}, {"new_string", "= 2"}}).isError);
   QCOMPARE(bytes("plain.txt"), QString("na\u00efve = 2\n").toUtf8());
+}
+
+void TestTools::editFileMakesSeveralEdits() {
+  call(writeFileTool(), {{"path", "multi.txt"}, {"content", "alpha\nbeta\ngamma\nbeta\n"}});
+  const QJsonArray edits{QJsonObject{{"old_string", "beta"}, {"new_string", "B"}, {"replace_all", true}},
+                         QJsonObject{{"old_string", "A\nB"}, {"new_string", "A+B"}}};
+  const ToolDef tool = editFileTool();
+  const QJsonObject input{{"path", "multi.txt"}, {"old_string", "alpha"}, {"new_string", "A"}, {"edits", edits}};
+  QCOMPARE(tool.summarize(input), QString("multi.txt (3 edits)"));
+  const ToolResult res = call(tool, input);
+  QVERIFY2(!res.isError, qPrintable(res.content));
+  QVERIFY_MATCH(res.content, "Replaced 4 occurrences");
+  // Each edit sees the result of the one before it.
+  QCOMPARE(read(m_pDir->file("multi.txt")), QString("A+B\ngamma\nB\n"));
+
+  // One that can't apply stops them all.
+  const QJsonArray bad{QJsonObject{{"old_string", "nowhere"}, {"new_string", "x"}}};
+  const ToolResult failed = call(tool, {{"path", "multi.txt"}, {"old_string", "gamma"}, {"new_string", "G"}, {"edits", bad}});
+  QVERIFY(failed.isError);
+  QVERIFY_MATCH(failed.content, "^Edit 2 of 2: old_string was not found in multi\\.txt \\(after the edits before it\\)");
+  QCOMPARE(read(m_pDir->file("multi.txt")), QString("A+B\ngamma\nB\n"));
 }
 
 void TestTools::bashKeepsTheEndOfLongOutput() {
