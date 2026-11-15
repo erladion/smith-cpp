@@ -130,6 +130,10 @@ A new worktree only has tracked files: ignored ones (`node_modules`, `.env`, bui
 there, so the agent may need to install or build first. Task worktrees are new in this port; the
 TypeScript version doesn't have them.
 
+## New in this port
+
+- **edit_file** keeps the encoding of files that aren't UTF-8.
+
 ## Layout
 
 ```

@@ -34,8 +34,8 @@ public:
   QString describe(const QString& project = {}) const override;
   SpawnSpec spawnSpec(const QString& command, const QString& cwd) override;
   SpawnSpec programSpec(const QString& file, const QStringList& args, const QString& project, const QString& chdir = {}) override;
-  QString readFile(const QString& file, const QString& project) override;
-  void writeFile(const QString& file, const QString& content, const QString& project) override;
+  QByteArray readBytes(const QString& file, const QString& project) override;
+  void writeBytes(const QString& file, const QByteArray& content, const QString& project) override;
   std::optional<SandboxPath> sandboxPath(const QString& path, const QString& project) override;
   QStringList promptNotes(const QString& project) const override;
   std::optional<QString> explainFailure(const QString& output, const QString& project) const override;

@@ -955,7 +955,7 @@ ToolContext Agent::toolContext(const ToolDef& tool, const CancelPtr& cancel) {
       checkpoint->beforeWrite(file);
     }
   };
-  ctx.afterWrite = [this, checkpoint](const QString& file, const QString& content) {
+  ctx.afterWrite = [this, checkpoint](const QString& file, const QByteArray& content) {
     if (checkpoint) {
       checkpoint->afterWrite(file, content);
     }
@@ -963,7 +963,7 @@ ToolContext Agent::toolContext(const ToolDef& tool, const CancelPtr& cancel) {
     const QString rel = relativeSlashPath(m_options.cwd, file);
     if (!runLaterReason(rel).isEmpty()) {
       QMutexLocker lock(&m_mutex);
-      m_approvedRunLater.insert(rel, hashText(content));
+      m_approvedRunLater.insert(rel, hashBytes(content));
     }
   };
   return ctx;

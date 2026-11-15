@@ -198,8 +198,8 @@ QMap<QString, QString> snapshotRunLater(const QString& cwd) {
   return snapshot;
 }
 
-QString hashText(const QString& text) {
-  return QString::fromLatin1(QCryptographicHash::hash(text.toUtf8(), QCryptographicHash::Sha1).toHex());
+QString hashBytes(const QByteArray& content) {
+  return QString::fromLatin1(QCryptographicHash::hash(content, QCryptographicHash::Sha1).toHex());
 }
 
 QList<RunLaterChange> runLaterChanges(const QMap<QString, QString>& before, const QMap<QString, QString>& after) {

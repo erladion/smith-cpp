@@ -129,27 +129,27 @@ SpawnSpec ContainerSandbox::programSpec(const QString& file, const QStringList& 
   return SpawnSpec{m_settings.runtime, all, hostEnv(), {}, {}};
 }
 
-QString ContainerSandbox::readFile(const QString& file, const QString& project) {
+QByteArray ContainerSandbox::readBytes(const QString& file, const QString& project) {
   if (isWithin(project, file)) {
-    return Sandbox::none()->readFile(file, project);
+    return Sandbox::none()->readBytes(file, project);
   }
   const ProcessResult result = runProcess(programSpec("cat", {"--", file}, project));
   if (!result.started || result.exitCode != 0) {
     throw fileError(result.started ? utf8(result.err) : result.startError, file, "open");
   }
-  return utf8(result.out);
+  return result.out;
 }
 
-void ContainerSandbox::writeFile(const QString& file, const QString& content, const QString& project) {
+void ContainerSandbox::writeBytes(const QString& file, const QByteArray& content, const QString& project) {
   if (isWithin(project, file)) {
-    Sandbox::none()->writeFile(file, content, project);
+    Sandbox::none()->writeBytes(file, content, project);
     return;
   }
   const QString name = container(project);
   const QString script = R"SH(mkdir -p -- "$(dirname -- "$1")" && cat > "$1")SH";
   SpawnSpec spec{m_settings.runtime, {"exec", "-i", name, "bash", "-c", script, "bash", file}, hostEnv(), {}, {}};
   RunOptions options;
-  options.input = content.toUtf8();
+  options.input = content;
   const ProcessResult result = runProcess(spec, options);
   if (!result.started || result.exitCode != 0) {
     throw fileError(result.started ? utf8(result.err) : result.startError, file, "write");

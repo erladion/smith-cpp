@@ -1,4 +1,5 @@
 #include "core/tools/Tools.h"
+#include "compat/Utf8.h"
 
 #include "core/Errors.h"
 #include "core/Json.h"
@@ -16,11 +17,11 @@ constexpr int MAX_LINE_CHARS = 1000;
 // Reads and writes happen inside the sandbox when it's active, so the file
 // tools can reach exactly what shell commands can. The path checks come
 // first, for clear errors; the sandbox enforces them.
-QString readThrough(const QString& file, const ToolContext& ctx) {
-  return ctx.sandboxOrNone()->readFile(file, ctx.cwd);
+QByteArray readThrough(const QString& file, const ToolContext& ctx) {
+  return ctx.sandboxOrNone()->readBytes(file, ctx.cwd);
 }
 
-std::optional<QString> readIfExists(const QString& file, const ToolContext& ctx) {
+std::optional<QByteArray> readIfExists(const QString& file, const ToolContext& ctx) {
   try {
     return readThrough(file, ctx);
   } catch (const SmithError& error) {
@@ -31,9 +32,63 @@ std::optional<QString> readIfExists(const QString& file, const ToolContext& ctx)
   }
 }
 
+// How a file's bytes are read as text, so a change can be written back the
+// same way and leave the rest of the file byte for byte as it was.
+enum class Encoding {
+  Utf8,
+  // UTF-8 with a byte order mark, which decoding drops.
+  MarkedUtf8,
+  // Anything else: one character per byte, so every byte survives. Right for
+  // Latin-1; for other encodings the text looks odd but nothing is lost.
+  Bytes,
+};
+
+const QByteArray MARK("\xEF\xBB\xBF");
+
+struct FileText {
+  QString text;
+  Encoding encoding = Encoding::Utf8;
+};
+
+FileText decode(const QByteArray& bytes) {
+  const QString text = utf8(bytes);
+  const QByteArray again = text.toUtf8();
+  if (again == bytes) {
+    return FileText{text, Encoding::Utf8};
+  }
+  if (bytes.startsWith(MARK) && MARK + again == bytes) {
+    return FileText{text, Encoding::MarkedUtf8};
+  }
+  return FileText{QString::fromLatin1(bytes.constData(), bytes.size()), Encoding::Bytes};
+}
+
+// The first character that has no byte of its own, if any.
+std::optional<QChar> beyondBytes(const QString& text) {
+  for (const QChar ch : text) {
+    if (ch.unicode() > 0xFF) {
+      return ch;
+    }
+  }
+  return std::nullopt;
+}
+
+QByteArray encode(const QString& text, Encoding encoding) {
+  switch (encoding) {
+  case Encoding::Utf8:
+    return text.toUtf8();
+  case Encoding::MarkedUtf8:
+    return MARK + text.toUtf8();
+  case Encoding::Bytes:
+    return text.toLatin1();
+  }
+  return text.toUtf8();
+}
+
+const QString NOT_UTF8 = "[This file isn't UTF-8: each byte is shown as one Latin-1 character. edit_file keeps its bytes that way.]";
+
 struct WritePlan {
   QString file;
-  QString content;
+  QByteArray content;
   bool created = false;
   Diff diff;
 };
@@ -42,14 +97,17 @@ struct WritePlan {
 WritePlan planWrite(const QJsonObject& input, const ToolContext& ctx) {
   const QString file = resolveInRoot(ctx.cwd, input.value("path").toString());
   assertWritable(ctx.cwd, file);
-  const std::optional<QString> before = readIfExists(file, ctx);
+  const std::optional<QByteArray> before = readIfExists(file, ctx);
   const QString content = input.value("content").toString();
-  return WritePlan{file, content, !before.has_value(), diffLines(before.value_or(QString()), content)};
+  const FileText old = before ? decode(*before) : FileText{};
+  // A file keeps the encoding it has, where the new text can be written in it.
+  const Encoding encoding = old.encoding == Encoding::Bytes && beyondBytes(content) ? Encoding::Utf8 : old.encoding;
+  return WritePlan{file, encode(content, encoding), !before.has_value(), diffLines(old.text, content)};
 }
 
 struct EditPlan {
   QString file;
-  QString updated;
+  QByteArray content;
   int replaced = 0;
   Diff diff;
 };
@@ -65,7 +123,12 @@ EditPlan planEdit(const QJsonObject& input, const ToolContext& ctx) {
   }
   const QString file = resolveInRoot(ctx.cwd, path);
   assertWritable(ctx.cwd, file);
-  const QString text = readThrough(file, ctx);
+  const QByteArray bytes = readThrough(file, ctx);
+  if (bytes.contains('\0')) {
+    throw SmithError(QString("%1 looks like a binary file; edit_file only changes text.").arg(path));
+  }
+  const FileText read = decode(bytes);
+  const QString& text = read.text;
   const int count = text.count(oldString);
   if (count == 0) {
     throw SmithError(QString("old_string was not found in %1. Read the file and copy the text exactly.").arg(path));
@@ -74,6 +137,13 @@ EditPlan planEdit(const QJsonObject& input, const ToolContext& ctx) {
     throw SmithError(
         QString("old_string occurs %1 times in %2. Include more surrounding text to make it unique, or set replace_all.").arg(QString::number(count), path));
   }
+  if (read.encoding == Encoding::Bytes) {
+    if (const std::optional<QChar> stray = beyondBytes(newString)) {
+      throw SmithError(QString("%1 isn't UTF-8, so its bytes are kept one character each, and new_string has a character that can't be "
+                               "written that way: '%2'. Use only characters the file already has, or change it with a command.")
+                           .arg(path, QString(*stray)));
+    }
+  }
   QString updated = text;
   if (replaceAll) {
     updated.replace(oldString, newString);
@@ -81,7 +151,7 @@ EditPlan planEdit(const QJsonObject& input, const ToolContext& ctx) {
     const int at = text.indexOf(oldString);
     updated = text.left(at) + newString + text.mid(at + oldString.size());
   }
-  return EditPlan{file, updated, replaceAll ? count : 1, diffLines(text, updated)};
+  return EditPlan{file, encode(updated, read.encoding), replaceAll ? count : 1, diffLines(text, updated)};
 }
 
 } // namespace
@@ -120,10 +190,12 @@ ToolDef readFileTool() {
     const int offset = input.value("offset").toInt(1);
     const int limit = input.value("limit").toInt(DEFAULT_LINE_LIMIT);
     const QString file = resolveForRead(ctx.cwd, path, ctx.sandbox).path;
-    const QString text = readThrough(file, ctx);
-    if (text.contains(QChar(0))) {
+    const QByteArray bytes = readThrough(file, ctx);
+    if (bytes.contains('\0')) {
       return ToolResult::error(QString("%1 looks like a binary file.").arg(path));
     }
+    const FileText read = decode(bytes);
+    const QString& text = read.text;
     QStringList lines = text.split('\n');
     if (!lines.isEmpty() && lines.last().isEmpty()) {
       lines.removeLast();
@@ -142,7 +214,10 @@ ToolDef readFileTool() {
       body << QString("%1\t%2").arg(offset + i).arg(shown);
     }
     const int end = offset + slice.size() - 1;
-    const QString footer = end < lines.size() ? QString("\n\n[Showing lines %1-%2 of %3]").arg(offset).arg(end).arg(lines.size()) : QString();
+    QString footer = end < lines.size() ? QString("\n\n[Showing lines %1-%2 of %3]").arg(offset).arg(end).arg(lines.size()) : QString();
+    if (read.encoding == Encoding::Bytes) {
+      footer += "\n\n" + NOT_UTF8;
+    }
     return ToolResult{truncateText(body.join('\n'), MAX_OUTPUT_CHARS) + footer};
   };
   return tool;
@@ -168,7 +243,7 @@ ToolDef writeFileTool() {
     if (ctx.beforeWrite) {
       ctx.beforeWrite(plan.file);
     }
-    ctx.sandboxOrNone()->writeFile(plan.file, plan.content, ctx.cwd);
+    ctx.sandboxOrNone()->writeBytes(plan.file, plan.content, ctx.cwd);
     if (ctx.afterWrite) {
       ctx.afterWrite(plan.file, plan.content);
     }
@@ -208,9 +283,9 @@ ToolDef editFileTool() {
     if (ctx.beforeWrite) {
       ctx.beforeWrite(plan.file);
     }
-    ctx.sandboxOrNone()->writeFile(plan.file, plan.updated, ctx.cwd);
+    ctx.sandboxOrNone()->writeBytes(plan.file, plan.content, ctx.cwd);
     if (ctx.afterWrite) {
-      ctx.afterWrite(plan.file, plan.updated);
+      ctx.afterWrite(plan.file, plan.content);
     }
     const DiffStats stats = diffStats(plan.diff);
     const QString times = plan.replaced == 1 ? QString("1 occurrence") : QString("%1 occurrences").arg(plan.replaced);

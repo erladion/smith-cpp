@@ -26,7 +26,7 @@ struct ToolContext {
   std::shared_ptr<Sandbox> sandbox;
   // File tools call these around each write, so the turn can be undone.
   std::function<void(const QString& file)> beforeWrite;
-  std::function<void(const QString& file, const QString& content)> afterWrite;
+  std::function<void(const QString& file, const QByteArray& content)> afterWrite;
 
   // The sandbox, or a "none" sandbox when there is no sandbox.
   std::shared_ptr<Sandbox> sandboxOrNone() const;

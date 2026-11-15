@@ -65,6 +65,7 @@ private Q_SLOTS:
   void librariesDontIncludeApps();
   void appsDontIncludeEachOther();
   void desktopTextIsPlain();
+  void editFileKeepsOtherEncodings();
   void bashKeepsTheEndOfLongOutput();
 
   // config file
@@ -398,6 +399,43 @@ void TestTools::desktopTextIsPlain() {
   }
   QVERIFY(seen > 50);
   QVERIFY2(offenders.isEmpty(), qPrintable("Text without a textFormat (use Text.PlainText): " + offenders.join(", ")));
+}
+
+void TestTools::editFileKeepsOtherEncodings() {
+  auto bytes = [&](const QString& name) {
+    QFile file(m_pDir->file(name));
+    return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
+  };
+  auto put = [&](const QString& name, const QByteArray& content) {
+    QFile file(m_pDir->file(name));
+    QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    file.write(content);
+  };
+  // Latin-1: the edit changes its bytes and leaves the é as the one byte it was.
+  const QByteArray latin("caf\xE9 = 1\nx = 1\n");
+  put("latin.txt", latin);
+  QVERIFY_MATCH(call(readFileTool(), {{"path", "latin.txt"}}).content, QString::fromUtf8("^1\\tcaf\u00e9 = 1[\\s\\S]*isn't UTF-8"));
+  const ToolResult kept = call(editFileTool(), {{"path", "latin.txt"}, {"old_string", "x = 1"}, {"new_string", QString::fromUtf8("x = \u00e9t\u00e9")}});
+  QVERIFY2(!kept.isError, qPrintable(kept.content));
+  QCOMPARE(bytes("latin.txt"), QByteArray("caf\xE9 = 1\nx = \xE9t\xE9\n"));
+  // A character with no byte of its own can't go in; nothing changes.
+  const ToolResult stray = call(editFileTool(), {{"path", "latin.txt"}, {"old_string", "caf"}, {"new_string", QString::fromUtf8("\u2615")}});
+  QVERIFY(stray.isError);
+  QVERIFY_MATCH(stray.content, "can't be written that way");
+  QCOMPARE(bytes("latin.txt"), QByteArray("caf\xE9 = 1\nx = \xE9t\xE9\n"));
+  // Written whole, it stays Latin-1 while the new text fits.
+  QVERIFY(!call(writeFileTool(), {{"path", "latin.txt"}, {"content", QString::fromUtf8("th\u00e9\n")}}).isError);
+  QCOMPARE(bytes("latin.txt"), QByteArray("th\xE9\n"));
+
+  // A byte order mark stays where it was.
+  put("marked.txt", QByteArray("\xEF\xBB\xBFx = 1\n"));
+  const ToolResult edited = call(editFileTool(), {{"path", "marked.txt"}, {"old_string", "x = 1"}, {"new_string", "x = 2"}});
+  QVERIFY2(!edited.isError, qPrintable(edited.content));
+  QCOMPARE(bytes("marked.txt"), QByteArray("\xEF\xBB\xBFx = 2\n"));
+
+  put("plain.txt", QString("na\u00efve = 1\n").toUtf8());
+  QVERIFY(!call(editFileTool(), {{"path", "plain.txt"}, {"old_string", "= 1"}, {"new_string", "= 2"}}).isError);
+  QCOMPARE(bytes("plain.txt"), QString("na\u00efve = 2\n").toUtf8());
 }
 
 void TestTools::bashKeepsTheEndOfLongOutput() {

@@ -18,7 +18,8 @@ QString runLaterReason(const QString& rel);
 // Git folders are in it too (".git", "vendor/lib/.git"), by their config and hooks.
 QMap<QString, QString> snapshotRunLater(const QString& cwd);
 
-QString hashText(const QString& text);
+// The fingerprint a snapshot has for a file with this content.
+QString hashBytes(const QByteArray& content);
 
 struct RunLaterChange {
   QString rel;

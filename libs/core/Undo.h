@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QByteArray>
 #include <QMap>
 #include <QMutex>
 #include <QSet>
@@ -18,14 +19,14 @@ class Checkpoint {
 public:
   struct FileChange {
     // Content before the turn's first change; nullopt if the file didn't exist.
-    std::optional<QString> before;
+    std::optional<QByteArray> before;
     // Content after the turn's last change.
-    std::optional<QString> after;
+    std::optional<QByteArray> after;
   };
 
   // Call before writing `file`; remembers its content the first time.
   void beforeWrite(const QString& file);
-  void afterWrite(const QString& file, const QString& content);
+  void afterWrite(const QString& file, const QByteArray& content);
   void addUntracked(const QString& tool);
 
   QMap<QString, FileChange> files() const;
@@ -46,7 +47,7 @@ struct RestoreResult {
 // Puts files back as they were before the checkpoint, leaving alone any file changed since.
 RestoreResult restore(const Checkpoint& checkpoint);
 
-// A file's text, or nullopt if it doesn't exist.
-std::optional<QString> readOrNull(const QString& file);
+// A file's bytes, or nullopt if it doesn't exist.
+std::optional<QByteArray> readOrNull(const QString& file);
 
 } // namespace Smith

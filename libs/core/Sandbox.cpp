@@ -214,7 +214,7 @@ public:
     return SpawnSpec{file, args, sandboxEnv(ENV_ALLOW, m_extraEnv), chdir.isEmpty() ? project : chdir, {}};
   }
 
-  QString readFile(const QString& file, const QString&) override {
+  QByteArray readBytes(const QString& file, const QString&) override {
     QFileInfo info(file);
     if (!info.exists()) {
       throw SmithError(QString("ENOENT: no such file or directory, open '%1'").arg(file), "ENOENT");
@@ -226,16 +226,16 @@ public:
     if (!handle.open(QIODevice::ReadOnly)) {
       throw SmithError(QString("EACCES: permission denied, open '%1'").arg(file), "EACCES");
     }
-    return utf8(handle.readAll());
+    return handle.readAll();
   }
 
-  void writeFile(const QString& file, const QString& content, const QString&) override {
+  void writeBytes(const QString& file, const QByteArray& content, const QString&) override {
     QDir().mkpath(QFileInfo(file).path());
     // Written beside the file and renamed over it, so a crash can't leave half of it.
     QSaveFile handle(file);
     // Where the folder isn't writable but the file is, write in place.
     handle.setDirectWriteFallback(true);
-    if (!handle.open(QIODevice::WriteOnly) || handle.write(content.toUtf8()) < 0 || !handle.commit()) {
+    if (!handle.open(QIODevice::WriteOnly) || handle.write(content) < 0 || !handle.commit()) {
       throw SmithError(QString("Could not write %1: %2").arg(file, handle.errorString()), "EACCES");
     }
   }
@@ -318,10 +318,10 @@ public:
     return bwrap(file, args, project, chdir, false);
   }
 
-  QString readFile(const QString& file, const QString& project) override {
+  QByteArray readBytes(const QString& file, const QString& project) override {
     const ProcessResult result = runProcess(programSpec("cat", {"--", file}, project, {}));
     if (result.started && result.exitCode == 0) {
-      return utf8(result.out);
+      return result.out;
     }
     const QString stderrText = result.started ? utf8(result.err) : result.startError;
     SmithError error = fileError(stderrText, file, "open");
@@ -332,10 +332,10 @@ public:
     throw error;
   }
 
-  void writeFile(const QString& file, const QString& content, const QString& project) override {
+  void writeBytes(const QString& file, const QByteArray& content, const QString& project) override {
     const QString script = R"SH(mkdir -p -- "$(dirname -- "$1")" && cat > "$1")SH";
     RunOptions options;
-    options.input = content.toUtf8();
+    options.input = content;
     const ProcessResult result = runProcess(programSpec("bash", {"-c", script, "bash", file}, project, {}), options);
     if (!result.started || result.exitCode != 0) {
       throw fileError(result.started ? utf8(result.err) : result.startError, file, "write");
@@ -494,6 +494,14 @@ private:
 } // namespace
 
 const QRegularExpression PROXY_VARS("^(HTTP_PROXY|HTTPS_PROXY|NO_PROXY|ALL_PROXY|http_proxy|https_proxy|no_proxy|all_proxy)$");
+
+QString Sandbox::readFile(const QString& file, const QString& project) {
+  return utf8(readBytes(file, project));
+}
+
+void Sandbox::writeFile(const QString& file, const QString& content, const QString& project) {
+  writeBytes(file, content.toUtf8(), project);
+}
 
 QStringList Sandbox::readOnlyPaths() const {
   QMutexLocker lock(&m_mutex);

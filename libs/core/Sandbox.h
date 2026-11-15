@@ -95,9 +95,13 @@ public:
   // How to run a program directly (no shell), starting in `chdir` (default: the project). No network.
   virtual SpawnSpec programSpec(const QString& file, const QStringList& args, const QString& project, const QString& chdir = {}) = 0;
   // Reads a file as commands see it. Throws SmithError with a code (ENOENT, EISDIR, ...).
-  virtual QString readFile(const QString& file, const QString& project) = 0;
+  virtual QByteArray readBytes(const QString& file, const QString& project) = 0;
+  // The same, as UTF-8 text; bytes that aren't UTF-8 come out as U+FFFD.
+  QString readFile(const QString& file, const QString& project);
   // Writes a file, creating its folder; only where commands could write it.
-  virtual void writeFile(const QString& file, const QString& content, const QString& project) = 0;
+  virtual void writeBytes(const QString& file, const QByteArray& content, const QString& project) = 0;
+  // The same, for text, as UTF-8.
+  void writeFile(const QString& file, const QString& content, const QString& project);
   // See SandboxPath; nullopt for ordinary paths.
   virtual std::optional<SandboxPath> sandboxPath(const QString& path, const QString& project) = 0;
   // What the model should know about where its commands run, for the system prompt.

@@ -1,5 +1,4 @@
 #include "core/Undo.h"
-#include "compat/Utf8.h"
 
 #include <QFile>
 #include <QFileInfo>
@@ -7,12 +6,12 @@
 
 namespace Smith {
 
-std::optional<QString> readOrNull(const QString& file) {
+std::optional<QByteArray> readOrNull(const QString& file) {
   QFile handle(file);
   if (!handle.exists() || !handle.open(QIODevice::ReadOnly)) {
     return std::nullopt;
   }
-  return utf8(handle.readAll());
+  return handle.readAll();
 }
 
 void Checkpoint::beforeWrite(const QString& file) {
@@ -22,7 +21,7 @@ void Checkpoint::beforeWrite(const QString& file) {
   }
 }
 
-void Checkpoint::afterWrite(const QString& file, const QString& content) {
+void Checkpoint::afterWrite(const QString& file, const QByteArray& content) {
   QMutexLocker lock(&m_mutex);
   if (m_files.contains(file)) {
     m_files[file].after = content;
@@ -55,15 +54,15 @@ RestoreResult restore(const Checkpoint& checkpoint) {
       result.skipped << file;
       continue;
     }
+    bool done = false;
     if (!it.value().before) {
-      QFile::remove(file);
+      done = QFile::remove(file);
     } else {
       QFile handle(file);
-      if (handle.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        handle.write(it.value().before->toUtf8());
-      }
+      done = handle.open(QIODevice::WriteOnly | QIODevice::Truncate) && handle.write(*it.value().before) >= 0;
     }
-    result.restored << file;
+    // One that couldn't be put back is left as it is, and said so.
+    (done ? result.restored : result.skipped) << file;
   }
   return result;
 }
