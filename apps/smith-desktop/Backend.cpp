@@ -273,11 +273,46 @@ void Backend::submit(const QString& value) {
           m_transcript.append(Entry::simple(Entry::Kind::Quote, INTERRUPTED));
         }
         refreshSessions();
+        // The next queued task, if this one went well; else they wait in the input box.
+        QStringList putBack;
+        if (const std::optional<QString> next = m_turns.afterTurn(putBack)) {
+          QMetaObject::invokeMethod(this, [this, task = *next]() { submit(task); }, Qt::QueuedConnection);
+          return;
+        }
+        if (!putBack.isEmpty()) {
+          notice(NoticeLevel::Warn, putBackText(putBack.size()));
+          Q_EMIT appendInput(putBack.join("\n\n"));
+        }
         if (planning && turn.reason == "stop" && m_pAgent->planning()) {
           Q_EMIT openPicker("plan");
         }
       },
       true);
+}
+
+void Backend::queueNext(const QString& value) {
+  const QString text = value.trimmed();
+  if (text.isEmpty() || !agentRunning()) {
+    return;
+  }
+  if (text.startsWith('/')) {
+    notice(NoticeLevel::Warn, "Commands can't be queued. Yours is still in the input box, for when the agent is done.");
+    Q_EMIT restoreInput(value);
+    return;
+  }
+  m_turns.queueNext(text);
+}
+
+void Backend::editNext(int index) {
+  if (index >= 0 && index < m_turns.nextTasks().size()) {
+    Q_EMIT appendInput(m_turns.takeNext(index));
+  }
+}
+
+void Backend::dropNext(int index) {
+  if (index >= 0 && index < m_turns.nextTasks().size()) {
+    m_turns.takeNext(index);
+  }
 }
 
 void Backend::runTurn(const QString& activity, std::function<void(const CancelPtr&)> work, std::function<void()> then, bool timed) {

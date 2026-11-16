@@ -20,6 +20,35 @@ void TurnRunner::forgetContext() {
   m_limit.reset();
 }
 
+void TurnRunner::queueNext(const QString& task) {
+  m_next << task;
+  Q_EMIT changed();
+}
+
+QString TurnRunner::takeNext(int index) {
+  if (m_next.isEmpty()) {
+    return {};
+  }
+  const QString task = m_next.takeAt(index < 0 || index >= m_next.size() ? m_next.size() - 1 : index);
+  Q_EMIT changed();
+  return task;
+}
+
+std::optional<QString> TurnRunner::afterTurn(QStringList& putBack) {
+  if (m_next.isEmpty()) {
+    return std::nullopt;
+  }
+  if (m_last.reason == "stop") {
+    const QString task = m_next.takeFirst();
+    Q_EMIT changed();
+    return task;
+  }
+  putBack = m_next;
+  m_next.clear();
+  Q_EMIT changed();
+  return std::nullopt;
+}
+
 std::optional<qint64> TurnRunner::elapsed() const {
   return m_timed ? std::optional<qint64>(m_clock.elapsed()) : std::nullopt;
 }
@@ -255,6 +284,11 @@ QString usageText(const TurnUsage& usage) {
     text += QString(" · %1 tok/s").arg(*speed < 10 ? QString::number(*speed, 'f', 1) : QString::number(std::lround(*speed)));
   }
   return text;
+}
+
+QString putBackText(int count) {
+  return count == 1 ? QString("Your queued task wasn't started, so it's back in the input box.")
+                    : QString("Your %1 queued tasks weren't started, so they're back in the input box, one after another.").arg(count);
 }
 
 QList<Entry> changesEntries(const SessionChanges& changes, const QString& cwd) {

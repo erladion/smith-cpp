@@ -114,6 +114,7 @@ ApplicationWindow {
     Connections {
         target: Backend
         function onRestoreInput(text) { composer.setText(text) }
+        function onAppendInput(text) { composer.appendText(text) }
         function onOpenPicker(kind) { window.openPicker(kind) }
         function onRedPill() { redPill.visible = true }
         function onConfirmDrop(path) { sidebar.askDrop(path) }

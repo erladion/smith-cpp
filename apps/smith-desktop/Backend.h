@@ -53,6 +53,8 @@ class Backend : public QObject {
   Q_PROPERTY(qint64 turnStartedAt READ turnStartedAt NOTIFY changed)
   Q_PROPERTY(QVariantList todos READ todos NOTIFY changed)
   Q_PROPERTY(QStringList queued READ queued NOTIFY changed)
+  // Tasks queued with tab while the agent works, each to start once the one before it is done.
+  Q_PROPERTY(QStringList nextTasks READ nextTasks NOTIFY changed)
   Q_PROPERTY(QVariantMap approval READ approval NOTIFY promptChanged)
   Q_PROPERTY(QVariantMap question READ question NOTIFY promptChanged)
 
@@ -121,6 +123,7 @@ public:
   qint64 turnStartedAt() const { return m_turns.startedAt(); }
   QVariantList todos() const;
   QStringList queued() const;
+  QStringList nextTasks() const { return m_turns.nextTasks(); }
   QVariantMap approval() const;
   QVariantMap question() const;
 
@@ -162,6 +165,11 @@ public:
   // A message for the agent, or a slash command. While the agent works, a message is queued.
   Q_INVOKABLE void submit(const QString& text);
   Q_INVOKABLE void interrupt();
+  // Tab while the agent works: `text` starts as a turn of its own once this one is done.
+  Q_INVOKABLE void queueNext(const QString& text);
+  // Takes a queued task back into the input box, or drops it.
+  Q_INVOKABLE void editNext(int index);
+  Q_INVOKABLE void dropNext(int index);
   // "allow", "always", "deny" or "interrupt" (deny and stop the turn).
   Q_INVOKABLE void decide(const QString& decision);
   Q_INVOKABLE void answerOption(int index);
@@ -221,6 +229,8 @@ Q_SIGNALS:
   void sessionsChanged();
   // Text to put back in the input box (an undone turn, or queued messages that weren't delivered).
   void restoreInput(const QString& text);
+  // Text to add to what's in the input box (queued tasks that didn't start).
+  void appendInput(const QString& text);
   // A command wants a picker: "model", "endpoint", "reasoning", "theme", "sessions", "folder", "jobs", "skills", "plan".
   void openPicker(const QString& kind);
   // /redpill.

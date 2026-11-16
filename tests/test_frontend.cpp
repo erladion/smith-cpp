@@ -39,6 +39,7 @@ private Q_SLOTS:
   void turnsAddUpTheirTokens();
   void changesListEachFile();
   void fileIndexListsInTheBackground();
+  void queuedTasksStartAfterAGoodTurn();
 };
 
 #ifndef Q_MOC_RUN
@@ -476,6 +477,39 @@ void TestFrontend::fileIndexListsInTheBackground() {
   // Destroyed while listing: it waits for the thread.
   FileIndex leaving;
   leaving.files(one.path());
+}
+
+void TestFrontend::queuedTasksStartAfterAGoodTurn() {
+  TurnRunner turns;
+  auto turn = [&](DoneReason reason) {
+    bool finished = false;
+    turns.runTurn(
+        "Thinking…", {}, [](const CancelPtr&) {}, [&](const QString&) { finished = true; }, true);
+    turns.apply(Event::Done{reason});
+    QTRY_VERIFY(finished);
+  };
+  QStringList putBack;
+  turn(DoneReason::Stop);
+  QVERIFY(!turns.afterTurn(putBack));
+  QVERIFY(putBack.isEmpty());
+
+  turns.queueNext("one");
+  turns.queueNext("two");
+  turns.queueNext("three");
+  // The last one back, to change it.
+  QCOMPARE(turns.takeNext(), QString("three"));
+  QCOMPARE(turns.nextTasks(), QStringList({"one", "two"}));
+  // A turn that ended well starts the next, one at a time.
+  turn(DoneReason::Stop);
+  QCOMPARE(turns.afterTurn(putBack), std::optional<QString>("one"));
+  QCOMPARE(turns.nextTasks(), QStringList({"two"}));
+  // One that didn't (interrupted, cut off, stopped at the step limit) starts nothing: they all go back.
+  turns.queueNext("four");
+  turn(DoneReason::Interrupted);
+  QVERIFY(!turns.afterTurn(putBack));
+  QCOMPARE(putBack, QStringList({"two", "four"}));
+  QVERIFY(turns.nextTasks().isEmpty());
+  QCOMPARE(putBackText(2), QString("Your 2 queued tasks weren't started, so they're back in the input box, one after another."));
 }
 
 #endif

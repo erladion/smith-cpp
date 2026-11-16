@@ -106,12 +106,13 @@ Type these in the input box of either app. Tab completes them, and their argumen
 
 | Key | Terminal | Desktop |
 |---|---|---|
-| enter | Send. While the agent works, it queues the message. | Same. |
+| enter | Send. While the agent works, it adds the message to what the agent is doing, at its next step. | Same. |
 | shift+enter | New line (so do `\` then enter, and ctrl+j). | New line. |
 | esc | Interrupt the agent. | Same. |
 | shift+tab | Switch plan mode. | Same, in the input box. |
 | ↑ / ↓ | Recall earlier input. | |
-| tab | Complete a slash command, or the file after `@`. | Same. |
+| tab | Complete a slash command, or the file after `@`. While the agent works, queue the text as the next task. | Same. |
+| ↑ (agent working, empty box) | Take the last queued task back to change it. | Click a queued task; × drops it. |
 | ctrl+c | Quit. | |
 | ctrl+n / ctrl+o / ctrl+k | | New session / open a folder / pick a model. |
 | ctrl+b | | Show or hide the sidebar. |
@@ -402,6 +403,11 @@ commands can't be undone; Smith says which.
   every message you send tells it so. When it's done, Smith asks whether to carry out the plan.
   Yes switches plan mode off and tells the agent to go ahead. Esc (or "Keep planning") stays in
   plan mode, so you can say what to change.
+- **Queued tasks.** While the agent works, enter adds what you type to the current task, and tab
+  queues it as the next one instead. Queued tasks show under the input and start one by one, each
+  as a turn of its own, once the one before it finishes. If a turn is interrupted, fails or stops
+  short (the step limit, a cut-off answer), nothing more starts: the queued tasks go back into the
+  input box, so you can see what happened first. Commands can't be queued.
 - **What changed.** `/diff` (the desktop's "Changes" button) shows every file the agent changed
   in this session, compared with how it was before the agent first touched it: created, changed
   or deleted, with the whole diff. Files that are back as they were (after `/undo`, say) aren't

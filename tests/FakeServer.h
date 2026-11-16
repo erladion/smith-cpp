@@ -30,6 +30,8 @@ public:
     // An error response with this status and "error" object.
     int status = 0;
     QJsonObject error;
+    // Waits this long before answering, like a slow model.
+    int delayMs = 0;
   };
 
   static Reply stream(const QList<QJsonObject>& deltas, const QString& finish) {
@@ -48,6 +50,12 @@ public:
     Reply reply = streamed;
     reply.split = true;
     return reply;
+  }
+
+  static Reply delayed(const Reply& reply, int ms) {
+    Reply slow = reply;
+    slow.delayMs = ms;
+    return slow;
   }
 
   static Reply plain(const QString& content) {
@@ -187,6 +195,9 @@ private:
     if (exhausted) {
       respond(socket, 500, R"({"error":{"message":"fake server: script exhausted"}})");
       return;
+    }
+    if (reply.delayMs > 0) {
+      QThread::msleep(reply.delayMs);
     }
     if (reply.status) {
       respond(socket, reply.status, QJsonDocument(QJsonObject{{"error", reply.error}}).toJson(QJsonDocument::Compact));

@@ -126,8 +126,18 @@ QList<Line> App::liveLines() {
       }
       lines.append(Line{Span{"  queued: the agent gets this at its next step", Style{.dim = true, .italic = true}}});
     }
+    const QStringList next = m_turns.nextTasks();
+    if (!next.isEmpty()) {
+      lines.append(Line{});
+      for (int i = 0; i < next.size(); i++) {
+        lines.append(prefixed(Line{Span{QString("%1. ").arg(i + 1), fg(Color::Yellow)}}, Line{Span{"   ", {}}}, Line{Span{next[i], DIM}}, w));
+      }
+      lines.append(Line{Span{QString("  next: %1 when this one is done · ↑ takes the last back")
+                                 .arg(next.size() == 1 ? QString("starts") : QString("they start one by one")),
+                             Style{.dim = true, .italic = true}}});
+    }
     const bool planning = m_pAgent->planning();
-    const QString placeholder = m_turns.busy() ? "Type to add to what the agent is doing (enter queues it)"
+    const QString placeholder = m_turns.busy() ? "Add to what the agent is doing (enter), or queue the next task (tab)"
                                 : planning     ? "Ask for a plan: the agent reads, changes nothing (shift+tab ends plan mode)"
                                                : "Ask for something, or /help";
     const QList<Line> prompt = prefixed(Line{Span{"› ", fg(planning ? Color::Blue : Color::Cyan)}}, Line{Span{"  ", {}}}, m_editor.render(placeholder), w - 4);

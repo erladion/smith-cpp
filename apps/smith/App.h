@@ -133,6 +133,8 @@ private:
   QList<Suggestion> currentSuggestions() const;
   void onKey(const Tui::Key& key);
   void queueMessage(const QString& value);
+  // Tab while the agent works: `value` starts as a turn of its own once this one is done.
+  void queueNext(const QString& value);
   void submit(const QString& value);
   void runCommand(const QString& text);
   // Runs an agent turn; `then` follows on the UI thread. A timed turn is one the user sent.

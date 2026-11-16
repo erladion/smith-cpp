@@ -110,7 +110,7 @@ Line statusLine(const Status& status, int width) {
     parts << plural(status.jobs, "background job");
   }
   if (status.busy) {
-    parts << (status.queueing ? "esc to interrupt · enter queues" : "esc to interrupt");
+    parts << (status.queueing ? "esc to interrupt · enter adds · tab queues next" : "esc to interrupt");
   }
   Line line;
   if (status.planning) {

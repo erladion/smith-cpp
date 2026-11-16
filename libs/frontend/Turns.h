@@ -75,6 +75,17 @@ public:
   // Tokens used by the turn under way, or else by the last one.
   const TurnUsage& usage() const { return m_timed ? m_usage : m_last.usage; }
 
+  // Tasks you queued while a turn ran (tab), each to start as a turn of its
+  // own once the one before it is done. The frontend starts them.
+  const QStringList& nextTasks() const { return m_next; }
+  void queueNext(const QString& task);
+  // Removes the queued task at `index` (the last one when -1) and returns it.
+  QString takeNext(int index = -1);
+  // After a timed turn: the task to start now, if the turn ended well and one
+  // is waiting. Otherwise none starts, and `putBack` gets them all, for the
+  // input box: you'll want to look at what happened first.
+  std::optional<QString> afterTurn(QStringList& putBack);
+
   // Takes in an agent event. Returns the transcript entry it adds, if any.
   std::optional<Entry> apply(const AgentEvent& event);
 
@@ -124,11 +135,15 @@ private:
   QString m_reason;
   TurnUsage m_usage;
   TurnStats m_last;
+  QStringList m_next;
 
   QList<QThread*> m_workers;
   CancelPtr m_pClosing = makeCancel();
   bool m_closed = false;
 };
+
+// Says that `count` queued tasks went back into the input box instead of starting.
+QString putBackText(int count);
 
 // /diff: a line saying what changed, then each changed file with its diff, paths relative to `cwd`.
 QList<Entry> changesEntries(const SessionChanges& changes, const QString& cwd);

@@ -83,6 +83,7 @@ private Q_SLOTS:
   void switchesTheme();
   void plansThenCarriesOut();
   void mentionsAttachFiles();
+  void queuedTasksRunInTurn();
 
 private:
   void shot(const QString& name);
@@ -690,6 +691,43 @@ void TestDesktop::mentionsAttachFiles() {
     told = told || model->data(model->index(i), Desktop::TranscriptModel::TextRole).toString().startsWith("Attached greet.py (");
   }
   QVERIFY(told);
+  QVERIFY2(g_qmlWarnings.isEmpty(), qPrintable(g_qmlWarnings.join('\n')));
+}
+
+void TestDesktop::queuedTasksRunInTurn() {
+  using R = FakeServer;
+  auto* window = qobject_cast<QQuickWindow*>(root());
+  auto* input = root()->findChild<QQuickItem*>("composerInput");
+  m_pFake->setScript({R::delayed(R::text("First done."), 1500), R::text("Second done.")});
+  m_pFake->clearRequests();
+  m_pBackend->submit("first task");
+  QVERIFY(m_pBackend->agentRunning());
+
+  // While it works: tab queues the next task instead of adding to this one.
+  window->requestActivate();
+  input->forceActiveFocus();
+  input->setProperty("text", "second task");
+  QTest::keyClick(window, Qt::Key_Tab);
+  QCOMPARE(m_pBackend->nextTasks(), QStringList({"second task"}));
+  QCOMPARE(input->property("text").toString(), QString());
+  QVERIFY(m_pBackend->queued().isEmpty());
+  QVERIFY(m_pBackend->agentRunning());
+  shot("22-next-task");
+
+  // It starts by itself once the first is done, as a turn of its own.
+  QTRY_VERIFY_WITH_TIMEOUT(m_pFake->requests().size() == 2 && !m_pBackend->busy(), 15000);
+  QCOMPARE(messageText(m_pFake->requests()[1].value("messages").toArray().last().toObject()), QString("second task"));
+  QVERIFY(m_pBackend->nextTasks().isEmpty());
+
+  // After an interrupted turn, what's queued goes back into the input box instead.
+  m_pFake->setScript({R::delayed(R::text("unused"), 1500)});
+  m_pBackend->submit("third task");
+  m_pBackend->queueNext("fourth task");
+  m_pBackend->interrupt();
+  QTRY_VERIFY_WITH_TIMEOUT(!m_pBackend->busy(), 15000);
+  QTRY_COMPARE(input->property("text").toString(), QString("fourth task"));
+  QVERIFY(m_pBackend->nextTasks().isEmpty());
+  input->setProperty("text", "");
   QVERIFY2(g_qmlWarnings.isEmpty(), qPrintable(g_qmlWarnings.join('\n')));
 }
 

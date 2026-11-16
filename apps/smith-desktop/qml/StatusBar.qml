@@ -143,7 +143,7 @@ Rectangle {
         Text {
             textFormat: Text.PlainText
             visible: Backend.busy
-            text: Backend.agentRunning ? "esc interrupts · enter queues" : "working…"
+            text: Backend.agentRunning ? "esc interrupts · enter adds · tab queues next" : "working…"
             color: Theme.textFaint
             font.family: Theme.textFamily
             font.pixelSize: Theme.tinySize

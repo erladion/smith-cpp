@@ -37,7 +37,7 @@ struct Status {
   bool network = false;
   // Working: esc interrupts.
   bool busy = false;
-  // An agent turn is running, so enter queues a message.
+  // An agent turn is running, so enter adds a message to it and tab queues the next task.
   bool queueing = false;
   // Commands running in the background.
   int jobs = 0;

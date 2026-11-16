@@ -336,6 +336,19 @@ void App::queueMessage(const QString& value) {
   m_pAgent->queue(text);
 }
 
+void App::queueNext(const QString& value) {
+  const QString text = value.trimmed();
+  if (text.isEmpty()) {
+    return;
+  }
+  if (text.startsWith('/')) {
+    m_editor.setValue(value);
+    print(Entry::notice(NoticeLevel::Warn, "Commands can't be queued. Yours is still in the input box, for when the agent is done."));
+    return;
+  }
+  m_turns.queueNext(text);
+}
+
 void App::submit(const QString& value) {
   const QString text = value.trimmed();
   if (text.isEmpty()) {
@@ -365,6 +378,17 @@ void App::submit(const QString& value) {
         print(Entry::simple(Entry::Kind::Meta, turnSummary(turn.reason, turn.elapsedMs, turn.toolCalls)));
         if (turn.reason == "interrupted" && matrix()) {
           print(Entry::simple(Entry::Kind::Quote, INTERRUPTED));
+        }
+        // The next queued task, if this one went well; else they wait in the input box.
+        QStringList putBack;
+        if (const std::optional<QString> next = m_turns.afterTurn(putBack)) {
+          QMetaObject::invokeMethod(this, [this, task = *next]() { submit(task); }, Qt::QueuedConnection);
+          return;
+        }
+        if (!putBack.isEmpty()) {
+          const QString typing = m_editor.value().trimmed();
+          m_editor.setValue(((typing.isEmpty() ? QStringList() : QStringList{typing}) + putBack).join("\n\n"));
+          print(Entry::notice(NoticeLevel::Warn, putBackText(putBack.size())));
         }
         if (planning && turn.reason == "stop" && m_pAgent->planning()) {
           offerPlan();

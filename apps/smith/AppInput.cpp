@@ -121,6 +121,11 @@ void App::onKey(const Key& key) {
   if (m_turns.busy()) {
     if (key.name == KeyName::Escape) {
       m_turns.interrupt();
+    } else if (agentRunning() && key.name == KeyName::Tab && !key.shift && !m_editor.value().trimmed().isEmpty()) {
+      queueNext(m_editor.commit());
+    } else if (agentRunning() && key.name == KeyName::Up && m_editor.value().isEmpty() && !m_turns.nextTasks().isEmpty()) {
+      // The last queued task back, to change or drop.
+      m_editor.setValue(m_turns.takeNext());
     } else if (agentRunning() && m_editor.handle(key)) {
       queueMessage(m_editor.commit());
     }

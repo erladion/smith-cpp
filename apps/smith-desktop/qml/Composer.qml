@@ -22,6 +22,18 @@ Rectangle {
         input.cursorPosition = value.length
         input.forceActiveFocus()
     }
+    function appendText(value) {
+        setText(input.text.trim().length > 0 ? input.text.trim() + "\n\n" + value : value)
+    }
+    // Tab while the agent works: the next task, started once this one is done.
+    function queueNext() {
+        const text = input.text
+        if (text.trim().length === 0) {
+            return
+        }
+        input.text = ""
+        Backend.queueNext(text)
+    }
 
     implicitHeight: column.implicitHeight + 20
     color: Theme.surface
@@ -81,6 +93,57 @@ Rectangle {
             }
         }
 
+        // Tasks queued with tab, each started once the one before it is done. Click one to edit it.
+        Repeater {
+            objectName: "nextTasks"
+            model: Backend.nextTasks
+            RowLayout {
+                id: nextRow
+                required property string modelData
+                required property int index
+                Layout.fillWidth: true
+                spacing: 8
+                Text {
+                    textFormat: Text.PlainText
+                    text: (nextRow.index + 1) + "."
+                    color: Theme.warn
+                    font.family: Theme.mono
+                    font.pixelSize: Theme.smallSize
+                }
+                Text {
+                    textFormat: Text.PlainText
+                    Layout.fillWidth: true
+                    text: nextRow.modelData
+                    elide: Text.ElideRight
+                    color: nextHover.hovered ? Theme.text : Theme.textDim
+                    font.family: Theme.textFamily
+                    font.pixelSize: Theme.smallSize
+                    HoverHandler { id: nextHover; cursorShape: Qt.PointingHandCursor }
+                    TapHandler { onTapped: Backend.editNext(nextRow.index) }
+                    SmithToolTip {
+                        visible: nextHover.hovered
+                        text: "Take it back into the input box to change it"
+                    }
+                }
+                Text {
+                    textFormat: Text.PlainText
+                    text: nextRow.index === 0 ? "next, when this is done" : "after that"
+                    color: Theme.textFaint
+                    font.family: Theme.textFamily
+                    font.pixelSize: Theme.tinySize
+                    font.italic: true
+                }
+                Text {
+                    textFormat: Text.PlainText
+                    text: "×"
+                    color: dropHover.hovered ? Theme.error : Theme.textFaint
+                    font.pixelSize: Theme.fontSize
+                    HoverHandler { id: dropHover; cursorShape: Qt.PointingHandCursor }
+                    TapHandler { onTapped: Backend.dropNext(nextRow.index) }
+                }
+            }
+        }
+
         RowLayout {
             Layout.fillWidth: true
             spacing: 10
@@ -105,7 +168,7 @@ Rectangle {
                     objectName: "composerInput"
                     enabled: Backend.state === "ready"
                     wrapMode: TextArea.Wrap
-                    placeholderText: Backend.agentRunning ? "Type to add to what the agent is doing (enter queues it)"
+                    placeholderText: Backend.agentRunning ? "Add to what the agent is doing (enter), or queue the next task (tab)"
                                      : Backend.planning ? "Ask for a plan: the agent reads, changes nothing (shift+tab ends plan mode)"
                                                         : "Ask for something, or type / for commands"
                     placeholderTextColor: Theme.textFaint
@@ -155,6 +218,11 @@ Rectangle {
                                 return
                             }
                         }
+                        if (event.key === Qt.Key_Tab && Backend.agentRunning && input.text.trim().length > 0) {
+                            composer.queueNext()
+                            event.accepted = true
+                            return
+                        }
                         if (event.key === Qt.Key_Backtab) {
                             if (!Backend.busy) {
                                 Backend.setPlanning(!Backend.planning)
@@ -187,7 +255,8 @@ Rectangle {
             SmithButton {
                 Layout.alignment: Qt.AlignBottom
                 visible: !Backend.busy || Backend.agentRunning
-                text: Backend.agentRunning ? (input.text.trim().length > 0 ? "Queue" : "Stop") : "Send"
+                text: Backend.agentRunning ? (input.text.trim().length > 0 ? "Add" : "Stop") : "Send"
+                tip: Backend.agentRunning && input.text.trim().length > 0 ? "Give this to the agent at its next step" : ""
                 kind: Backend.agentRunning && input.text.trim().length === 0 ? "danger" : "primary"
                 keyHint: Backend.agentRunning && input.text.trim().length === 0 ? "esc" : "⏎"
                 enabled: Backend.state === "ready"
