@@ -9,6 +9,8 @@ QtObject {
     readonly property bool matrix: Backend.matrix
     // A light window, whatever the theme is called: hovering darkens instead of lightening.
     readonly property bool light: (Math.max(window.r, window.g, window.b) + Math.min(window.r, window.g, window.b)) / 2 > 0.5
+    // The rain's leading glyphs: a light accent on a dark window, the text color on a light one.
+    readonly property color rainHead: light ? text : Qt.lighter(accent, 1.8)
 
     readonly property color window: p.window
     readonly property color surface: p.surface

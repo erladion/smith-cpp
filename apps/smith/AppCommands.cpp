@@ -85,6 +85,7 @@ void App::runCommand(const QString& text) {
     m_ticker.stop();
     Tui::Rain::Options options;
     options.frames = std::numeric_limits<double>::infinity();
+    options.color = rainColor();
     playRain(options, [this]() {
       // The window may have been resized meanwhile: reprint if so, then redraw.
       reprint();

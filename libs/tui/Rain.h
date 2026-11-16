@@ -11,9 +11,10 @@
 
 namespace Smith::Tui {
 
-// Digital rain: green glyphs falling down the screen, with a title that
-// locks into place where the drops pass through it. One step per frame,
-// drawn to a string (full screen) or to lines (inside other output).
+// Digital rain: glyphs falling down the screen in one color, with a title
+// that locks into place where the drops pass through it. One step per frame,
+// drawn to a string (full screen) or to lines (inside other output). The
+// colors are the palette's (setPalette), so the rain is in the theme's.
 class Rain {
 public:
   struct Options {
@@ -25,6 +26,8 @@ public:
     int holdFrames = 12;
     // For tests: a fixed seed.
     std::optional<quint32> seed;
+    // The drops' color; their heads are White, which a theme makes readable on its background.
+    Color color = Color::Green;
   };
 
   Rain(int cols, int rows, const Options& options);
@@ -44,7 +47,9 @@ public:
   int rows() const { return m_rows; }
 
 private:
-  enum class Shade { None, Head, Bright, Green, Faded, Title };
+  enum class Shade { None, Head, Bright, Body, Faded, Title };
+
+  Style styleOf(Shade shade) const;
 
   struct Drop {
     // Row of the leading glyph; negative while it's still above the screen.
@@ -72,6 +77,7 @@ private:
   double m_frames;
   int m_holdFrames;
   int m_frame = 0;
+  Color m_color;
 };
 
 // `width` columns of a scrolling stream of glyphs with gaps, like code going

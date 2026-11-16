@@ -8,12 +8,6 @@ namespace Smith::Tui {
 
 namespace {
 
-// The 16 basic colors, so the terminal's theme picks the shades.
-const QString HEAD = "\x1b[1;97m";
-const QString BRIGHT = "\x1b[92m";
-const QString GREEN = "\x1b[32m";
-const QString FADED = "\x1b[2;32m";
-const QString TITLE = "\x1b[1;92m";
 const QString RESET = "\x1b[0m";
 
 } // namespace
@@ -32,7 +26,7 @@ const QStringList& rainGlyphs() {
 
 Rain::Rain(int cols, int rows, const Options& options)
     : m_cols(cols), m_rows(rows), m_random(options.seed ? QRandomGenerator(*options.seed) : QRandomGenerator::securelySeeded()),
-      m_frames(options.frames), m_holdFrames(options.holdFrames) {
+      m_frames(options.frames), m_holdFrames(options.holdFrames), m_color(options.color) {
   for (const QChar c : options.title.left(cols)) {
     m_title << QString(c);
   }
@@ -103,6 +97,23 @@ void Rain::step() {
   }
 }
 
+Style Rain::styleOf(Shade shade) const {
+  switch (shade) {
+  case Shade::Head:
+    return Style{.color = Color::White, .bold = true};
+  case Shade::Bright:
+  case Shade::Title:
+    return Style{.color = m_color, .bold = true};
+  case Shade::Body:
+    return fg(m_color);
+  case Shade::Faded:
+    return Style{.color = m_color, .dim = true};
+  case Shade::None:
+    break;
+  }
+  return {};
+}
+
 QString Rain::render() const {
   QString out;
   for (int r = 0; r < m_rows; r++) {
@@ -110,26 +121,7 @@ QString Rain::render() const {
     QString current;
     for (int c = 0; c < m_cols; c++) {
       const auto [shade, ch] = cell(r, c);
-      QString style;
-      switch (shade) {
-      case Shade::Head:
-        style = HEAD;
-        break;
-      case Shade::Bright:
-        style = BRIGHT;
-        break;
-      case Shade::Green:
-        style = GREEN;
-        break;
-      case Shade::Faded:
-        style = FADED;
-        break;
-      case Shade::Title:
-        style = TITLE;
-        break;
-      case Shade::None:
-        break;
-      }
+      const QString style = ansiStyle(styleOf(shade));
       if (style != current) {
         out += RESET + style;
         current = style;
@@ -152,24 +144,7 @@ QList<Line> Rain::lines() const {
         line.last().text += ch;
         continue;
       }
-      Style style;
-      switch (shade) {
-      case Shade::Head:
-        style = Style{.color = Color::White, .bold = true};
-        break;
-      case Shade::Bright:
-      case Shade::Title:
-        style = Style{.color = Color::Green, .bold = true};
-        break;
-      case Shade::Green:
-        style = fg(Color::Green);
-        break;
-      case Shade::Faded:
-        style = Style{.color = Color::Green, .dim = true};
-        break;
-      case Shade::None:
-        break;
-      }
+      const Style style = styleOf(shade);
       line.append(Span{ch, style});
       previous = shade;
     }
@@ -195,7 +170,7 @@ QPair<Rain::Shade, QString> Rain::cell(int r, int c) const {
   if (d < 3) {
     return {Shade::Bright, g};
   }
-  return {d < drop->length * 0.5 ? Shade::Green : Shade::Faded, g};
+  return {d < drop->length * 0.5 ? Shade::Body : Shade::Faded, g};
 }
 
 Rain::Drop Rain::makeDrop(double spread) {

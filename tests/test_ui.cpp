@@ -2,6 +2,8 @@
 
 #include "TestUtil.h"
 
+#include <QSet>
+
 #include "core/Agent.h"
 #include "tui/Editor.h"
 #include "tui/Keys.h"
@@ -86,6 +88,7 @@ private Q_SLOTS:
   void everyFrameFillsTheScreen();
   void titleAppearsAndCenters();
   void rainStripIsEndless();
+  void rainTakesTheThemesColors();
   void codeStreamScrolls();
   void statusLineHasCodeStream();
 
@@ -675,6 +678,35 @@ void TestUi::rainStripIsEndless() {
   }
   QVERIFY2(!strip.done(), "an endless rain never finishes");
   QVERIFY2(lit > 0, "it rains");
+}
+
+void TestUi::rainTakesTheThemesColors() {
+  // Light's rain: its blue drops, and heads in its text color so they show on white.
+  setPalette(Ui::terminalPalette(Theme::Light));
+  setColorDepth(ColorDepth::TrueColor);
+  Rain::Options options;
+  options.frames = std::numeric_limits<double>::infinity();
+  options.seed = 3;
+  options.color = Color::Blue;
+  Rain rain(40, 12, options);
+  QString frames;
+  QSet<int> colors;
+  for (int i = 0; i < 40; i++) {
+    rain.step();
+    frames += rain.render();
+    for (const Line& line : rain.lines()) {
+      for (const Span& span : line) {
+        colors.insert(int(span.style.color));
+      }
+    }
+  }
+  QVERIFY2(frames.contains("38;2;9;105;218"), "drops in light's blue");
+  QVERIFY2(frames.contains("38;2;31;35;40"), "heads in light's text color");
+  QVERIFY2(!frames.contains(";32m") && !frames.contains("92m"), "not the terminal's green");
+  colors.remove(int(Color::None));
+  QCOMPARE(colors, QSet<int>({int(Color::Blue), int(Color::White)}));
+  setPalette({});
+  setColorDepth(detectColorDepth());
 }
 
 void TestUi::codeStreamScrolls() {

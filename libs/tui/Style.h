@@ -64,5 +64,7 @@ int nearestIndexed(Rgb rgb);
 
 // Renders a line as terminal output. Span text is sanitized, so it can't inject escape codes.
 QString toAnsi(const Line& line);
+// The escape code that starts text in `style` (empty for none), in the palette's shades.
+QString ansiStyle(const Style& style);
 
 } // namespace Smith::Tui

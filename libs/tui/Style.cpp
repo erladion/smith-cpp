@@ -150,6 +150,10 @@ int nearestIndexed(Rgb rgb) {
   return best;
 }
 
+QString ansiStyle(const Style& style) {
+  return sgr(style);
+}
+
 QString toAnsi(const Line& line) {
   QString out;
   for (const Span& span : line) {

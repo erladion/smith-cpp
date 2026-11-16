@@ -110,6 +110,8 @@ private:
   void exitApp();
   void restoreTerminal();
   bool matrix() const;
+  // The rain's color: matrix's green, else the accent's blue (both the theme's shades).
+  Tui::Color rainColor() const;
   bool streaming() const;
   int width() const;
   bool prompting() const;

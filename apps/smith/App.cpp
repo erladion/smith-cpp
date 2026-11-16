@@ -106,7 +106,10 @@ void App::run() {
     render();
   };
   if (matrix() && Tui::colorsEnabled()) {
-    playRain(Tui::Rain::Options{"AGENT SMITH"}, start);
+    Tui::Rain::Options rain;
+    rain.title = "AGENT SMITH";
+    rain.color = rainColor();
+    playRain(rain, start);
   } else {
     start();
   }
@@ -294,6 +297,10 @@ void App::exitApp() {
 
 bool App::matrix() const {
   return m_options.theme.base == Theme::Matrix;
+}
+
+Tui::Color App::rainColor() const {
+  return matrix() ? Tui::Color::Green : Tui::Color::Blue;
 }
 
 bool App::streaming() const {

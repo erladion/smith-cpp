@@ -224,7 +224,7 @@ ApplicationWindow {
             running: redPill.visible
             glyphSize: 18
             fontFamily: Theme.mono
-            headColor: "#eafff0"
+            headColor: Theme.rainHead
             brightColor: Theme.accent
             color: Theme.accentSoft
             fadedColor: Theme.borderStrong
