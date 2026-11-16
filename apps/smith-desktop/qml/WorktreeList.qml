@@ -42,9 +42,10 @@ ColumnLayout {
                     taskName.forceActiveFocus()
                 }
             }
-            ToolTip.visible: addHover.hovered
-            ToolTip.text: "A worktree for a task: the agent works on its own branch while you keep working here"
-            ToolTip.delay: 600
+            SmithToolTip {
+                visible: addHover.hovered
+                text: "A worktree for a task: the agent works on its own branch while you keep working here"
+            }
         }
     }
 

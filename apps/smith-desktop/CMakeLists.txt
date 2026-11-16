@@ -37,6 +37,7 @@ set(SMITH_DESKTOP_QML
   qml/QuestionPanel.qml
   qml/Sidebar.qml
   qml/SmithButton.qml
+  qml/SmithToolTip.qml
   qml/Spinner.qml
   qml/Splash.qml
   qml/StatusBar.qml

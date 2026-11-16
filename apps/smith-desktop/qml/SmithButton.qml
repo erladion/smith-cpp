@@ -19,9 +19,10 @@ Button {
     hoverEnabled: true
     focusPolicy: Qt.NoFocus
 
-    ToolTip.visible: tip.length > 0 && hovered
-    ToolTip.text: tip
-    ToolTip.delay: 600
+    SmithToolTip {
+        visible: control.tip.length > 0 && control.hovered
+        text: control.tip
+    }
 
     contentItem: Row {
         spacing: 8

@@ -48,8 +48,11 @@ Rectangle {
             font.family: Theme.mono
             font.pixelSize: Theme.tinySize
             font.bold: true
-            ToolTip.visible: branchHover.hovered
-            ToolTip.text: "A task worktree: the agent's changes stay on this branch until you land them"
+            SmithToolTip {
+                visible: branchHover.hovered
+                delay: 0
+                text: "A task worktree: the agent's changes stay on this branch until you land them"
+            }
             HoverHandler { id: branchHover }
         }
 
@@ -60,8 +63,11 @@ Rectangle {
             color: Backend.sandboxActive ? Theme.added : Theme.error
             font.family: Theme.mono
             font.pixelSize: Theme.tinySize
-            ToolTip.visible: sandboxHover.hovered
-            ToolTip.text: Backend.sandboxDescription
+            SmithToolTip {
+                visible: sandboxHover.hovered
+                delay: 0
+                text: Backend.sandboxDescription
+            }
             HoverHandler { id: sandboxHover }
         }
 

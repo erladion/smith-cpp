@@ -13,7 +13,9 @@
 #include "Backend.h"
 #include "Window.h"
 
+#include <QFont>
 #include <QGuiApplication>
+#include <functional>
 #include <QQmlApplicationEngine>
 #include <QQuickItem>
 #include <QQuickItemGrabResult>
@@ -73,6 +75,7 @@ private Q_SLOTS:
   void switchesSessions();
   void deletesAnotherSession();
   void landsATaskWorktree();
+  void tooltipsFollowTheTheme();
   void switchesTheme();
 
 private:
@@ -356,6 +359,40 @@ void TestDesktop::landsATaskWorktree() {
   shot("12-removed");
 }
 
+void TestDesktop::tooltipsFollowTheTheme() {
+  // Hovered as you would: the Compact button's tooltip, in the theme's colors and small text.
+  auto* window = qobject_cast<QQuickWindow*>(root());
+  QQuickItem* compact = nullptr;
+  std::function<void(QQuickItem*)> find = [&](QQuickItem* item) {
+    if (!compact && item->property("tip").toString().startsWith("Summarize")) {
+      compact = item;
+    }
+    for (QQuickItem* child : item->childItems()) {
+      find(child);
+    }
+  };
+  find(window->contentItem());
+  QVERIFY(compact);
+  QTest::mouseMove(window, compact->mapToScene(QPointF(compact->width() / 2, compact->height() / 2)).toPoint());
+  QObject* tip = nullptr;
+  QTRY_VERIFY((tip = [&]() -> QObject* {
+    for (QObject* candidate : compact->findChildren<QObject*>("smithToolTip")) {
+      if (candidate->property("opened").toBool()) {
+        return candidate;
+      }
+    }
+    return nullptr;
+  }()));
+  auto color = [&](const char* name) { return m_pBackend->palette().value(name).value<QColor>(); };
+  QCOMPARE(tip->property("background").value<QQuickItem*>()->property("color").value<QColor>(), color("surfaceRaised"));
+  QCOMPARE(tip->property("contentItem").value<QQuickItem*>()->property("color").value<QColor>(), color("text"));
+  QCOMPARE(tip->property("font").value<QFont>().pixelSize(), 12);
+  shot("13-tooltip");
+  QTest::mouseMove(window, QPoint(5, window->height() - 5));
+  QTRY_VERIFY(!tip->property("visible").toBool());
+  QVERIFY2(g_qmlWarnings.isEmpty(), qPrintable(g_qmlWarnings.join('\n')));
+}
+
 void TestDesktop::switchesTheme() {
   const QString before = m_pBackend->theme();
   // From another theme, when the run is already light (SMITH_TEST_THEME=light).
@@ -385,7 +422,7 @@ void TestDesktop::switchesTheme() {
   QCOMPARE(item(0)->property("text").toString(), QString("Theme…"));
   auto textColor = [&](int index) { return item(index)->property("contentItem").value<QQuickItem*>()->property("color").value<QColor>(); };
   QCOMPARE(textColor(1), color("text"));
-  shot("13-menu");
+  shot("14-menu");
   QMetaObject::invokeMethod(menu, "close");
 
   // /theme without a name opens the picker; with one it switches now, and is remembered.
@@ -402,7 +439,7 @@ void TestDesktop::switchesTheme() {
   QCOMPARE(textColor(1), color("text"));
   QCOMPARE(loadPreferences().theme, QString("light"));
   QTRY_VERIFY(!picker->property("visible").toBool());
-  shot("14-light");
+  shot("15-light");
 
   // A theme file of yours: listed in the picker, and its colors over its base's.
   write(m_pHome->file("config/smith/themes/night.json"), R"({"description": "Easy at night", "base": "plain", "colors": {"accent": "#ff8800"}})");

@@ -110,9 +110,10 @@ Rectangle {
             border.color: Theme.border
             HoverHandler { id: netHover; cursorShape: Qt.PointingHandCursor }
             TapHandler { onTapped: if (!Backend.busy) Backend.setNetwork(!Backend.network) }
-            ToolTip.visible: netHover.hovered
-            ToolTip.text: Backend.network ? "Sandboxed commands can use the network" : "Sandboxed commands have no network"
-            ToolTip.delay: 600
+            SmithToolTip {
+                visible: netHover.hovered
+                text: Backend.network ? "Sandboxed commands can use the network" : "Sandboxed commands have no network"
+            }
             Row {
                 id: netRow
                 anchors.centerIn: parent
