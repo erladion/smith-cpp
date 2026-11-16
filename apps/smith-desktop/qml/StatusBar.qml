@@ -3,8 +3,8 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import Smith.Desktop 1.0
 
-// The bottom line: where commands run, how full the context is, background
-// jobs, and (matrix theme, idle) a slow stream of glyphs at the right end.
+// The bottom line: plan mode, where commands run, how full the context is,
+// the turn's tokens, background jobs, and (matrix theme, idle) a slow stream of glyphs at the right end.
 Rectangle {
     id: bar
 
@@ -39,6 +39,16 @@ Rectangle {
         anchors.leftMargin: 14
         anchors.rightMargin: 14
         spacing: 14
+
+        Text {
+            textFormat: Text.PlainText
+            visible: Backend.planning
+            text: "plan mode"
+            color: Theme.accent
+            font.family: Theme.mono
+            font.pixelSize: Theme.tinySize
+            font.bold: true
+        }
 
         Text {
             textFormat: Text.PlainText
@@ -99,6 +109,23 @@ Rectangle {
                 font.pixelSize: Theme.tinySize
                 anchors.verticalCenter: parent.verticalCenter
             }
+        }
+
+        // Tokens of the turn under way, or the last one.
+        Text {
+            objectName: "usageText"
+            textFormat: Text.PlainText
+            visible: Backend.usage.length > 0
+            text: "turn " + Backend.usage
+            color: Theme.textDim
+            font.family: Theme.mono
+            font.pixelSize: Theme.tinySize
+            SmithToolTip {
+                visible: usageHover.hovered
+                delay: 0
+                text: Backend.usageDetail
+            }
+            HoverHandler { id: usageHover }
         }
 
         Text {

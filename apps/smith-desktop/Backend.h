@@ -78,6 +78,11 @@ class Backend : public QObject {
   Q_PROPERTY(QVariantList sessions READ sessions NOTIFY sessionsChanged)
   Q_PROPERTY(QVariantList recentProjects READ recentProjects NOTIFY sessionsChanged)
   Q_PROPERTY(bool canUndo READ canUndo NOTIFY changed)
+  // Plan mode: the agent reads and plans but changes nothing.
+  Q_PROPERTY(bool planning READ planning NOTIFY changed)
+  // Tokens of the turn under way or the last one: "12k in · 845 out · 34 tok/s", and the same at length.
+  Q_PROPERTY(QString usage READ usage NOTIFY changed)
+  Q_PROPERTY(QString usageDetail READ usageDetail NOTIFY changed)
   // The branch, when the project is a task worktree.
   Q_PROPERTY(QString worktreeBranch READ worktreeBranch NOTIFY changed)
   // Whether the project is in a git repository (so task worktrees can be made).
@@ -140,6 +145,9 @@ public:
   QVariantList sessions() const { return m_sessions; }
   QVariantList recentProjects() const;
   bool canUndo() const;
+  bool planning() const;
+  QString usage() const { return usageText(m_turns.usage()); }
+  QString usageDetail() const;
   QString worktreeBranch() const { return m_project.worktreeBranch; }
   bool inRepository() const { return m_inRepository; }
   QVariantList worktrees() const { return m_worktrees; }
@@ -161,6 +169,12 @@ public:
   Q_INVOKABLE void refreshModels();
   Q_INVOKABLE void setNetwork(bool on);
   Q_INVOKABLE void undo();
+  // /plan on and off.
+  Q_INVOKABLE void setPlanning(bool on);
+  // After a turn in plan mode: plan mode off, and the agent starts on the plan.
+  Q_INVOKABLE void carryOutPlan();
+  // /diff: what the agent changed in files this session, into the transcript.
+  Q_INVOKABLE void showChanges();
   Q_INVOKABLE void compact();
   Q_INVOKABLE void newSession(const QString& folder = {});
   Q_INVOKABLE void openSession(const QString& id);
@@ -202,7 +216,7 @@ Q_SIGNALS:
   void sessionsChanged();
   // Text to put back in the input box (an undone turn, or queued messages that weren't delivered).
   void restoreInput(const QString& text);
-  // A command wants a picker: "model", "endpoint", "reasoning", "theme", "sessions", "folder", "jobs", "skills".
+  // A command wants a picker: "model", "endpoint", "reasoning", "theme", "sessions", "folder", "jobs", "skills", "plan".
   void openPicker(const QString& kind);
   // /redpill.
   void redPill();

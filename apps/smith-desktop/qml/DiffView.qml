@@ -8,6 +8,8 @@ Rectangle {
 
     property var rows: []
     property int maxLines: 40
+    // Says how many lines are left out; off when the user can expand it instead.
+    property bool moreHint: true
 
     readonly property int numberWidth: {
         let largest = 1
@@ -61,7 +63,7 @@ Rectangle {
 
         Text {
             textFormat: Text.PlainText
-            visible: view.rows.length > view.maxLines
+            visible: view.moreHint && view.rows.length > view.maxLines
             text: "… " + (view.rows.length - view.maxLines) + " more diff lines"
             color: Theme.textFaint
             font.family: Theme.mono

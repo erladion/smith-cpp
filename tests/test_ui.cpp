@@ -590,7 +590,12 @@ void TestUi::argumentsComplete() {
   QCOMPARE(texts("/reasoning "), QStringList({"/reasoning default", "/reasoning off", "/reasoning low", "/reasoning medium", "/reasoning high"}));
   QCOMPARE(texts("/reasoning h"), QStringList({"/reasoning high"}));
   QCOMPARE(texts("/network o"), QStringList({"/network on", "/network off"}));
-  QCOMPARE(texts("/theme "), QStringList({"/theme matrix", "/theme plain", "/theme light"}));
+  {
+    // Without the themes in your own config.
+    TempDir config(QDir::tempPath(), "smith-themes-");
+    EnvGuard env("XDG_CONFIG_HOME", config.path());
+    QCOMPARE(texts("/theme "), QStringList({"/theme matrix", "/theme plain", "/theme light"}));
+  }
   QCOMPARE(texts("/theme l"), QStringList({"/theme light"}));
   QCOMPARE(texts("/sessions "), QStringList({"/sessions all"}));
   QCOMPARE(texts("/endpoint g"), QStringList({"/endpoint gpu-box"}));
@@ -725,6 +730,14 @@ void TestUi::statusLineHasCodeStream() {
   QVERIFY(plainLine(withStream).endsWith(QString(24, QChar(0xFF71))));
   QVERIFY2(plainLine(Ui::statusLine(streamed, 40)) == plainLine(Ui::statusLine(status, 40)), "no room, no stream");
   QVERIFY(lineWidth(Ui::statusLine(status, 80)) < 80);
+
+  // Plan mode comes first of all; the turn's tokens after the context.
+  Ui::Status planning = status;
+  planning.planning = true;
+  planning.usage = "12k in · 845 out";
+  QVERIFY(plainLine(Ui::statusLine(planning, 200)).startsWith("plan mode · "));
+  QVERIFY(plainLine(Ui::statusLine(planning, 200)).contains("turn 12k in · 845 out"));
+  QVERIFY(!plainLine(Ui::statusLine(status, 200)).contains("plan mode"));
 
   // In a task worktree, its branch comes first, so it's never cut off.
   Ui::Status inWorktree = status;

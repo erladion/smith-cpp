@@ -17,11 +17,29 @@
 
 namespace Smith {
 
+// The tokens a turn's model calls used, as the server reported them.
+struct TurnUsage {
+  int calls = 0;
+  // Summed over the calls: each one sends the whole conversation again.
+  qint64 promptTokens = 0;
+  qint64 completionTokens = 0;
+  // For the speed: the tokens of the calls that were timed, and how long they streamed.
+  qint64 timedTokens = 0;
+  qint64 generationMs = 0;
+
+  // Tokens generated per second, when there's enough to tell.
+  std::optional<double> tokensPerSecond() const;
+};
+
+// "12k in · 845 out · 34 tok/s"; empty when the server reported nothing.
+QString usageText(const TurnUsage& usage);
+
 // How a turn went, for the line under it.
 struct TurnStats {
   QString reason;
   qint64 elapsedMs = 0;
   int toolCalls = 0;
+  TurnUsage usage;
 };
 
 // Runs agent turns and other slow work on worker threads for a frontend, and
@@ -54,6 +72,8 @@ public:
   std::optional<qint64> elapsed() const;
   // The last timed turn, once it is over.
   const TurnStats& lastTurn() const { return m_last; }
+  // Tokens used by the turn under way, or else by the last one.
+  const TurnUsage& usage() const { return m_timed ? m_usage : m_last.usage; }
 
   // Takes in an agent event. Returns the transcript entry it adds, if any.
   std::optional<Entry> apply(const AgentEvent& event);
@@ -102,12 +122,16 @@ private:
   qint64 m_startedAt = 0;
   int m_toolCalls = 0;
   QString m_reason;
+  TurnUsage m_usage;
   TurnStats m_last;
 
   QList<QThread*> m_workers;
   CancelPtr m_pClosing = makeCancel();
   bool m_closed = false;
 };
+
+// /diff: a line saying what changed, then each changed file with its diff, paths relative to `cwd`.
+QList<Entry> changesEntries(const SessionChanges& changes, const QString& cwd);
 
 // What /undo did, for the transcript; paths are shown relative to `cwd`.
 Entry undoNotice(const UndoResult& result, const QString& cwd);

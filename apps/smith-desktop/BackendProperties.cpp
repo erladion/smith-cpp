@@ -1,6 +1,9 @@
 #include "Backend.h"
 
 #include "core/Dirs.h"
+#include "core/Tool.h"
+
+#include <QLocale>
 #include "core/Jobs.h"
 #include "core/Tool.h"
 #include "tui/Rain.h"
@@ -178,6 +181,25 @@ QVariantList Backend::recentProjects() const {
     });
   }
   return out;
+}
+
+bool Backend::planning() const {
+  return m_pAgent && m_pAgent->planning();
+}
+
+QString Backend::usageDetail() const {
+  const TurnUsage& usage = m_turns.usage();
+  if (usage.calls == 0) {
+    return {};
+  }
+  const QLocale english(QLocale::English);
+  QString text = QString("%1: %2, %3 prompt tokens sent (the whole conversation, again with each call) and %4 generated")
+                     .arg(m_turns.busy() ? "This turn so far" : "The last turn", plural(usage.calls, "model call"),
+                          english.toString(usage.promptTokens), english.toString(usage.completionTokens));
+  if (const std::optional<double> speed = usage.tokensPerSecond()) {
+    text += QString(", at %1 tokens a second").arg(english.toString(*speed, 'f', 1));
+  }
+  return text + ".";
 }
 
 bool Backend::canUndo() const {

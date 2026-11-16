@@ -147,6 +147,11 @@ private:
   void setNetwork(const QString& arg);
   // /theme: a picker without an argument.
   void setTheme(const QString& arg);
+  // /plan: switches plan mode, or sets it with "on" or "off".
+  void setPlanning(const QString& arg);
+  // After a turn in plan mode: carry out the plan, or keep planning.
+  void offerPlan();
+  void showChanges();
 
   TuiOptions m_options;
   AgentHooks m_hooks;

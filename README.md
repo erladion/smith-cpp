@@ -88,6 +88,8 @@ Type these in the input box of either app. Tab completes them, and their argumen
 | `/open` | Pick a project folder: a recent one, or browse to one. |
 | `/new [folder]` | Start a new session, here or in another folder. |
 | `/clear` | Start a new session (same as `/new`). |
+| `/plan [on\|off]` | Switch [plan mode](#plan-mode): the agent reads and plans, but changes nothing until you switch it off. |
+| `/diff` | Show what the agent changed in files this session, file by file, with the whole diff of each. |
 | `/undo` | Undo the last turn: restore the files it changed, and edit your message again. |
 | `/compact` | Summarize the conversation now, to free context. Smith also does this on its own when the context fills. |
 | `/worktree <task>` | Give a task its own worktree: the agent works on a `smith/<task>` branch beside your checkout. |
@@ -107,6 +109,7 @@ Type these in the input box of either app. Tab completes them, and their argumen
 | enter | Send. While the agent works, it queues the message. | Same. |
 | shift+enter | New line (so do `\` then enter, and ctrl+j). | New line. |
 | esc | Interrupt the agent. | Same. |
+| shift+tab | Switch plan mode. | Same, in the input box. |
 | ↑ / ↓ | Recall earlier input. | |
 | tab | Complete a slash command. | Same. |
 | ctrl+c | Quit. | |
@@ -393,6 +396,21 @@ commands can't be undone; Smith says which.
 
 ## Good to know
 
+- **Plan mode.** <a id="plan-mode"></a>Switch it on with shift+tab, `/plan` or the desktop's
+  "plan" switch, and ask for something. The agent reads and searches, then answers with a plan.
+  It can't edit files, run commands or send a sub-agent to work: those calls are refused, and
+  every message you send tells it so. When it's done, Smith asks whether to carry out the plan.
+  Yes switches plan mode off and tells the agent to go ahead. Esc (or "Keep planning") stays in
+  plan mode, so you can say what to change.
+- **What changed.** `/diff` (the desktop's "Changes" button) shows every file the agent changed
+  in this session, compared with how it was before the agent first touched it: created, changed
+  or deleted, with the whole diff. Files that are back as they were (after `/undo`, say) aren't
+  listed. Changes made by `bash` commands can't be seen this way; `git diff` shows those.
+- **Tokens.** The status line shows what the turn under way (or the last one) used, as the server
+  reports it: tokens in, tokens out, and how fast they were generated. "In" counts each model
+  call, which sends the whole conversation again, so it grows quickly with tool calls; the
+  context figure beside it is how full the window is. Servers that don't report usage show
+  nothing.
 - **Images.** Name an image file in your message (a path, quoted or not, as a terminal pastes a
   dropped file) and it is sent along: PNG, JPEG, GIF or WebP, up to 5 MB each, from anywhere on
   disk. Each picture is labelled with its file, so the model doesn't try to open it. If the
@@ -455,9 +473,9 @@ there, so the agent may need to install or build first.
 - **A sidebar** with the project (open a folder, or a recent one), its task worktrees (click to
   switch, land or drop on hover) and its sessions (switch, start, rename with a double-click,
   delete); "all" lists every folder's sessions.
-- **A top bar** to pick the endpoint, model and reasoning level, switch the sandbox's network,
-  undo and compact. The status bar shows the sandbox, how full the context is, and background
-  jobs.
+- **A top bar** to pick the endpoint, model and reasoning level, switch plan mode and the
+  sandbox's network, see the session's changes, undo and compact. The status bar shows plan mode,
+  the sandbox, how full the context is, the turn's tokens, and background jobs.
 
 "Theme…" in the ⋯ menu does what `/theme` does.
 
@@ -474,7 +492,8 @@ python3 scripts/fake_llm.py &                 # listens on 127.0.0.1:18090
 
 Ask it to "fix the greeting bug" in a folder with the `greet.py` shown at the top of the script.
 It plans with todos, reads the file, asks to edit it (with a diff), asks to run it, and answers in
-Markdown. "Set up a database" shows an `ask_user` question.
+Markdown. In plan mode (shift+tab first), it reads the file and answers with a plan instead;
+carrying out the plan then makes the fix. "Set up a database" shows an `ask_user` question.
 
 ## Building
 

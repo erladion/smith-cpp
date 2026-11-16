@@ -49,6 +49,15 @@ QString relativeSlashPath(const QString& cwd, const QString& path) {
 
 const QString TODO_REMINDER = "[Reminder] Your todo list still has unfinished steps:";
 
+namespace {
+
+const QString PLAN_NOTE = "[Plan mode is on. Look into this with the tools that read and search, then reply with a plan: the steps, the files "
+                          "each one changes, and anything the user needs to decide. Don't change files or run commands yet: those calls are "
+                          "refused until the user switches plan mode off.]";
+const QString PLAN_OVER_NOTE = "[Plan mode is off: you can change files and run commands again.]";
+
+} // namespace
+
 Agent::Agent(AgentOptions options) : m_options(std::move(options)) {
   m_history = Messages{Message{{"role", "system"}, {"content", m_options.systemPrompt}}} + repairHistory(m_options.history);
   m_tools = m_options.tools;
@@ -71,6 +80,7 @@ Agent::Agent(AgentOptions options) : m_options(std::move(options)) {
   m_model = m_options.model;
   m_reasoning = m_options.reasoning.isEmpty() ? QString("default") : m_options.reasoning;
   m_todos = todosFromHistory(m_history);
+  m_planning = m_options.planning;
 }
 
 QString Agent::model() const {
@@ -112,6 +122,16 @@ void Agent::setReasoning(const QString& level) {
   m_reasoning = level;
 }
 
+void Agent::setPlanning(bool on) {
+  QMutexLocker lock(&m_mutex);
+  m_planning = on;
+}
+
+bool Agent::planning() const {
+  QMutexLocker lock(&m_mutex);
+  return m_planning;
+}
+
 TodoList Agent::todos() const {
   QMutexLocker lock(&m_mutex);
   return m_todos;
@@ -127,6 +147,9 @@ void Agent::reset() {
   {
     QMutexLocker lock(&m_mutex);
     m_turns.clear();
+    m_planned = false;
+    m_originals.clear();
+    m_untracked.clear();
   }
   setTodos({});
 }
@@ -137,6 +160,9 @@ void Agent::loadConversation(const Messages& messages) {
     m_history = Messages{m_history.first()} + repairHistory(messages);
     m_measured.reset();
     m_turns.clear();
+    m_planned = false;
+    m_originals.clear();
+    m_untracked.clear();
   }
   setTodos(todosFromHistory(this->messages()));
   emitContext();
@@ -182,6 +208,57 @@ std::optional<UndoResult> Agent::undo() {
   return UndoResult{turn.prompt, restored.restored, restored.skipped, turn.checkpoint->untracked()};
 }
 
+void Agent::absorb(const Checkpoint& checkpoint) {
+  const QMap<QString, Checkpoint::FileChange> files = checkpoint.files();
+  const QStringList untracked = checkpoint.untracked();
+  QMutexLocker lock(&m_mutex);
+  for (auto it = files.begin(); it != files.end(); ++it) {
+    if (!m_originals.contains(it.key())) {
+      m_originals.insert(it.key(), it.value().before);
+    }
+  }
+  for (const QString& tool : untracked) {
+    if (!m_untracked.contains(tool)) {
+      m_untracked << tool;
+    }
+  }
+}
+
+SessionChanges Agent::sessionChanges() const {
+  QMap<QString, std::optional<QByteArray>> originals;
+  SessionChanges changes;
+  std::shared_ptr<Checkpoint> current;
+  {
+    QMutexLocker lock(&m_mutex);
+    originals = m_originals;
+    changes.untracked = m_untracked;
+    if (!m_turns.isEmpty()) {
+      current = m_turns.last().checkpoint;
+    }
+  }
+  // The turn under way isn't absorbed yet.
+  if (current) {
+    const QMap<QString, Checkpoint::FileChange> files = current->files();
+    for (auto it = files.begin(); it != files.end(); ++it) {
+      if (!originals.contains(it.key())) {
+        originals.insert(it.key(), it.value().before);
+      }
+    }
+    for (const QString& tool : current->untracked()) {
+      if (!changes.untracked.contains(tool)) {
+        changes.untracked << tool;
+      }
+    }
+  }
+  for (auto it = originals.begin(); it != originals.end(); ++it) {
+    const std::optional<QByteArray> now = readOrNull(it.key());
+    if (now != it.value()) {
+      changes.files.append(ChangedFile{it.key(), it.value(), now});
+    }
+  }
+  return changes;
+}
+
 void Agent::emitEvent(const AgentEvent& event) const {
   if (m_options.onEvent) {
     m_options.onEvent(event);
@@ -189,16 +266,25 @@ void Agent::emitEvent(const AgentEvent& event) const {
 }
 
 void Agent::send(const QString& text, const CancelPtr& cancel, const QList<Image>& images) {
+  const std::shared_ptr<Checkpoint> checkpoint = m_options.checkpoint ? m_options.checkpoint : std::make_shared<Checkpoint>();
+  QString note;
   {
     QMutexLocker lock(&m_mutex);
-    m_turns.append(Turn{int(m_history.size()), text, m_options.checkpoint ? m_options.checkpoint : std::make_shared<Checkpoint>()});
+    m_turns.append(Turn{int(m_history.size()), text, checkpoint});
     if (m_turns.size() > MAX_UNDO) {
       m_turns.removeFirst();
     }
     m_approvedRunLater.clear();
+    if (m_planning) {
+      note = PLAN_NOTE;
+    } else if (m_planned) {
+      note = PLAN_OVER_NOTE;
+    }
+    m_planned = m_planning;
   }
   const int sent = int(messages().size());
-  append(userMessage(text, images));
+  const Message message = userMessage(text, images);
+  append(note.isEmpty() ? message : withNote(message, note));
   std::optional<QMap<QString, QString>> before;
   if (m_options.protectRunLater && m_options.reportRunLater) {
     try {
@@ -210,6 +296,7 @@ void Agent::send(const QString& text, const CancelPtr& cancel, const QList<Image
   try {
     interruptible(cancel, [&]() { loop(cancel); });
   } catch (...) {
+    absorb(*checkpoint);
     if (before) {
       reportRunLater(*before);
     }
@@ -218,6 +305,7 @@ void Agent::send(const QString& text, const CancelPtr& cancel, const QList<Image
     }
     throw;
   }
+  absorb(*checkpoint);
   if (before) {
     reportRunLater(*before);
   }
@@ -488,6 +576,9 @@ ToolResult Agent::runSubagent(const TaskInput& input, const CancelPtr& cancel) {
       }
     } else if (const auto* done = std::get_if<Event::Done>(&event)) {
       reason = done->reason;
+    } else if (std::holds_alternative<Event::Usage>(event)) {
+      // Its tokens count with the turn's.
+      emitEvent(event);
     }
   };
   Agent agent(child);
@@ -608,6 +699,10 @@ QString Agent::complete(const QString& instructions, const QString& input, const
   };
   const ServerPtr target = server();
   const QJsonObject response = Http::postJson(target->url("/chat/completions"), target->apiKey(), body, cancel);
+  const QJsonObject usage = response.value("usage").toObject();
+  if (!usage.isEmpty()) {
+    emitEvent(Event::Usage{qint64(usage.value("prompt_tokens").toDouble()), qint64(usage.value("completion_tokens").toDouble()), 0});
+  }
   const QString content = response.value("choices").toArray().at(0).toObject().value("message").toObject().value("content").toString();
   return stripThinkTags(content);
 }
@@ -681,6 +776,8 @@ Agent::StreamedResponse Agent::streamResponse(const CancelPtr& cancel) {
   StreamedResponse result;
   QList<ToolCall> calls;
   ThinkTagParser thinkTags;
+  // Timed from the first token, so the speed leaves out reading the prompt.
+  QElapsedTimer generating;
   auto output = [&](BlockKind kind, const QString& text) {
     if (kind == BlockKind::Text) {
       result.text += text;
@@ -694,7 +791,9 @@ Agent::StreamedResponse Agent::streamResponse(const CancelPtr& cancel) {
   const int skipped = Http::postStream(target->url("/chat/completions"), target->apiKey(), body, cancel, [&](const QJsonObject& chunk) {
     const QJsonObject usage = chunk.value("usage").toObject();
     if (!usage.isEmpty()) {
-      result.totalTokens = qint64(usage.value("prompt_tokens").toDouble() + usage.value("completion_tokens").toDouble());
+      result.promptTokens = qint64(usage.value("prompt_tokens").toDouble());
+      result.completionTokens = qint64(usage.value("completion_tokens").toDouble());
+      result.totalTokens = result.promptTokens + result.completionTokens;
     }
     const QJsonArray choices = chunk.value("choices").toArray();
     if (choices.isEmpty()) {
@@ -702,6 +801,9 @@ Agent::StreamedResponse Agent::streamResponse(const CancelPtr& cancel) {
     }
     const QJsonObject choice = choices.first().toObject();
     const QJsonObject delta = choice.value("delta").toObject();
+    if (!generating.isValid() && !delta.isEmpty()) {
+      generating.start();
+    }
 
     QString reasoningText = delta.value("reasoning_content").toString();
     if (reasoningText.isEmpty()) {
@@ -753,6 +855,10 @@ Agent::StreamedResponse Agent::streamResponse(const CancelPtr& cancel) {
   });
   for (const Segment& segment : thinkTags.flush()) {
     output(segment.kind, segment.text);
+  }
+  if (result.totalTokens) {
+    result.generationMs = generating.isValid() ? generating.elapsed() : 0;
+    emitEvent(Event::Usage{result.promptTokens, result.completionTokens, result.generationMs});
   }
   if (skipped > 0) {
     emitEvent(Event::Notice{NoticeLevel::Warn, QString("The server sent %1 that couldn't be read as JSON; %2 skipped, so this response may be "
@@ -862,6 +968,12 @@ ToolResult Agent::runTool(const ToolCall& call, const CancelPtr& cancel) {
     return fail("The user's config file doesn't allow this (permissions.deny). Don't try it another way; ask them how they want to proceed.", summary,
                 "denied");
   }
+  if (planning() && changes(*tool, args)) {
+    approval = "refused in plan mode";
+    return fail("Plan mode is on, so nothing may be changed or run yet. Finish the plan with what you can read; the user switches plan mode "
+                "off to let you carry it out.",
+                summary, "denied");
+  }
   approval = needsApproval ? "already allowed" : "not needed";
   if (needsApproval && (!m_pAlwaysAllowed->allows(tool->name, args, unsandboxed) || !warning.isEmpty())) {
     // Show the change in the prompt; a call that would fail anyway fails without asking.
@@ -921,6 +1033,11 @@ ToolResult Agent::runTool(const ToolCall& call, const CancelPtr& cancel) {
 
   emitEvent(Event::ToolEnd{call.id, tool->name, summary, result.content, result.isError, result.diff});
   return result;
+}
+
+bool Agent::changes(const ToolDef& tool, const QJsonObject& args) {
+  // A sub-agent sent to work would change things; one sent to look wouldn't.
+  return !tool.readOnly || (tool.name == "task" && args.value("can_write").toBool(false));
 }
 
 ApprovalDecision Agent::requestApproval(const ApprovalRequest& request, const CancelPtr& cancel) {

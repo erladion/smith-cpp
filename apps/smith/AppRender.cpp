@@ -126,10 +126,13 @@ QList<Line> App::liveLines() {
       }
       lines.append(Line{Span{"  queued: the agent gets this at its next step", Style{.dim = true, .italic = true}}});
     }
-    const QString placeholder = m_turns.busy() ? "Type to add to what the agent is doing (enter queues it)" : "Ask for something, or /help";
-    const QList<Line> prompt = prefixed(Line{Span{"› ", fg(Color::Cyan)}}, Line{Span{"  ", {}}}, m_editor.render(placeholder), w - 4);
+    const bool planning = m_pAgent->planning();
+    const QString placeholder = m_turns.busy() ? "Type to add to what the agent is doing (enter queues it)"
+                                : planning     ? "Ask for a plan: the agent reads, changes nothing (shift+tab ends plan mode)"
+                                               : "Ask for something, or /help";
+    const QList<Line> prompt = prefixed(Line{Span{"› ", fg(planning ? Color::Blue : Color::Cyan)}}, Line{Span{"  ", {}}}, m_editor.render(placeholder), w - 4);
     lines.append(Line{});
-    lines.append(box(prompt, Color::Gray, w, true));
+    lines.append(box(prompt, planning ? Color::Blue : Color::Gray, w, true));
     lines.append(m_suggestions.lines(currentSuggestions(), w));
   }
   Status status;
@@ -145,6 +148,8 @@ QList<Line> App::liveLines() {
   status.queueing = agentRunning();
   status.jobs = m_options.jobs ? m_options.jobs->running() : 0;
   status.worktreeBranch = m_project.worktreeBranch;
+  status.planning = m_pAgent->planning();
+  status.usage = usageText(m_turns.usage());
   if (streaming()) {
     const int frame = m_frame;
     status.filler = [frame](int n) { return Tui::codeStream(frame / STREAM_EVERY, n); };

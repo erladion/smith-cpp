@@ -49,6 +49,11 @@ struct Suggestion {
 // follows a command that has them ("/reasoning h" → high).
 QList<Suggestion> suggest(const QString& input, const CompletionContext& ctx);
 
+// What switching plan mode on or off did, for the transcript.
+QString planModeText(bool on);
+// Sent for you when you choose to carry out a plan.
+extern const QString GO_AHEAD;
+
 class AllowedTools;
 // /permissions: what runs without asking, as text; with "reset", forgets what the user allowed.
 QString managePermissions(AllowedTools& allowed, const QString& arg);

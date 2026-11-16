@@ -380,6 +380,7 @@ std::shared_ptr<Agent> Runtime::createAgent(const AgentHooks& hooks, const std::
   options.model = current ? current->model : m_model;
   options.reasoning = current ? current->reasoning : m_reasoning;
   options.contextSize = current ? current->contextSize : m_contextSize;
+  options.planning = current && current->planning;
   options.history = current ? Messages{} : m_resumed;
   options.cwd = project.cwd;
   options.temperature = m_temperature;

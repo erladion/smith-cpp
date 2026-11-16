@@ -81,10 +81,18 @@ struct Done {
   DoneReason reason = DoneReason::Stop;
 };
 
+// Tokens one model call used, as the server reported them. `generationMs` is
+// how long the reply took to stream, from its first token; 0 when unknown.
+struct Usage {
+  qint64 promptTokens = 0;
+  qint64 completionTokens = 0;
+  qint64 generationMs = 0;
+};
+
 } // namespace Event
 
 using AgentEvent = std::variant<Event::UserMessage, Event::Delta, Event::ResponseEnd, Event::ToolPrepare, Event::ToolStart, Event::ToolEnd,
-                                Event::Context, Event::Activity, Event::Notice, Event::Todos, Event::Done>;
+                                Event::Context, Event::Activity, Event::Notice, Event::Todos, Event::Done, Event::Usage>;
 
 // For std::visit over an AgentEvent: one lambda per event, e.g.
 //   std::visit(Overloaded{[](const Event::Delta& delta) { ... }, [](const auto&) {}}, event);

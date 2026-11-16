@@ -62,7 +62,7 @@ std::optional<QList<Entry>> Backend::enterProject(const QString& folder) {
     notice(NoticeLevel::Error, errorMessage(error));
     return std::nullopt;
   }
-  const AgentSettings current{m_pServer, m_pAgent->model(), m_pAgent->reasoning(), m_pAgent->contextLimit()};
+  const AgentSettings current{m_pServer, m_pAgent->model(), m_pAgent->reasoning(), m_pAgent->contextLimit(), m_pAgent->planning()};
   m_project = next;
   m_pAgent = m_pRuntime->createAgent(m_hooks, current);
   QList<Entry> notes;

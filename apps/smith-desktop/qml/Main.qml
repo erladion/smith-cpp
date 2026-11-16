@@ -60,6 +60,11 @@ ApplicationWindow {
         }
         case "theme":
             return { title: "Select theme", items: Backend.themeChoices(), current: Backend.theme, empty: "" }
+        case "plan":
+            return { title: "The plan is ready", items: [
+                         { value: "go", label: "Carry out the plan", hint: "plan mode off, and the agent starts" },
+                         { value: "keep", label: "Keep planning", hint: "stay in plan mode and say what to change" }],
+                     current: "", empty: "" }
         case "recent":
             return { title: "Open a recent project", items: Backend.recentProjects.map(p => ({ value: p.path, label: p.name, hint: p.hint + " · " + p.where })),
                      current: "", empty: "No other folders have sessions yet." }
@@ -90,6 +95,7 @@ ApplicationWindow {
             case "endpoint": Backend.setEndpoint(value); break
             case "reasoning": Backend.setReasoning(value); break
             case "theme": Backend.setTheme(value); break
+            case "plan": if (value === "go") Backend.carryOutPlan(); break
             case "recent": Backend.openProject(value); break
             case "jobs": Backend.stopJob(value); break
             case "worktrees": Backend.switchToWorktree(value); break

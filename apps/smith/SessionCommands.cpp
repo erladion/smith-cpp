@@ -61,7 +61,7 @@ std::optional<QList<Entry>> SessionCommands::enterProject(const QString& folder)
     return std::nullopt;
   }
   const std::shared_ptr<Agent> agent = m_app.agent();
-  const AgentSettings current{m_app.server(), agent->model(), agent->reasoning(), agent->contextLimit()};
+  const AgentSettings current{m_app.server(), agent->model(), agent->reasoning(), agent->contextLimit(), agent->planning()};
   m_app.setProject(next);
   m_app.setAgent(m_app.opts().createAgent(m_app.hooks(), current));
   QList<Entry> notes;

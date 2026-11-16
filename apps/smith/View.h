@@ -43,6 +43,9 @@ struct Status {
   int jobs = 0;
   // The branch, when working in a task worktree.
   QString worktreeBranch;
+  bool planning = false;
+  // The tokens of the turn under way or the last one (usageText); empty if unknown.
+  QString usage;
   // Fills spare room at the right end with this many columns of something, e.g. a code stream.
   std::function<QString(int)> filler;
 };

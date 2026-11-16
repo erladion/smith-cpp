@@ -35,6 +35,8 @@ private Q_SLOTS:
   void closeWaitsAndDropsCallbacks();
   void closeStopsRequestsGivenItsToken();
   void undoNoticeListsWhatHappened();
+  void turnsAddUpTheirTokens();
+  void changesListEachFile();
 };
 
 #ifndef Q_MOC_RUN
@@ -391,6 +393,65 @@ void TestFrontend::undoNoticeListsWhatHappened() {
   QCOMPARE(partial.level, NoticeLevel::Warn);
   QVERIFY_MATCH(partial.text, "Left alone because they changed afterwards: c\\.cpp");
   QVERIFY_MATCH(partial.text, "Not undone: anything changed by bash commands");
+}
+
+void TestFrontend::turnsAddUpTheirTokens() {
+  TurnRunner turns;
+  QCOMPARE(usageText(turns.usage()), QString());
+  bool finished = false;
+  turns.runTurn(
+      "Thinking…", {}, [](const CancelPtr&) { QThread::msleep(30); }, [&](const QString&) { finished = true; }, true);
+  turns.apply(Event::Usage{12000, 400, 10000});
+  // Shown while the turn runs, adding up.
+  QCOMPARE(usageText(turns.usage()), QString("12k in · 400 out · 40 tok/s"));
+  turns.apply(Event::Usage{12500, 445, 0});
+  // A call without a time (a summary) counts, but not toward the speed.
+  QCOMPARE(turns.usage().calls, 2);
+  QCOMPARE(usageText(turns.usage()), QString("25k in · 845 out · 40 tok/s"));
+  QTRY_VERIFY(finished);
+  QCOMPARE(turns.lastTurn().usage.completionTokens, qint64(845));
+  QCOMPARE(usageText(turns.usage()), QString("25k in · 845 out · 40 tok/s"));
+
+  // Small numbers, and too little to time.
+  TurnUsage small;
+  small.calls = 1;
+  small.promptTokens = 1234;
+  small.completionTokens = 5;
+  small.timedTokens = 5;
+  small.generationMs = 100;
+  QCOMPARE(usageText(small), QString("1.2k in · 5 out"));
+
+  // A turn that isn't timed (compacting) adds nothing.
+  finished = false;
+  turns.runTurn(
+      "Compacting…", {}, [](const CancelPtr&) {}, [&](const QString&) { finished = true; });
+  turns.apply(Event::Usage{9000, 900, 0});
+  QTRY_VERIFY(finished);
+  QCOMPARE(turns.usage().calls, 2);
+}
+
+void TestFrontend::changesListEachFile() {
+  const QList<Entry> none = changesEntries(SessionChanges{{}, {"bash"}}, "/work");
+  QCOMPARE(none.size(), 1);
+  QVERIFY_MATCH(none[0].text, "hasn't changed any files[\\s\\S]*what bash commands changed \\(git diff");
+
+  SessionChanges changes;
+  changes.files = {
+      ChangedFile{"/work/src/a.txt", QByteArray("one\ntwo\n"), QByteArray("one\n2\n")},
+      ChangedFile{"/work/new.txt", std::nullopt, QByteArray("hi\n")},
+      ChangedFile{"/work/gone.bin", QByteArray("\0\1", 2), std::nullopt},
+  };
+  const QList<Entry> entries = changesEntries(changes, "/work");
+  QCOMPARE(entries.size(), 4);
+  QVERIFY_MATCH(entries[0].text, "^Changed in this session: 3 files, \\+2 −1");
+  QCOMPARE(entries[1].name, QString("changed"));
+  QCOMPARE(entries[1].summary, QString("src/a.txt"));
+  QVERIFY(entries[1].fullDiff && entries[1].diff);
+  QCOMPARE(diffStats(*entries[1].diff).removed, 1);
+  QCOMPARE(entries[2].name, QString("created"));
+  QCOMPARE(entries[3].name, QString("deleted"));
+  QVERIFY(!entries[3].diff);
+  QVERIFY_MATCH(entries[3].output, "binary file: 2 → 0 bytes");
 }
 
 #endif

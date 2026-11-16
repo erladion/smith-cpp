@@ -18,6 +18,8 @@ namespace {
 
 constexpr int PREVIEW_LINES = 4;
 constexpr int DIFF_LINES = 14;
+// For /diff, which is asked for to see the changes.
+constexpr int FULL_DIFF_LINES = 400;
 
 Color noticeColor(NoticeLevel level) {
   switch (level) {
@@ -75,7 +77,7 @@ QList<Line> toolLines(const Entry& tool, int width) {
       width);
   QList<Line> out{header};
   if (tool.diff && !tool.isError) {
-    for (const Line& line : diffView(*tool.diff, width, DIFF_LINES)) {
+    for (const Line& line : diffView(*tool.diff, width, tool.fullDiff ? FULL_DIFF_LINES : DIFF_LINES)) {
       out.append(Line{Span{"  ", {}}} + line);
     }
     return out;

@@ -62,6 +62,10 @@ void App::runCommand(const QString& text) {
     }
   } else if (command == "/theme") {
     setTheme(arg);
+  } else if (command == "/plan") {
+    setPlanning(arg);
+  } else if (command == "/diff") {
+    showChanges();
   } else if (command == "/network") {
     setNetwork(arg);
   } else if (command == "/permissions") {
@@ -175,6 +179,42 @@ void App::setNetwork(const QString& arg) {
                               ? " The container was removed for that; the next command starts a new one, without what was installed in the old one."
                               : QString();
   print(Entry::notice(NoticeLevel::Info, QString("Sandboxed commands now have network %1.%2").arg(arg, restart)));
+}
+
+void App::setPlanning(const QString& arg) {
+  if (!arg.isEmpty() && arg != "on" && arg != "off") {
+    print(Entry::notice(NoticeLevel::Error, "Use /plan to switch plan mode, or /plan on or /plan off."));
+    return;
+  }
+  const bool on = arg.isEmpty() ? !m_pAgent->planning() : arg == "on";
+  if (on == m_pAgent->planning()) {
+    print(Entry::notice(NoticeLevel::Info, QString("Plan mode is already %1.").arg(arg)));
+    return;
+  }
+  m_pAgent->setPlanning(on);
+  print(Entry::notice(NoticeLevel::Info, planModeText(on)));
+}
+
+void App::offerPlan() {
+  const QList<Tui::PickerItem> items{
+      {"go", "Carry out the plan", "plan mode off, and the agent starts"},
+      {"keep", "Keep planning", "stay in plan mode and say what to change"},
+  };
+  Tui::PickerOptions options;
+  options.help = "enter picks · esc keeps planning";
+  openPicker(std::make_unique<Tui::Picker>("The plan is ready", items, QString(), options), [this](const QString& value) {
+    if (value == "go") {
+      m_pAgent->setPlanning(false);
+      print(Entry::notice(NoticeLevel::Info, planModeText(false)));
+      submit(GO_AHEAD);
+    }
+  });
+}
+
+void App::showChanges() {
+  for (const Entry& entry : changesEntries(m_pAgent->sessionChanges(), m_project.cwd)) {
+    print(entry);
+  }
 }
 
 void App::setTheme(const QString& arg) {

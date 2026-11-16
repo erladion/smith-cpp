@@ -45,6 +45,9 @@ private Q_SLOTS:
   void subagentAsksThroughMainAgent();
   void subagentCanBeSentToWork();
   void imagesGoWithTheMessage();
+  void planModeRefusesChangesAndSaysSo();
+  void usageIsReportedPerCall();
+  void sessionChangesCompareWithBefore();
   void interruptStopsFurtherApprovals();
   void loadingConversationIsntRecorded();
   void resumedHistoryIsRepaired();
@@ -717,6 +720,105 @@ void TestAgent::imagesGoWithTheMessage() {
     told = told || (notice && notice->text.contains("pictures were taken out"));
   }
   QVERIFY(told);
+}
+
+void TestAgent::planModeRefusesChangesAndSaysSo() {
+  TempDir project(QDir::tempPath(), "smith-plan-");
+  write(project.file("a.txt"), "one\n");
+  QList<QJsonObject> calls = FakeServer::toolCallDeltas("edit_file", {{"path", "a.txt"}, {"old_string", "one"}, {"new_string", "two"}}, "e1");
+  m_pFake->setScript({
+      FakeServer::stream(calls, "tool_calls"),
+      FakeServer::stream(FakeServer::toolCallDeltas("task", {{"description", "fix"}, {"prompt", "Fix it"}, {"can_write", true}}, "t1"), "tool_calls"),
+      FakeServer::stream(FakeServer::toolCallDeltas("read_file", {{"path", "a.txt"}}, "r1"), "tool_calls"),
+      FakeServer::text("1. Change one to two in a.txt."),
+      FakeServer::text("Done."),
+      FakeServer::text("Anything else?"),
+  });
+  auto h = make(ApprovalDecision::Allow, [&](AgentOptions& options, Harness&) {
+    options.cwd = project.path();
+    options.subagentPrompt = "sub";
+    options.workerPrompt = "worker";
+  });
+  h->agent->setPlanning(true);
+  QVERIFY(h->agent->planning());
+  h->agent->send("make it two", makeCancel());
+
+  // Told up front, in a part of its own that the transcript leaves out.
+  const QJsonObject asked = lastMessage(m_pFake->requests()[0]);
+  QCOMPARE(messageText(asked), QString("make it two"));
+  QVERIFY_MATCH(asked.value("content").toArray().last().toObject().value("text").toString(), "^\\[Plan mode is on");
+  // The edit and the working sub-agent are refused without asking; reading still works.
+  QCOMPARE(h->approvals, QStringList());
+  QCOMPARE(read(project.file("a.txt")), QString("one\n"));
+  const QStringList results = toolResults(m_pFake->requests()[3]);
+  QCOMPARE(results.size(), 3);
+  QVERIFY_MATCH(results[0], "^Error: Plan mode is on");
+  QVERIFY_MATCH(results[1], "^Error: Plan mode is on");
+  QVERIFY_MATCH(results[2], "one");
+  QVERIFY(h->agent->sessionChanges().files.isEmpty());
+
+  // The next message says plan mode is over; the one after says nothing.
+  h->agent->setPlanning(false);
+  h->agent->send("go ahead", makeCancel());
+  QVERIFY_MATCH(lastMessage(m_pFake->requests()[4]).value("content").toArray().last().toObject().value("text").toString(), "^\\[Plan mode is off");
+  h->agent->send("thanks", makeCancel());
+  QCOMPARE(lastMessage(m_pFake->requests()[5]).value("content").toString(), QString("thanks"));
+}
+
+void TestAgent::usageIsReportedPerCall() {
+  m_pFake->setScript({FakeServer::stream(FakeServer::toolCallDeltas("glob", {{"pattern", "*.txt"}}), "tool_calls"), FakeServer::text("None.")});
+  auto h = make();
+  h->agent->send("any text files?", makeCancel());
+  QList<Event::Usage> usage;
+  for (const AgentEvent& event : h->events) {
+    if (const auto* one = std::get_if<Event::Usage>(&event)) {
+      usage << *one;
+    }
+  }
+  // One per model call, as the fake server reports them.
+  QCOMPARE(usage.size(), 2);
+  QCOMPARE(usage[0].promptTokens, qint64(100));
+  QCOMPARE(usage[0].completionTokens, qint64(10));
+  QVERIFY(usage[1].generationMs >= 0);
+}
+
+void TestAgent::sessionChangesCompareWithBefore() {
+  TempDir project(QDir::tempPath(), "smith-changes-");
+  write(project.file("a.txt"), "one\n");
+  m_pFake->setScript({
+      FakeServer::stream(FakeServer::toolCallDeltas("edit_file", {{"path", "a.txt"}, {"old_string", "one"}, {"new_string", "two"}}, "e1"), "tool_calls"),
+      FakeServer::text("Changed."),
+      FakeServer::stream(FakeServer::toolCallDeltas("edit_file", {{"path", "a.txt"}, {"old_string", "two"}, {"new_string", "three"}}, "e2"), "tool_calls"),
+      FakeServer::stream(FakeServer::toolCallDeltas("write_file", {{"path", "b.txt"}, {"content", "new\n"}}, "w1"), "tool_calls"),
+      FakeServer::text("Changed again."),
+  });
+  auto h = make(ApprovalDecision::Allow, [&](AgentOptions& options, Harness&) { options.cwd = project.path(); });
+  QVERIFY(h->agent->sessionChanges().files.isEmpty());
+  h->agent->send("two", makeCancel());
+  h->agent->send("three, and b", makeCancel());
+
+  // Over both turns: each file against how it was before the first change.
+  SessionChanges changes = h->agent->sessionChanges();
+  QCOMPARE(changes.files.size(), 2);
+  QCOMPARE(changes.files[0].file, project.file("a.txt"));
+  QVERIFY(changes.files[0].before == std::optional<QByteArray>("one\n"));
+  QVERIFY(changes.files[0].now == std::optional<QByteArray>("three\n"));
+  QVERIFY(changes.files[1].before == std::optional<QByteArray>());
+  QVERIFY(changes.files[1].now == std::optional<QByteArray>("new\n"));
+  QVERIFY(changes.untracked.isEmpty());
+
+  // Undone, the second turn's changes are gone; a file back as it was isn't listed.
+  h->agent->undo();
+  changes = h->agent->sessionChanges();
+  QCOMPARE(changes.files.size(), 1);
+  QVERIFY(changes.files[0].now == std::optional<QByteArray>("two\n"));
+  write(project.file("a.txt"), "one\n");
+  QVERIFY(h->agent->sessionChanges().files.isEmpty());
+
+  // Another session starts from nothing.
+  write(project.file("a.txt"), "changed by the agent\n");
+  h->agent->loadConversation({});
+  QVERIFY(h->agent->sessionChanges().files.isEmpty());
 }
 
 void TestAgent::subagentCanBeSentToWork() {

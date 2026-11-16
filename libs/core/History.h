@@ -42,6 +42,9 @@ Message userMessage(const QString& text, const QList<Image>& images);
 // Whether a message carries pictures, and the same message without them.
 bool hasImages(const Message& message);
 Message withoutImages(const Message& message);
+// The message with `note` added after the user's words, as a text part of
+// its own: the model reads it, the transcript (messageText) doesn't show it.
+Message withNote(const Message& message, const QString& note);
 Message toolMessage(const QString& callId, const QString& content);
 
 // Gives every assistant tool call a matching tool result. A session saved

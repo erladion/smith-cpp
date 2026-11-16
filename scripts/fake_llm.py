@@ -6,7 +6,9 @@ fixed script chosen by what you type:
 
   "...greeting..."   plans with todo_write, reads greet.py, edits it (approval
                      with a diff), runs it with bash (approval), checks off the
-                     todos and answers in Markdown
+                     todos and answers in Markdown; in plan mode, reads
+                     greet.py and answers with a plan, which "Go ahead with
+                     the plan." then carries out
   "...database..."   asks you a question with ask_user
   anything else      a one-line reply
 
@@ -59,6 +61,22 @@ FIX_STEPS = [
 ]
 
 
+PLAN_STEPS = [
+    {"reasoning": "Plan mode: read greet.py, change nothing.", "calls": [("read_file", {"path": "greet.py"})]},
+    {"text": "## Plan\n\n"
+             "1. In `greet.py`, build the greeting from `name`: `return f\"Hello, {name}!\"`.\n"
+             "2. Run `python3 greet.py Anderson` and check it prints **Hello, Anderson!**.\n\n"
+             "Nothing else calls `greet()`, so that's the whole change."},
+]
+
+
+def text_of(content):
+    """A message's text, whether a string or content parts (pictures, plan mode's note)."""
+    if isinstance(content, str):
+        return content
+    return "\n".join(part.get("text", "") for part in content if part.get("type") == "text")
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
@@ -94,7 +112,7 @@ class Handler(BaseHTTPRequestHandler):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         messages = body["messages"]
         last_user = max(i for i, m in enumerate(messages) if m["role"] == "user")
-        prompt = messages[last_user]["content"]
+        prompt = text_of(messages[last_user]["content"])
         step = sum(1 for m in messages[last_user:] if m["role"] == "assistant")
 
         if not body.get("stream"):
@@ -112,7 +130,9 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         time.sleep(0.3)
 
-        if "greeting" in prompt and step < len(FIX_STEPS):
+        if "greeting" in prompt and "[Plan mode is on" in prompt and step < len(PLAN_STEPS):
+            spec = PLAN_STEPS[step]
+        elif ("greeting" in prompt or "Go ahead with the plan" in prompt) and step < len(FIX_STEPS):
             spec = FIX_STEPS[step]
         elif "database" in prompt and step == 0:
             spec = {"calls": [("ask_user", {"question": "Which database should the app use?",

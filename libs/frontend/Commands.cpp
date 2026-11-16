@@ -108,6 +108,9 @@ const QList<CommandSpec>& commands() {
         {"/worktrees", {}, "list the task worktrees: switch to one, land it or drop it", {}},
         {"/land", "[task]", "commit a task's changes and bring them to your branch (cherry-pick or merge)", completeTask},
         {"/drop", "[task]", "remove a task's worktree and branch, discarding what isn't landed", completeTask},
+        {"/plan", "[on|off]", "plan mode: the agent reads and plans but changes nothing until you switch it off",
+         fixed({Completion{"on", "read and plan only"}, Completion{"off", "let the agent change files and run commands"}})},
+        {"/diff", {}, "show what the agent changed in files this session, file by file", {}},
         {"/undo", {}, "undo the last turn: restore files it changed and edit your message again", {}},
         {"/skills", {}, "list the available skills", {}},
         {"/network", "on|off", "allow or block network access for sandboxed commands",
@@ -135,7 +138,7 @@ QString commandHelp() {
   }
   return "Commands (type / to see them as you type; tab completes, enter runs):\n" + lines.join('\n') +
          "\nKeys: enter sends · shift+enter, \\ then enter, or ctrl+j adds a new line · esc interrupts the agent\n"
-         "      ↑/↓ recall earlier input · ctrl+c quits";
+         "      shift+tab switches plan mode · ↑/↓ recall earlier input · ctrl+c quits";
 }
 
 QList<Suggestion> suggest(const QString& input, const CompletionContext& ctx) {
@@ -173,6 +176,13 @@ QList<Suggestion> suggest(const QString& input, const CompletionContext& ctx) {
     }
   }
   return out;
+}
+
+const QString GO_AHEAD = "Go ahead with the plan.";
+
+QString planModeText(bool on) {
+  return on ? QString("Plan mode on: the agent reads and plans, but changes nothing. Switch it off (/plan or shift+tab) to let it carry out the plan.")
+            : QString("Plan mode off: the agent can change files and run commands again.");
 }
 
 QString managePermissions(AllowedTools& allowed, const QString& arg) {

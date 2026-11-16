@@ -132,6 +132,11 @@ void App::onKey(const Key& key) {
     return;
   }
 
+  if (key.name == KeyName::Tab && key.shift) {
+    setPlanning({});
+    return;
+  }
+
   // While command suggestions are showing, arrows pick one, tab completes it and enter runs it.
   QString toRun;
   const SuggestionList::Outcome handled =

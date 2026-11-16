@@ -81,6 +81,7 @@ private Q_SLOTS:
   void suggestionsStayInTheirBox();
   void longCommandsStayInTheWindow();
   void switchesTheme();
+  void plansThenCarriesOut();
 
 private:
   void shot(const QString& name);
@@ -596,6 +597,65 @@ void TestDesktop::switchesTheme() {
   m_pBackend->setTheme(before);
   QCOMPARE(m_pBackend->theme(), before);
   QVERIFY2(g_qmlWarnings.isEmpty(), qPrintable(g_qmlWarnings.join('\n')));
+}
+
+void TestDesktop::plansThenCarriesOut() {
+  using R = FakeServer;
+  const QString readme = m_pHome->file("hello-app/README.md");
+  m_pFake->setScript({
+      R::stream(R::toolCallDeltas("write_file", {{"path", "README.md"}, {"content", "# Hello\n"}}, "w1"), "tool_calls"),
+      R::text("## Plan\n\n1. Add a README.md that says how to run greet.py."),
+      R::stream(R::toolCallDeltas("write_file", {{"path", "README.md"}, {"content", "# Hello\n\nRun `python3 greet.py <name>`.\n"}}, "w2"), "tool_calls"),
+      R::text("Added README.md."),
+  });
+  m_pFake->clearRequests();
+
+  // The switch in the top bar; the input box says so.
+  QObject* toggle = root()->findChild<QObject*>("planToggle");
+  QVERIFY(toggle);
+  QMetaObject::invokeMethod(toggle, "toggled");
+  QVERIFY(m_pBackend->planning());
+  QTRY_VERIFY(toggle->property("on").toBool());
+  QCOMPARE(root()->findChild<QObject*>("composerInput")->property("placeholderText").toString().left(15), QString("Ask for a plan:"));
+
+  m_pBackend->submit("add a readme");
+  QTRY_VERIFY_WITH_TIMEOUT(!m_pBackend->busy(), 15000);
+  // The write was refused without asking, and the plan offered.
+  QVERIFY(!QFile::exists(readme));
+  QTRY_COMPARE(root()->property("pickerKind").toString(), QString("plan"));
+  QObject* picker = root()->findChild<QObject*>("picker");
+  QTRY_VERIFY(picker->property("opened").toBool());
+  QVERIFY_MATCH(m_pBackend->usage(), "^\\d+ in · \\d+ out");
+  QVERIFY_MATCH(m_pBackend->usageDetail(), "^The last turn: 2 model calls, 200 prompt tokens sent .* and 20 generated");
+  shot("19-plan-ready");
+
+  // Carry it out: plan mode off, and the agent starts.
+  // The first choice, as enter picks it.
+  QMetaObject::invokeMethod(picker, "choose", Q_ARG(QVariant, 0));
+  QTRY_VERIFY(!picker->property("visible").toBool());
+  QVERIFY(!m_pBackend->planning());
+  QTRY_VERIFY_WITH_TIMEOUT(!m_pBackend->approval().isEmpty(), 15000);
+  m_pBackend->decide("allow");
+  QTRY_VERIFY_WITH_TIMEOUT(!m_pBackend->busy(), 15000);
+  QVERIFY(QFile::exists(readme));
+  const QJsonArray sent = m_pFake->requests().value(2).value("messages").toArray();
+  QVERIFY_MATCH(messageText(sent.last().toObject()), "^Go ahead with the plan\\.$");
+
+  // Changes: each file with all of its diff.
+  auto* model = m_pBackend->transcript();
+  const int before = model->rowCount();
+  QMetaObject::invokeMethod(root()->findChild<QObject*>("changesButton"), "clicked");
+  QVERIFY(model->rowCount() > before + 1);
+  bool listed = false;
+  for (int i = before; i < model->rowCount(); i++) {
+    const QModelIndex index = model->index(i);
+    if (model->data(index, Desktop::TranscriptModel::SummaryRole).toString() == "README.md") {
+      listed = model->data(index, Desktop::TranscriptModel::NameRole).toString() == "created" && model->data(index, Desktop::TranscriptModel::FullDiffRole).toBool();
+    }
+  }
+  QVERIFY(listed);
+  QVERIFY2(g_qmlWarnings.isEmpty(), qPrintable(g_qmlWarnings.join('\n')));
+  shot("20-changes");
 }
 
 #endif

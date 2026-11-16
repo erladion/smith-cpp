@@ -100,6 +100,9 @@ Line statusLine(const Status& status, int width) {
       parts << k(*status.tokens) + " tokens";
     }
   }
+  if (!status.usage.isEmpty()) {
+    parts << "turn " + status.usage;
+  }
   if (status.sandboxActive) {
     parts << QString("%1, net %2").arg(status.sandboxType == SandboxType::Container ? "container" : "sandbox", status.network ? "on" : "off");
   }
@@ -110,6 +113,10 @@ Line statusLine(const Status& status, int width) {
     parts << (status.queueing ? "esc to interrupt · enter queues" : "esc to interrupt");
   }
   Line line;
+  if (status.planning) {
+    line.append(Span{"plan mode", Style{.color = Color::Blue, .bold = true}});
+    line.append(Span{" · ", DIM});
+  }
   if (!status.worktreeBranch.isEmpty()) {
     line.append(Span{"⎇ " + status.worktreeBranch, fg(Color::Yellow)});
     line.append(Span{" · ", DIM});

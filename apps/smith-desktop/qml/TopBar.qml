@@ -3,8 +3,8 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import Smith.Desktop 1.0
 
-// What the agent talks to and how: endpoint, model, reasoning, the sandbox's
-// network; and the turn controls, undo and compact.
+// What the agent talks to and how: endpoint, model, reasoning, plan mode, the
+// sandbox's network; and the changes so far, undo and compact.
 Rectangle {
     id: bar
 
@@ -73,6 +73,56 @@ Rectangle {
         }
     }
 
+    // A labelled on/off switch.
+    component Toggle: Rectangle {
+        id: toggle
+        property string label
+        property bool on: false
+        property string tip
+        signal toggled()
+        implicitWidth: toggleRow.implicitWidth + 20
+        implicitHeight: 32
+        radius: Theme.radius
+        color: toggleHover.hovered ? Theme.surfaceRaised : "transparent"
+        border.color: toggle.on ? Theme.accent : Theme.border
+        HoverHandler { id: toggleHover; cursorShape: Qt.PointingHandCursor }
+        TapHandler { onTapped: if (!Backend.busy) toggle.toggled() }
+        SmithToolTip {
+            visible: toggleHover.hovered
+            text: toggle.tip
+        }
+        Row {
+            id: toggleRow
+            anchors.centerIn: parent
+            spacing: 8
+            Text {
+                textFormat: Text.PlainText
+                text: toggle.label
+                color: toggle.on ? Theme.text : Theme.textFaint
+                font.family: Theme.textFamily
+                font.pixelSize: Theme.tinySize
+                anchors.verticalCenter: parent.verticalCenter
+            }
+            Rectangle {
+                width: 30
+                height: 16
+                radius: 8
+                color: toggle.on ? Theme.accentWash : Theme.window
+                border.color: toggle.on ? Theme.accent : Theme.borderStrong
+                anchors.verticalCenter: parent.verticalCenter
+                Rectangle {
+                    width: 10
+                    height: 10
+                    radius: 5
+                    y: 3
+                    x: toggle.on ? 17 : 3
+                    color: toggle.on ? Theme.accent : Theme.textFaint
+                    Behavior on x { NumberAnimation { duration: 120 } }
+                }
+            }
+        }
+    }
+
     RowLayout {
         anchors.fill: parent
         anchors.leftMargin: 16
@@ -100,52 +150,32 @@ Rectangle {
 
         Item { Layout.fillWidth: true }
 
-        // The sandbox's network, as a switch.
-        Rectangle {
-            visible: Backend.sandboxActive
-            implicitWidth: netRow.implicitWidth + 20
-            implicitHeight: 32
-            radius: Theme.radius
-            color: netHover.hovered ? Theme.surfaceRaised : "transparent"
-            border.color: Theme.border
-            HoverHandler { id: netHover; cursorShape: Qt.PointingHandCursor }
-            TapHandler { onTapped: if (!Backend.busy) Backend.setNetwork(!Backend.network) }
-            SmithToolTip {
-                visible: netHover.hovered
-                text: Backend.network ? "Sandboxed commands can use the network" : "Sandboxed commands have no network"
-            }
-            Row {
-                id: netRow
-                anchors.centerIn: parent
-                spacing: 8
-                Text {
-                    textFormat: Text.PlainText
-                    text: "network"
-                    color: Theme.textFaint
-                    font.family: Theme.textFamily
-                    font.pixelSize: Theme.tinySize
-                    anchors.verticalCenter: parent.verticalCenter
-                }
-                Rectangle {
-                    width: 30
-                    height: 16
-                    radius: 8
-                    color: Backend.network ? Theme.accentWash : Theme.window
-                    border.color: Backend.network ? Theme.accent : Theme.borderStrong
-                    anchors.verticalCenter: parent.verticalCenter
-                    Rectangle {
-                        width: 10
-                        height: 10
-                        radius: 5
-                        y: 3
-                        x: Backend.network ? 17 : 3
-                        color: Backend.network ? Theme.accent : Theme.textFaint
-                        Behavior on x { NumberAnimation { duration: 120 } }
-                    }
-                }
-            }
+        // Plan mode, as a switch.
+        Toggle {
+            objectName: "planToggle"
+            label: "plan"
+            on: Backend.planning
+            tip: Backend.planning ? "Plan mode: the agent reads and plans, but changes nothing (shift+tab)"
+                                  : "Plan mode: let the agent only read and plan first (shift+tab)"
+            onToggled: Backend.setPlanning(!Backend.planning)
         }
 
+        // The sandbox's network, as a switch.
+        Toggle {
+            visible: Backend.sandboxActive
+            label: "network"
+            on: Backend.network
+            tip: Backend.network ? "Sandboxed commands can use the network" : "Sandboxed commands have no network"
+            onToggled: Backend.setNetwork(!Backend.network)
+        }
+
+        SmithButton {
+            objectName: "changesButton"
+            text: "Changes"
+            tip: "What the agent changed in files this session, file by file (/diff)"
+            enabled: Backend.state === "ready"
+            onClicked: Backend.showChanges()
+        }
         SmithButton {
             text: "Undo"
             tip: "Undo the last turn: restore files it changed and edit your message again"

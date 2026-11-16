@@ -58,6 +58,14 @@ struct UndoResult {
   QStringList untracked;
 };
 
+// What the agent changed in files since the conversation started or was loaded.
+struct SessionChanges {
+  // Files that differ now from before the agent first changed them, by path.
+  QList<ChangedFile> files;
+  // Tools that ran whose changes can't be seen (bash).
+  QStringList untracked;
+};
+
 // Starts the message that reminds the model of unfinished todos when it stops early.
 extern const QString TODO_REMINDER;
 
@@ -96,6 +104,8 @@ struct AgentOptions {
   std::function<Answer(const Question&)> ask;
   // Gives the agent the todo_write tool.
   bool todos = true;
+  // Starts in plan mode (see Agent::setPlanning).
+  bool planning = false;
   // Always ask before the file tools change a file that runs outside the sandbox later, and report other changes after each turn.
   bool protectRunLater = true;
   // The report after each turn; off for a sub-agent, whose changes are in its parent's.
@@ -126,6 +136,12 @@ public:
   void setModel(const QString& model, std::optional<int> contextSize, const ServerPtr& server = {});
   void setReasoning(const QString& level);
 
+  // Plan mode: the model may read and search but not change files or run
+  // commands; such calls are refused, and each message tells it so. The
+  // first message after it is switched off says it's over.
+  void setPlanning(bool on);
+  bool planning() const;
+
   // The model's checklist, as last written with todo_write.
   TodoList todos() const;
   // The full conversation, including the system prompt.
@@ -145,6 +161,9 @@ public:
   bool canUndo() const;
   // Undoes the last turn: puts back files it changed and removes the turn from the conversation.
   std::optional<UndoResult> undo();
+
+  // Compares the files the agent changed with how they were before its first change. Reads them from disk.
+  SessionChanges sessionChanges() const;
 
   // Runs one user turn, with pictures to show the model if any. Throws on API errors; interruption via `cancel` is not an error.
   void send(const QString& text, const CancelPtr& cancel, const QList<Image>& images = {});
@@ -168,6 +187,10 @@ private:
     QString finishReason;
     // Prompt + completion tokens, when the server reports usage.
     std::optional<qint64> totalTokens;
+    qint64 promptTokens = 0;
+    qint64 completionTokens = 0;
+    // From the first token streamed to the last.
+    qint64 generationMs = 0;
   };
 
   struct Turn {
@@ -204,6 +227,10 @@ private:
   void setTodos(const TodoList& todos);
   ToolContext toolContext(const ToolDef& tool, const CancelPtr& cancel);
   void reportRunLater(const QMap<QString, QString>& before);
+  // Adds a turn's changes to what sessionChanges compares.
+  void absorb(const Checkpoint& checkpoint);
+  // Whether a call would change something, which plan mode refuses.
+  static bool changes(const ToolDef& tool, const QJsonObject& args);
   const ToolDef* findTool(const QString& name) const;
 
   AgentOptions m_options;
@@ -223,6 +250,12 @@ private:
   // Last exact token count from the server, and how many messages it covered.
   std::optional<QPair<qint64, int>> m_measured;
   TodoList m_todos;
+  bool m_planning = false;
+  // The last message went out in plan mode, so the next one says it's over.
+  bool m_planned = false;
+  // For sessionChanges: each file as it was before the agent first changed it, and the tools whose changes can't be seen.
+  QMap<QString, std::optional<QByteArray>> m_originals;
+  QStringList m_untracked;
   // Run-later files the user approved this turn, with the content they approved: not reported again.
   QMap<QString, QString> m_approvedRunLater;
 

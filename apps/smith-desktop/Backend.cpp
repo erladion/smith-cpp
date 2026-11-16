@@ -258,15 +258,19 @@ void Backend::submit(const QString& value) {
   }
   const std::shared_ptr<Agent> agent = m_pAgent;
   const QList<Image> images = refs.images;
+  const bool planning = agent->planning();
   runTurn(
-      "Thinking…", [agent, text, images](const CancelPtr& cancel) { agent->send(text, cancel, images); },
-      [this]() {
+      planning ? "Planning…" : "Thinking…", [agent, text, images](const CancelPtr& cancel) { agent->send(text, cancel, images); },
+      [this, planning]() {
         const TurnStats& turn = m_turns.lastTurn();
         m_transcript.append(Entry::simple(Entry::Kind::Meta, turnSummary(turn.reason, turn.elapsedMs, turn.toolCalls)));
         if (turn.reason == "interrupted" && matrix()) {
           m_transcript.append(Entry::simple(Entry::Kind::Quote, INTERRUPTED));
         }
         refreshSessions();
+        if (planning && turn.reason == "stop" && m_pAgent->planning()) {
+          Q_EMIT openPicker("plan");
+        }
       },
       true);
 }

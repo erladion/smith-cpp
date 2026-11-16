@@ -27,7 +27,8 @@ QString helpText() {
     lines << "  " + QString("%1 %2").arg(command.name, command.args).leftJustified(width + 2) + command.description;
   }
   return "Commands (the same as in the terminal; most also have a button or menu):\n" + lines.join('\n') +
-         "\nKeys: enter sends · shift+enter adds a new line · esc interrupts the agent · ↑/↓ in an empty box recall earlier input\n"
+         "\nKeys: enter sends · shift+enter adds a new line · esc interrupts the agent · shift+tab switches plan mode\n"
+         "      ↑/↓ in an empty box recall earlier input\n"
          "      y / a / n answer an approval · ctrl+n new session · ctrl+o open a folder · ctrl+k pick a model";
 }
 
@@ -95,6 +96,14 @@ void Backend::runCommand(const QString& text) {
     } else {
       setTheme(arg);
     }
+  } else if (command == "/plan") {
+    if (!arg.isEmpty() && arg != "on" && arg != "off") {
+      notice(NoticeLevel::Error, "Use /plan to switch plan mode, or /plan on or /plan off.");
+    } else {
+      setPlanning(arg.isEmpty() ? !planning() : arg == "on");
+    }
+  } else if (command == "/diff") {
+    showChanges();
   } else if (command == "/network") {
     if (arg == "on" || arg == "off") {
       setNetwork(arg == "on");
@@ -273,6 +282,38 @@ void Backend::undo() {
   m_transcript.append(undoNotice(*result, m_project.cwd));
   Q_EMIT restoreInput(result->prompt);
   Q_EMIT changed();
+}
+
+void Backend::setPlanning(bool on) {
+  if (!m_pAgent || m_turns.busy()) {
+    return;
+  }
+  if (on == m_pAgent->planning()) {
+    notice(NoticeLevel::Info, QString("Plan mode is already %1.").arg(on ? "on" : "off"));
+    return;
+  }
+  m_pAgent->setPlanning(on);
+  notice(NoticeLevel::Info, planModeText(on));
+  Q_EMIT changed();
+}
+
+void Backend::carryOutPlan() {
+  if (!m_pAgent || m_turns.busy()) {
+    return;
+  }
+  if (m_pAgent->planning()) {
+    setPlanning(false);
+  }
+  submit(GO_AHEAD);
+}
+
+void Backend::showChanges() {
+  if (!m_pAgent) {
+    return;
+  }
+  for (const Entry& entry : changesEntries(m_pAgent->sessionChanges(), m_project.cwd)) {
+    m_transcript.append(entry);
+  }
 }
 
 void Backend::compact() {

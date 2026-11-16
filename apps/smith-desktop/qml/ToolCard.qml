@@ -16,8 +16,10 @@ Rectangle {
     property bool expanded: false
 
     readonly property int previewLines: 4
+    readonly property int diffPreviewLines: 16
     readonly property bool hasDiff: diff.length > 0 && !isError
-    readonly property bool canExpand: !hasDiff && outputLines > previewLines
+    readonly property bool canExpand: hasDiff ? diff.length > diffPreviewLines : outputLines > previewLines
+    readonly property int hiddenLines: hasDiff ? diff.length - diffPreviewLines : outputLines - previewLines
 
     implicitHeight: column.implicitHeight + 20
     radius: Theme.radius
@@ -80,7 +82,8 @@ Rectangle {
             visible: card.hasDiff
             Layout.fillWidth: true
             rows: card.diff
-            maxLines: 16
+            maxLines: card.expanded ? 2000 : card.diffPreviewLines
+            moreHint: false
         }
 
         Rectangle {
@@ -112,7 +115,7 @@ Rectangle {
         Text {
             textFormat: Text.PlainText
             visible: card.canExpand
-            text: card.expanded ? "▴ show less" : "▾ " + (card.outputLines - card.previewLines) + " more line" + (card.outputLines - card.previewLines === 1 ? "" : "s")
+            text: card.expanded ? "▴ show less" : "▾ " + card.hiddenLines + " more " + (card.hasDiff ? "diff " : "") + "line" + (card.hiddenLines === 1 ? "" : "s")
             color: Theme.textFaint
             font.family: Theme.textFamily
             font.pixelSize: Theme.tinySize

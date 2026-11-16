@@ -24,7 +24,7 @@ Rectangle {
 
     implicitHeight: column.implicitHeight + 20
     color: Theme.surface
-    border.color: input.activeFocus ? Theme.borderStrong : Theme.border
+    border.color: Backend.planning ? Theme.accent : input.activeFocus ? Theme.borderStrong : Theme.border
     radius: Theme.radius
 
     function send() {
@@ -105,7 +105,8 @@ Rectangle {
                     enabled: Backend.state === "ready"
                     wrapMode: TextArea.Wrap
                     placeholderText: Backend.agentRunning ? "Type to add to what the agent is doing (enter queues it)"
-                                                          : "Ask for something, or type / for commands"
+                                     : Backend.planning ? "Ask for a plan: the agent reads, changes nothing (shift+tab ends plan mode)"
+                                                        : "Ask for something, or type / for commands"
                     placeholderTextColor: Theme.textFaint
                     color: Theme.text
                     selectionColor: Theme.selection
@@ -146,6 +147,13 @@ Rectangle {
                                 event.accepted = true
                                 return
                             }
+                        }
+                        if (event.key === Qt.Key_Backtab) {
+                            if (!Backend.busy) {
+                                Backend.setPlanning(!Backend.planning)
+                            }
+                            event.accepted = true
+                            return
                         }
                         if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && !(event.modifiers & Qt.ShiftModifier)) {
                             composer.send()

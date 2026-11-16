@@ -161,6 +161,8 @@ QVariant TranscriptModel::data(const QModelIndex& index, int role) const {
     };
   case LiveRole:
     return m_live && index.row() == m_entries.size() - 1;
+  case FullDiffRole:
+    return entry.fullDiff;
   default:
     return {};
   }
@@ -171,7 +173,7 @@ QHash<int, QByteArray> TranscriptModel::roleNames() const {
       {KindRole, "kind"},           {TextRole, "text"},       {HtmlRole, "html"},           {LevelRole, "level"},
       {NameRole, "name"},           {SummaryRole, "summary"}, {OutputRole, "output"},       {OutputLinesRole, "outputLines"},
       {IsErrorRole, "isError"},     {DiffRole, "diff"},       {DiffStatsRole, "diffStats"}, {TodosRole, "todos"},
-      {BannerRole, "banner"},       {LiveRole, "live"},
+      {BannerRole, "banner"},       {LiveRole, "live"},       {FullDiffRole, "fullDiff"},
   };
 }
 

@@ -33,6 +33,7 @@ struct AgentSettings {
   QString model;
   QString reasoning;
   std::optional<int> contextSize;
+  bool planning = false;
 };
 
 // The folder being worked in, and what was loaded for it.

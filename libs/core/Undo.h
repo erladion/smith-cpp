@@ -44,6 +44,13 @@ struct RestoreResult {
   QStringList skipped;
 };
 
+// A file as it was before the agent first changed it, and as it is now; nullopt where it doesn't exist.
+struct ChangedFile {
+  QString file;
+  std::optional<QByteArray> before;
+  std::optional<QByteArray> now;
+};
+
 // Puts files back as they were before the checkpoint, leaving alone any file changed since.
 RestoreResult restore(const Checkpoint& checkpoint);
 

@@ -7,6 +7,7 @@
 #include <QDateTime>
 #include <QPointer>
 
+#include <cmath>
 #include <memory>
 #include <utility>
 
@@ -99,6 +100,18 @@ std::optional<Entry> TurnRunner::apply(const AgentEvent& event) {
                           m_reason = doneReasonName(done.reason);
                           return std::nullopt;
                         },
+                        [this](const Event::Usage& usage) -> Added {
+                          if (m_timed) {
+                            m_usage.calls++;
+                            m_usage.promptTokens += usage.promptTokens;
+                            m_usage.completionTokens += usage.completionTokens;
+                            if (usage.generationMs > 0) {
+                              m_usage.timedTokens += usage.completionTokens;
+                              m_usage.generationMs += usage.generationMs;
+                            }
+                          }
+                          return std::nullopt;
+                        },
                     },
                     event);
 }
@@ -115,6 +128,7 @@ void TurnRunner::runTurn(const QString& activity, const QString& baseUrl, std::f
     m_startedAt = QDateTime::currentMSecsSinceEpoch();
     m_toolCalls = 0;
     m_reason.clear();
+    m_usage = {};
   }
   Q_EMIT changed();
   auto error = std::make_shared<QString>();
@@ -130,7 +144,7 @@ void TurnRunner::runTurn(const QString& activity, const QString& baseUrl, std::f
       },
       [this, error, finished]() {
         if (m_timed) {
-          m_last = TurnStats{m_reason, m_clock.elapsed(), m_toolCalls};
+          m_last = TurnStats{m_reason, m_clock.elapsed(), m_toolCalls, m_usage};
           m_timed = false;
           m_startedAt = 0;
         }
@@ -213,6 +227,69 @@ void TurnRunner::close() {
     delete thread;
   }
   m_workers.clear();
+}
+
+std::optional<double> TurnUsage::tokensPerSecond() const {
+  // Too short to time well.
+  if (generationMs < 250 || timedTokens < 8) {
+    return std::nullopt;
+  }
+  return timedTokens * 1000.0 / generationMs;
+}
+
+QString usageText(const TurnUsage& usage) {
+  if (usage.calls == 0) {
+    return {};
+  }
+  auto count = [](qint64 n) {
+    if (n < 1000) {
+      return QString::number(n);
+    }
+    if (n < 9950) {
+      return QString::number(n / 1000.0, 'f', 1) + "k";
+    }
+    return QString::number(std::llround(n / 1000.0)) + "k";
+  };
+  QString text = count(usage.promptTokens) + " in · " + count(usage.completionTokens) + " out";
+  if (const std::optional<double> speed = usage.tokensPerSecond()) {
+    text += QString(" · %1 tok/s").arg(*speed < 10 ? QString::number(*speed, 'f', 1) : QString::number(std::lround(*speed)));
+  }
+  return text;
+}
+
+QList<Entry> changesEntries(const SessionChanges& changes, const QString& cwd) {
+  auto relative = [&](const QString& file) { return file.startsWith(cwd + "/") ? file.mid(cwd.size() + 1) : file; };
+  const QString untracked = changes.untracked.isEmpty()
+                                ? QString()
+                                : QString("\nNot shown: what %1 commands changed (git diff shows that).").arg(changes.untracked.join(", "));
+  if (changes.files.isEmpty()) {
+    return {Entry::notice(NoticeLevel::Info, "The agent hasn't changed any files in this session, or they're back as they were." + untracked)};
+  }
+  QList<Entry> files;
+  DiffStats total;
+  for (const ChangedFile& change : changes.files) {
+    Entry entry;
+    entry.kind = Entry::Kind::Tool;
+    entry.name = !change.before ? "created" : !change.now ? "deleted" : "changed";
+    entry.summary = relative(change.file);
+    const QByteArray before = change.before.value_or(QByteArray());
+    const QByteArray now = change.now.value_or(QByteArray());
+    if (before.contains('\0') || now.contains('\0')) {
+      entry.output = QString("A binary file: %1 → %2 bytes.").arg(before.size()).arg(now.size());
+    } else {
+      entry.diff = diffLines(QString::fromUtf8(before), QString::fromUtf8(now), 3);
+      entry.fullDiff = true;
+      const DiffStats stats = diffStats(*entry.diff);
+      total.added += stats.added;
+      total.removed += stats.removed;
+    }
+    files.append(entry);
+  }
+  const QString head = QString("Changed in this session: %1, +%2 −%3, compared with how each was before the agent first changed it.")
+                           .arg(plural(changes.files.size(), "file"))
+                           .arg(total.added)
+                           .arg(total.removed);
+  return QList<Entry>{Entry::notice(NoticeLevel::Info, head + untracked)} + files;
 }
 
 Entry undoNotice(const UndoResult& result, const QString& cwd) {

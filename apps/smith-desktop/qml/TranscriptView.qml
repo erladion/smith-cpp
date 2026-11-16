@@ -211,6 +211,7 @@ ListView {
                 required property bool isError
                 required property var diff
                 required property var diffStats
+                required property bool fullDiff
                 width: ListView.view.width
                 implicitHeight: card.implicitHeight
                 ToolCard {
@@ -224,6 +225,7 @@ ListView {
                     isError: toolRow.isError
                     diff: toolRow.diff
                     diffStats: toolRow.diffStats
+                    expanded: toolRow.fullDiff
                 }
             }
         }

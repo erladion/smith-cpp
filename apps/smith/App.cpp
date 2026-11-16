@@ -354,13 +354,17 @@ void App::submit(const QString& value) {
   }
   const std::shared_ptr<Agent> current = m_pAgent;
   const QList<Image> images = refs.images;
+  const bool planning = current->planning();
   runBusy(
-      "Thinking…", [current, text, images](const CancelPtr& cancel) { current->send(text, cancel, images); },
-      [this]() {
+      planning ? "Planning…" : "Thinking…", [current, text, images](const CancelPtr& cancel) { current->send(text, cancel, images); },
+      [this, planning]() {
         const TurnStats& turn = m_turns.lastTurn();
         print(Entry::simple(Entry::Kind::Meta, turnSummary(turn.reason, turn.elapsedMs, turn.toolCalls)));
         if (turn.reason == "interrupted" && matrix()) {
           print(Entry::simple(Entry::Kind::Quote, INTERRUPTED));
+        }
+        if (planning && turn.reason == "stop" && m_pAgent->planning()) {
+          offerPlan();
         }
       },
       true);

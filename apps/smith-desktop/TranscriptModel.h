@@ -31,6 +31,7 @@ public:
     TodosRole,
     BannerRole,
     LiveRole,
+    FullDiffRole,
   };
 
   explicit TranscriptModel(QObject* parent = nullptr);

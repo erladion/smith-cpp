@@ -51,6 +51,8 @@ struct Entry {
   QString output;
   bool isError = false;
   std::optional<Diff> diff;
+  // Show all of the diff, not only its start (/diff).
+  bool fullDiff = false;
 
   TodoList todos;
 

@@ -17,7 +17,7 @@ QString messageText(const Message& message) {
   if (!content.isArray()) {
     return {};
   }
-  // The text comes first; the parts after it are pictures and their labels.
+  // The text comes first; the parts after it are pictures, their labels and notes.
   const QJsonArray parts = content.toArray();
   return parts.isEmpty() ? QString() : parts.first().toObject().value("text").toString();
 }
@@ -56,6 +56,15 @@ Message withoutImages(const Message& message) {
   Message plain = message;
   plain["content"] = messageText(message);
   return plain;
+}
+
+Message withNote(const Message& message, const QString& note) {
+  const QJsonValue content = message.value("content");
+  QJsonArray parts = content.isArray() ? content.toArray() : QJsonArray{QJsonObject{{"type", "text"}, {"text", content.toString()}}};
+  parts.append(QJsonObject{{"type", "text"}, {"text", note}});
+  Message noted = message;
+  noted["content"] = parts;
+  return noted;
 }
 
 Message toolMessage(const QString& callId, const QString& content) {
