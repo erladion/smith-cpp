@@ -28,9 +28,9 @@ Palette Palette::forTheme(Theme theme) {
     palette.surfaceRaised = QColor("#0c170f");
     palette.border = QColor("#163020");
     palette.borderStrong = QColor("#23573a");
-    palette.text = QColor("#c6f2d0");
-    palette.textDim = QColor("#76a883");
-    palette.textFaint = QColor("#3e6a4b");
+    palette.text = QColor("#d4d4d4");
+    palette.textDim = QColor("#767676");
+    palette.textFaint = QColor("#505050");
     palette.accent = QColor("#00ff41");
     palette.accentSoft = QColor("#19c95a");
     palette.accentWash = QColor("#0a2a14");
