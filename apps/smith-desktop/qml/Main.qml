@@ -148,6 +148,7 @@ ApplicationWindow {
 
             TranscriptView {
                 id: transcript
+                objectName: "transcript"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
             }
@@ -168,6 +169,7 @@ ApplicationWindow {
                 }
 
                 ApprovalPanel {
+                    objectName: "approvalPanel"
                     Layout.fillWidth: true
                     visible: Object.keys(Backend.approval).length > 0
                 }

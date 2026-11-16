@@ -20,6 +20,8 @@ ListView {
     reuseItems: false
     ScrollBar.vertical: ScrollBar {
         policy: ScrollBar.AsNeeded
+        // Held, it stays where you put it; let go at the end, it follows again.
+        onPressedChanged: view.follow = !pressed && view.atYEnd
         contentItem: Rectangle {
             implicitWidth: 6
             radius: 3
@@ -35,20 +37,12 @@ ListView {
         follow = true
     }
 
-    onContentYChanged: if (!scrolling && (moving || dragging)) follow = atYEnd
+    // You moved it (wheel, drag or scroll bar): it follows again once back at the end.
+    // No WheelHandler for this: it would take the wheel from the list, which then didn't scroll.
+    onContentYChanged: if (!scrolling && (moving || dragging || flicking)) follow = atYEnd
     onMovementEnded: follow = atYEnd
     onCountChanged: if (follow) Qt.callLater(toEnd)
     onContentHeightChanged: if (follow) Qt.callLater(toEnd)
-
-    WheelHandler {
-        onWheel: event => {
-            if (event.angleDelta.y > 0) {
-                view.follow = false
-            } else {
-                Qt.callLater(() => view.follow = view.atYEnd)
-            }
-        }
-    }
 
     readonly property int column: Math.min(width - 48, 980)
 

@@ -21,6 +21,7 @@
 #include <QQuickItemGrabResult>
 #include <QQuickWindow>
 #include <QSignalSpy>
+#include <QWheelEvent>
 
 using namespace Smith;
 using namespace TestUtil;
@@ -76,6 +77,9 @@ private Q_SLOTS:
   void deletesAnotherSession();
   void landsATaskWorktree();
   void tooltipsFollowTheTheme();
+  void scrollsWithTheWheel();
+  void suggestionsStayInTheirBox();
+  void longCommandsStayInTheWindow();
   void switchesTheme();
 
 private:
@@ -393,6 +397,105 @@ void TestDesktop::tooltipsFollowTheTheme() {
   QVERIFY2(g_qmlWarnings.isEmpty(), qPrintable(g_qmlWarnings.join('\n')));
 }
 
+void TestDesktop::scrollsWithTheWheel() {
+  auto* window = qobject_cast<QQuickWindow*>(root());
+  auto* view = root()->findChild<QQuickItem*>("transcript");
+  QVERIFY(view);
+  // More than fits, then at the end, as after a turn.
+  for (int i = 0; i < 4; i++) {
+    m_pBackend->submit("/help");
+  }
+  QTest::qWait(200);
+  QMetaObject::invokeMethod(view, "toEnd");
+  QTest::qWait(200);
+  const qreal before = view->property("contentY").toReal();
+
+  // Turns of the wheel over the conversation, each later than the last as a real one is.
+  const QPointF at = view->mapToScene(QPointF(view->width() / 2, view->height() / 2));
+  static ulong timestamp = 1000;
+  auto turn = [&](int notches) {
+    for (int i = 0; i < std::abs(notches); i++) {
+      QWheelEvent wheel(at, window->mapToGlobal(at.toPoint()), QPoint(), QPoint(0, notches > 0 ? 120 : -120), Qt::NoButton, Qt::NoModifier,
+                        Qt::NoScrollPhase, false);
+      wheel.setTimestamp(timestamp += 100);
+      QCoreApplication::sendEvent(window, &wheel);
+      QTest::qWait(20);
+    }
+  };
+  auto atEnd = [&]() { return view->property("atYEnd").toBool(); };
+  turn(5);
+  QTRY_VERIFY2(view->property("contentY").toReal() < before - 50, "the wheel scrolls the conversation");
+  // Scrolled up, new output doesn't pull it back down.
+  QTRY_VERIFY(!view->property("follow").toBool());
+  // Back down to the end, it follows again.
+  for (int i = 0; i < 40 && !atEnd(); i++) {
+    turn(-1);
+  }
+  QTRY_VERIFY(atEnd());
+  QTRY_VERIFY(view->property("follow").toBool());
+  QVERIFY2(g_qmlWarnings.isEmpty(), qPrintable(g_qmlWarnings.join('\n')));
+}
+
+void TestDesktop::suggestionsStayInTheirBox() {
+  auto* window = qobject_cast<QQuickWindow*>(root());
+  auto* input = root()->findChild<QQuickItem*>("composerInput");
+  auto* box = root()->findChild<QQuickItem*>("suggestions");
+  QVERIFY(input && box);
+  window->requestActivate();
+  input->forceActiveFocus();
+  input->setProperty("text", "/");
+  QTRY_VERIFY(box->isVisible());
+  // Long hints (/worktree's) are cut short inside the box, not drawn past it and the window's edge.
+  QList<QQuickItem*> texts;
+  std::function<void(QQuickItem*)> collect = [&](QQuickItem* item) {
+    if (QString(item->metaObject()->className()).startsWith("QQuickText") && item->isVisible() && !item->property("text").toString().isEmpty()) {
+      texts << item;
+    }
+    for (QQuickItem* child : item->childItems()) {
+      collect(child);
+    }
+  };
+  // Every row, once the list has laid them out.
+  QTRY_VERIFY((texts.clear(), collect(box), texts.size() > 10));
+  for (QQuickItem* text : texts) {
+    const QRectF inBox = text->mapRectToItem(box, QRectF(0, 0, text->width(), text->height()));
+    QVERIFY2(inBox.right() <= box->width(), qPrintable(text->property("text").toString()));
+  }
+  shot("15-suggestions");
+  input->setProperty("text", "");
+  QTRY_VERIFY(!box->isVisible());
+  QVERIFY2(g_qmlWarnings.isEmpty(), qPrintable(g_qmlWarnings.join('\n')));
+}
+
+void TestDesktop::longCommandsStayInTheWindow() {
+  // A command long enough that offering to allow commands like it names a long rule.
+  const QString command = "ls /tmp/" + QString(400, 'x');
+  m_pFake->setScript({FakeServer::stream({FakeServer::callDelta(0, "b9", "bash", {{"command", command}})}, "tool_calls"), FakeServer::text("Done.")});
+  m_pBackend->submit("list it");
+  QTRY_VERIFY_WITH_TIMEOUT(!m_pBackend->approval().isEmpty(), 15000);
+  QVERIFY(m_pBackend->approval().value("similar").toString().size() > 300);
+  auto* window = qobject_cast<QQuickWindow*>(root());
+  auto* panel = root()->findChild<QQuickItem*>("approvalPanel");
+  QVERIFY(panel);
+  QTRY_VERIFY(panel->isVisible() && panel->width() > 0);
+  QTest::qWait(100);
+  // Everything in the panel, buttons included, inside the window.
+  std::function<void(QQuickItem*)> check = [&](QQuickItem* item) {
+    if (item->isVisible() && item->width() > 0) {
+      const QRectF inWindow = item->mapRectToScene(QRectF(0, 0, item->width(), item->height()));
+      QVERIFY2(inWindow.right() <= window->width() + 0.5, qPrintable(QString("%1 reaches %2").arg(item->metaObject()->className()).arg(inWindow.right())));
+      for (QQuickItem* child : item->childItems()) {
+        check(child);
+      }
+    }
+  };
+  check(panel);
+  shot("14-long-command");
+  m_pBackend->decide("deny");
+  QTRY_VERIFY_WITH_TIMEOUT(!m_pBackend->busy(), 15000);
+  QVERIFY2(g_qmlWarnings.isEmpty(), qPrintable(g_qmlWarnings.join('\n')));
+}
+
 void TestDesktop::switchesTheme() {
   const QString before = m_pBackend->theme();
   // From another theme, when the run is already light (SMITH_TEST_THEME=light).
@@ -422,7 +525,7 @@ void TestDesktop::switchesTheme() {
   QCOMPARE(item(0)->property("text").toString(), QString("Theme…"));
   auto textColor = [&](int index) { return item(index)->property("contentItem").value<QQuickItem*>()->property("color").value<QColor>(); };
   QCOMPARE(textColor(1), color("text"));
-  shot("14-menu");
+  shot("16-menu");
   QMetaObject::invokeMethod(menu, "close");
 
   // /theme without a name opens the picker; with one it switches now, and is remembered.
@@ -439,7 +542,7 @@ void TestDesktop::switchesTheme() {
   QCOMPARE(textColor(1), color("text"));
   QCOMPARE(loadPreferences().theme, QString("light"));
   QTRY_VERIFY(!picker->property("visible").toBool());
-  shot("15-light");
+  shot("17-light");
 
   // A theme file of yours: listed in the picker, and its colors over its base's.
   write(m_pHome->file("config/smith/themes/night.json"), R"({"description": "Easy at night", "base": "plain", "colors": {"accent": "#ff8800"}})");

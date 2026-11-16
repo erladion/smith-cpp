@@ -24,18 +24,25 @@ Button {
         text: control.tip
     }
 
-    contentItem: Row {
-        spacing: 8
+    // Its full width asked for; given less, the label is shortened in the middle.
+    contentItem: Item {
+        implicitWidth: label.implicitWidth + (hint.visible ? hint.implicitWidth + 8 : 0)
+        implicitHeight: label.implicitHeight
         Text {
+            id: label
             textFormat: Text.PlainText
+            width: Math.min(implicitWidth, parent.width - (hint.visible ? hint.implicitWidth + 8 : 0))
+            elide: Text.ElideMiddle
             text: control.text
             font: control.font
             color: !control.enabled ? Theme.textFaint : control.kind === "normal" || control.kind === "ghost" ? Theme.text : control.tone
             anchors.verticalCenter: parent.verticalCenter
         }
         Text {
+            id: hint
             textFormat: Text.PlainText
             visible: control.keyHint.length > 0
+            x: label.width + 8
             text: control.keyHint
             font.family: Theme.mono
             font.pixelSize: Theme.tinySize

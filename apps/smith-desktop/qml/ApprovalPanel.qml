@@ -145,7 +145,10 @@ Rectangle {
             }
             SmithButton {
                 visible: (panel.request.similar || "").length > 0
+                // A long command shortened to the panel's width, in full on hover.
+                width: Math.min(implicitWidth, parent.width)
                 text: "Always allow \"" + (panel.request.similar || "") + "\" commands"
+                tip: (panel.request.similar || "").length > 60 ? text : ""
                 keyHint: "s"
                 onClicked: Backend.decide("similar")
             }

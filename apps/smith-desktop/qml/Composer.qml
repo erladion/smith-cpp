@@ -101,6 +101,7 @@ Rectangle {
 
                 TextArea {
                     id: input
+                    objectName: "composerInput"
                     enabled: Backend.state === "ready"
                     wrapMode: TextArea.Wrap
                     placeholderText: Backend.agentRunning ? "Type to add to what the agent is doing (enter queues it)"
@@ -188,6 +189,7 @@ Rectangle {
 
     // Command suggestions, above the box.
     Rectangle {
+        objectName: "suggestions"
         visible: composer.suggestions.length > 0 && input.activeFocus
         anchors.bottom: parent.top
         anchors.bottomMargin: 6
@@ -203,6 +205,7 @@ Rectangle {
             anchors.fill: parent
             anchors.margins: 4
             anchors.bottomMargin: 28
+            clip: true
             interactive: false
             model: composer.suggestions.slice(0, 8)
             delegate: Rectangle {
@@ -229,10 +232,13 @@ Rectangle {
                     }
                     Text {
                         textFormat: Text.PlainText
+                        // What's left of the row, so a long hint ends in … inside the box.
+                        width: suggestion.width - 8 - 180 - 12 - 8
                         text: suggestion.modelData.hint
                         color: Theme.textFaint
                         font.family: Theme.textFamily
                         font.pixelSize: Theme.tinySize
+                        elide: Text.ElideRight
                         anchors.verticalCenter: parent.verticalCenter
                     }
                 }
