@@ -437,6 +437,9 @@ void TestUi::themesColorTheTerminal() {
   QCOMPARE(toAnsi(plainText), QString("text"));
   setPalette(Ui::terminalPalette(Theme::Matrix));
   QCOMPARE(toAnsi(plainText), QString("text"));
+  // Matrix's grey, for dimmed details, is a plain grey without a green tint.
+  const Rgb gray = *Ui::terminalPalette(Theme::Matrix).shades[size_t(Color::Gray)];
+  QVERIFY((gray >> 16) == ((gray >> 8) & 0xff) && ((gray >> 8) & 0xff) == (gray & 0xff));
 
   // 256 colors: the nearest of them.
   setPalette(Ui::terminalPalette(Theme::Matrix));

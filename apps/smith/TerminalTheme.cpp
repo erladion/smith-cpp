@@ -15,7 +15,7 @@ Tui::Palette palette(std::optional<Tui::Rgb> text, Tui::Rgb red, Tui::Rgb green,
 Tui::Palette terminalPalette(Theme theme) {
   switch (theme) {
   case Theme::Matrix:
-    return palette(std::nullopt, 0xff5c5c, 0x00ff41, 0xe8c46a, 0x5fd7c8, 0xc792ea, 0x7dffb6, 0xeafff0, 0x5e8c6a);
+    return palette(std::nullopt, 0xff5c5c, 0x00ff41, 0xe8c46a, 0x5fd7c8, 0xc792ea, 0x7dffb6, 0xeafff0, 0x767676);
   case Theme::Plain:
     return palette(std::nullopt, 0xf07178, 0x7ec699, 0xe5c07b, 0x61afef, 0xc678dd, 0x56b6c2, 0xdcdfe4, 0x8b9098);
   case Theme::Light:
