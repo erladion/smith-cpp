@@ -34,7 +34,7 @@ Palette Palette::forTheme(Theme theme) {
     palette.accent = QColor("#00ff41");
     palette.accentSoft = QColor("#19c95a");
     palette.accentWash = QColor("#0a2a14");
-    palette.code = QColor("#7dffb6");
+    palette.code = QColor("#00ff41");
     palette.codeWash = QColor("#0b1f13");
     palette.info = QColor("#5fd7c8");
     palette.warn = QColor("#e8c46a");
