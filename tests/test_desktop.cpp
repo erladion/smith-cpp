@@ -461,7 +461,7 @@ void TestDesktop::suggestionsStayInTheirBox() {
     const QRectF inBox = text->mapRectToItem(box, QRectF(0, 0, text->width(), text->height()));
     QVERIFY2(inBox.right() <= box->width(), qPrintable(text->property("text").toString()));
   }
-  shot("15-suggestions");
+  shot("16-suggestions");
   input->setProperty("text", "");
   QTRY_VERIFY(!box->isVisible());
   QVERIFY2(g_qmlWarnings.isEmpty(), qPrintable(g_qmlWarnings.join('\n')));
@@ -470,7 +470,9 @@ void TestDesktop::suggestionsStayInTheirBox() {
 void TestDesktop::longCommandsStayInTheWindow() {
   // A command long enough that offering to allow commands like it names a long rule.
   const QString command = "ls /tmp/" + QString(400, 'x');
-  m_pFake->setScript({FakeServer::stream({FakeServer::callDelta(0, "b9", "bash", {{"command", command}})}, "tool_calls"), FakeServer::text("Done.")});
+  // The answer repeats it in a code block, as models do, with a long line of words too.
+  const QString answer = "It ran:\n\n```bash\n" + command + "\necho" + QString(" word").repeated(120) + "\n```\n\nDone.";
+  m_pFake->setScript({FakeServer::stream({FakeServer::callDelta(0, "b9", "bash", {{"command", command}})}, "tool_calls"), FakeServer::text(answer)});
   m_pBackend->submit("list it");
   QTRY_VERIFY_WITH_TIMEOUT(!m_pBackend->approval().isEmpty(), 15000);
   QVERIFY(m_pBackend->approval().value("similar").toString().size() > 300);
@@ -491,8 +493,38 @@ void TestDesktop::longCommandsStayInTheWindow() {
   };
   check(panel);
   shot("14-long-command");
-  m_pBackend->decide("deny");
+  // Allowed, it runs and its card in the conversation keeps the command and output inside too.
+  m_pBackend->decide("allow");
   QTRY_VERIFY_WITH_TIMEOUT(!m_pBackend->busy(), 15000);
+  auto* view = root()->findChild<QQuickItem*>("transcript");
+  QMetaObject::invokeMethod(view, "toEnd");
+  QTest::qWait(300);
+  QQuickItem* card = nullptr;
+  std::function<void(QQuickItem*)> findCard = [&](QQuickItem* item) {
+    if (item->property("name").toString() == "bash" && item->property("summary").toString().contains(QString(300, 'x'))) {
+      card = item;
+    }
+    for (QQuickItem* child : item->childItems()) {
+      findCard(child);
+    }
+  };
+  findCard(view);
+  QVERIFY(card);
+  check(card);
+  // The answer's code block wraps inside the answer instead of running past it.
+  QQuickItem* answerText = nullptr;
+  std::function<void(QQuickItem*)> findAnswer = [&](QQuickItem* item) {
+    if (QString(item->metaObject()->className()).contains("TextEdit") && item->property("text").toString().contains("word word")) {
+      answerText = item;
+    }
+    for (QQuickItem* child : item->childItems()) {
+      findAnswer(child);
+    }
+  };
+  QTRY_VERIFY((findAnswer(view), answerText));
+  QVERIFY2(answerText->property("contentWidth").toReal() <= answerText->width() + 1,
+           qPrintable(QString("drawn %1 wide in %2").arg(answerText->property("contentWidth").toReal()).arg(answerText->width())));
+  shot("15-long-command-ran");
   QVERIFY2(g_qmlWarnings.isEmpty(), qPrintable(g_qmlWarnings.join('\n')));
 }
 
@@ -525,7 +557,7 @@ void TestDesktop::switchesTheme() {
   QCOMPARE(item(0)->property("text").toString(), QString("Theme…"));
   auto textColor = [&](int index) { return item(index)->property("contentItem").value<QQuickItem*>()->property("color").value<QColor>(); };
   QCOMPARE(textColor(1), color("text"));
-  shot("16-menu");
+  shot("17-menu");
   QMetaObject::invokeMethod(menu, "close");
 
   // /theme without a name opens the picker; with one it switches now, and is remembered.
@@ -542,7 +574,7 @@ void TestDesktop::switchesTheme() {
   QCOMPARE(textColor(1), color("text"));
   QCOMPARE(loadPreferences().theme, QString("light"));
   QTRY_VERIFY(!picker->property("visible").toBool());
-  shot("17-light");
+  shot("18-light");
 
   // A theme file of yours: listed in the picker, and its colors over its base's.
   write(m_pHome->file("config/smith/themes/night.json"), R"({"description": "Easy at night", "base": "plain", "colors": {"accent": "#ff8800"}})");

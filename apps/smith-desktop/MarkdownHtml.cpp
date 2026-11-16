@@ -41,12 +41,13 @@ QString markdownToHtml(const QString& markdown, const Palette& palette) {
   bool inBlock = false;
   for (const Tui::Line& line : lines) {
     // A code block line starts with the gutter; gather them into one block with a wash behind it.
+    // Its long lines wrap (pre-wrap): a plain <pre> would run past the answer and the window.
     // Quotes have the same gutter, but italic text.
     const bool gutter = !line.isEmpty() && line.first().text == "│ " && line.first().style.dim;
     const bool blockLine = gutter && !(line.size() > 1 && line[1].style.italic);
     if (blockLine != inBlock) {
       html += blockLine ? QString("<table width=\"100%\" cellpadding=\"8\" style=\"background-color:%1; margin-top:4px; margin-bottom:4px\"><tr><td>"
-                                  "<pre style=\"font-family:'%2'; color:%3; margin:0\">")
+                                  "<pre style=\"font-family:'%2'; color:%3; margin:0; white-space:pre-wrap\">")
                               .arg(palette.codeWash.name(), palette.monoFamily, palette.text.name())
                         : QString("</pre></td></tr></table>");
       inBlock = blockLine;
