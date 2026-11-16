@@ -34,8 +34,8 @@ struct Endpoint {
 };
 
 // "matrix" adds digital rain at startup and a katakana spinner; "plain" and
-// "light" none of it. In the terminal, plain and light look the same: its own
-// colors decide the shades.
+// "light" none of it. Each has its own colors; in the terminal, light is for
+// one with a light background.
 enum class Theme { Matrix, Plain, Light };
 
 // The themes' names, as the config and /theme take them.

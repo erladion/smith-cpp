@@ -17,6 +17,7 @@
 #include "frontend/Folders.h"
 #include "frontend/Greetings.h"
 #include "frontend/Replay.h"
+#include "TerminalTheme.h"
 #include "View.h"
 
 using namespace Smith;
@@ -30,6 +31,7 @@ private Q_SLOTS:
   // text width and sanitizing
   void countsTerminalColumns();
   void stripsEscapesAndControls();
+  void themesColorTheTerminal();
   void approvalPromptCantBeSpoofed();
 
   // wrap and truncate
@@ -421,6 +423,38 @@ void TestUi::folderListing() {
 
 void TestUi::boxPadsLines() {
   QCOMPARE(plain(Ui::box({text("hi"), text("longer")}, Color::Cyan, 40)), QStringList({"╭────────╮", "│ hi     │", "│ longer │", "╰────────╯"}));
+}
+
+void TestUi::themesColorTheTerminal() {
+  const Line warning{Span{"careful", fg(Color::Yellow)}};
+  const Line plainText{Span{"text", {}}};
+  setPalette(Ui::terminalPalette(Theme::Light));
+
+  // 24-bit: the theme's own shade, here a yellow that reads on white.
+  setColorDepth(ColorDepth::TrueColor);
+  QCOMPARE(toAnsi(warning), QString("\x1b[38;2;154;103;0mcareful\x1b[0m"));
+  // Light and plain leave text without a color to the terminal; matrix tints it.
+  QCOMPARE(toAnsi(plainText), QString("text"));
+  setPalette(Ui::terminalPalette(Theme::Matrix));
+  QCOMPARE(toAnsi(plainText), QString("\x1b[38;2;198;242;208mtext\x1b[0m"));
+
+  // 256 colors: the nearest of them.
+  setColorDepth(ColorDepth::Indexed256);
+  QCOMPARE(nearestIndexed(0xff0000), 196);
+  QCOMPARE(nearestIndexed(0x808080), 244);
+  QCOMPARE(toAnsi(warning), QString("\x1b[38;5;%1mcareful\x1b[0m").arg(nearestIndexed(0xe8c46a)));
+
+  // 16 colors, or none: as before themes.
+  setColorDepth(ColorDepth::Basic);
+  QCOMPARE(toAnsi(warning), QString("\x1b[33mcareful\x1b[0m"));
+  QCOMPARE(toAnsi(plainText), QString("text"));
+  setColorDepth(ColorDepth::TrueColor);
+  setColors(false);
+  QCOMPARE(toAnsi(warning), QString("careful"));
+  setColors(true);
+
+  setPalette({});
+  setColorDepth(detectColorDepth());
 }
 
 void TestUi::rendererPrintsAboveLiveRegion() {

@@ -8,6 +8,7 @@ add_library(smith_tui_app STATIC
   Entries.cpp
   SessionCommands.cpp
   Suggestions.cpp
+  TerminalTheme.cpp
   View.cpp
   WorktreeCommands.cpp
 )

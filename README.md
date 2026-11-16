@@ -366,6 +366,12 @@ commands can't be undone; Smith says which.
   context size, give it with `--context-size` or `contextSize`.
 - **Scripts.** `smith -p "explain src/main.cpp"` runs one prompt and prints the answer. Add `-y`
   to let it change things without asking.
+- **Themes.** `/theme` switches between `matrix`, `plain` and `light` in either app, at once,
+  and remembers the choice. In the terminal the themes use their own colours, the same as the
+  desktop app's, when the terminal shows 24-bit colour (most do; Smith checks `COLORTERM`,
+  Windows Terminal and `TERM`) or the nearest of 256 colours. With only 16 colours, the
+  terminal's own shades stay. `light` keeps your terminal's background, so it's for a terminal
+  with a light one.
 - **Sessions** are saved as you go, in `~/.local/share/smith/sessions/`, readable only by you.
   `-c` continues the last one in a folder, `-r` resumes one by name, and `/name` names the
   current one.
@@ -417,8 +423,7 @@ there, so the agent may need to install or build first.
   undo and compact. The status bar shows the sandbox, how full the context is, and background
   jobs.
 
-`/theme` (or "Theme…" in the ⋯ menu) switches between `matrix`, `plain` and `light`. In the
-terminal, `plain` and `light` look the same: there your terminal's own colours decide the shades.
+"Theme…" in the ⋯ menu does what `/theme` does.
 
 ## Trying it without a model
 

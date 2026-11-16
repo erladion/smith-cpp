@@ -1,4 +1,5 @@
 #include "App.h"
+#include "TerminalTheme.h"
 
 #include "core/Errors.h"
 #include "core/Images.h"
@@ -23,6 +24,7 @@ App::App(TuiOptions options, QObject* parent)
                              [this]() { return m_terminal.rows(); }}) {
   m_pServer = m_options.server;
   m_project = m_options.project;
+  Tui::setPalette(terminalPalette(m_options.theme));
 
   // The agent calls these from its own threads.
   m_hooks.onEvent = [this](const AgentEvent& event) { QMetaObject::invokeMethod(this, [this, event]() { onEvent(event); }, Qt::QueuedConnection); };

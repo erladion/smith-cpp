@@ -6,6 +6,7 @@
 #include "Connection.h"
 #include "frontend/Duration.h"
 #include "SessionCommands.h"
+#include "TerminalTheme.h"
 #include "WorktreeCommands.h"
 
 #include <QRegularExpression>
@@ -178,11 +179,19 @@ void App::setNetwork(const QString& arg) {
 void App::setTheme(const QString& arg) {
   const auto apply = [this](Theme theme) {
     m_options.theme = theme;
+    Tui::setPalette(terminalPalette(theme));
     m_options.savePreferences(PreferenceUpdate{{}, {}, {}, themeName(theme)});
-    // The terminal's own colors decide the shades, so light only differs in the desktop app.
-    const QString note = theme == Theme::Light ? " Here it looks like plain: your terminal's colors decide the shades." : QString();
+    QString note;
+    if (theme == Theme::Light) {
+      note = " It suits a terminal with a light background.";
+    }
+    if (Tui::detectColorDepth() == Tui::ColorDepth::Basic) {
+      note += " This terminal shows 16 colors, so its own shades stay.";
+    }
     print(Entry::notice(NoticeLevel::Info, QString("Theme: %1.%2").arg(themeName(theme), note)));
-    render();
+    // Everything on screen again, in the new colors.
+    m_printedWidth = -1;
+    reprint();
   };
   if (!arg.isEmpty()) {
     if (const auto theme = themeNamed(arg)) {
