@@ -222,8 +222,7 @@ name, so `~/.config/smith/themes/night.json` is `/theme night`:
 Colours are `"#rrggbb"` or `"#rgb"`. The terminal follows the desktop colours where they mean
 the same thing: `red` follows `error`, `green` `added`, `yellow` `warn`, `blue` `accent`, `cyan`
 `code`, `white` `text` and `gray` `textDim`. Set `terminal` only for what should differ. Text
-without a colour of its own stays the terminal's, except on a `matrix` base, where it follows
-`text`.
+without a colour of its own stays your terminal's, unless `terminal` sets `text`.
 
 Theme files are read each time you pick one, so to try an edit, run `/theme <name>` again. A
 file with a mistake isn't offered, and `/theme` says what's wrong with it.

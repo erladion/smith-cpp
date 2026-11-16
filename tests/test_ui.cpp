@@ -433,12 +433,13 @@ void TestUi::themesColorTheTerminal() {
   // 24-bit: the theme's own shade, here a yellow that reads on white.
   setColorDepth(ColorDepth::TrueColor);
   QCOMPARE(toAnsi(warning), QString("\x1b[38;2;154;103;0mcareful\x1b[0m"));
-  // Light and plain leave text without a color to the terminal; matrix tints it.
+  // Text without a color of its own stays the terminal's, in every theme.
   QCOMPARE(toAnsi(plainText), QString("text"));
   setPalette(Ui::terminalPalette(Theme::Matrix));
-  QCOMPARE(toAnsi(plainText), QString("\x1b[38;2;198;242;208mtext\x1b[0m"));
+  QCOMPARE(toAnsi(plainText), QString("text"));
 
   // 256 colors: the nearest of them.
+  setPalette(Ui::terminalPalette(Theme::Matrix));
   setColorDepth(ColorDepth::Indexed256);
   QCOMPARE(nearestIndexed(0xff0000), 196);
   QCOMPARE(nearestIndexed(0x808080), 244);
@@ -463,9 +464,11 @@ void TestUi::themesColorTheTerminal() {
   QCOMPARE(custom.shades[size_t(Color::Blue)], std::optional<Rgb>(0xabcdef));
   QCOMPARE(custom.shades[size_t(Color::White)], std::optional<Rgb>(0x778899));
   QCOMPARE(custom.shades[size_t(Color::Magenta)], Ui::terminalPalette(Theme::Plain).shades[size_t(Color::Magenta)]);
-  // On plain, text stays the terminal's; on matrix it follows the theme's text.
+  // Text stays the terminal's, unless the file sets the terminal's text.
   QVERIFY(!custom.shades[size_t(Color::None)]);
   night.base = Theme::Matrix;
+  QVERIFY(!Ui::terminalPalette(night).shades[size_t(Color::None)]);
+  night.terminal.insert("text", 0x778899);
   QCOMPARE(Ui::terminalPalette(night).shades[size_t(Color::None)], std::optional<Rgb>(0x778899));
 
   setPalette({});
