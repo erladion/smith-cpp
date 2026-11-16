@@ -2,7 +2,7 @@
 #include "TerminalTheme.h"
 
 #include "core/Errors.h"
-#include "core/Images.h"
+#include "core/Mentions.h"
 #include "core/Jobs.h"
 #include "core/Tool.h"
 #include "frontend/Commands.h"
@@ -39,6 +39,8 @@ App::App(TuiOptions options, QObject* parent)
   m_prompts.refuseWhen([this]() { return m_turns.interrupted(); });
   connect(&m_prompts, &Prompts::changed, this, &App::requestRender);
   connect(&m_turns, &TurnRunner::changed, this, &App::requestRender);
+  connect(&m_fileIndex, &FileIndex::updated, this, &App::requestRender);
+  m_suggestions.files = [this]() { return m_fileIndex.files(m_project.cwd); };
 
   m_pAgent = m_options.createAgent(m_hooks, std::nullopt);
   m_pConnection = std::make_unique<ConnectionCommands>(*this);
@@ -344,8 +346,8 @@ void App::submit(const QString& value) {
     return;
   }
   print(Entry::simple(Entry::Kind::User, text));
-  // Image files the message names go along with it.
-  const ImageRefs refs = imagesIn(text, m_project.cwd);
+  // Files it mentions with @, and image files it names, go along with it.
+  const Attachments refs = attachmentsIn(text, m_project.cwd);
   if (!refs.attached.isEmpty()) {
     print(Entry::notice(NoticeLevel::Info, "Attached " + refs.attached.join(", ") + "."));
   }
@@ -354,9 +356,10 @@ void App::submit(const QString& value) {
   }
   const std::shared_ptr<Agent> current = m_pAgent;
   const QList<Image> images = refs.images;
+  const QList<AttachedFile> files = refs.files;
   const bool planning = current->planning();
   runBusy(
-      planning ? "Planning…" : "Thinking…", [current, text, images](const CancelPtr& cancel) { current->send(text, cancel, images); },
+      planning ? "Planning…" : "Thinking…", [current, text, images, files](const CancelPtr& cancel) { current->send(text, cancel, images, files); },
       [this, planning]() {
         const TurnStats& turn = m_turns.lastTurn();
         print(Entry::simple(Entry::Kind::Meta, turnSummary(turn.reason, turn.elapsedMs, turn.toolCalls)));

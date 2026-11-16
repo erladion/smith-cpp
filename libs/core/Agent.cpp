@@ -265,7 +265,7 @@ void Agent::emitEvent(const AgentEvent& event) const {
   }
 }
 
-void Agent::send(const QString& text, const CancelPtr& cancel, const QList<Image>& images) {
+void Agent::send(const QString& text, const CancelPtr& cancel, const QList<Image>& images, const QList<AttachedFile>& files) {
   const std::shared_ptr<Checkpoint> checkpoint = m_options.checkpoint ? m_options.checkpoint : std::make_shared<Checkpoint>();
   QString note;
   {
@@ -283,7 +283,7 @@ void Agent::send(const QString& text, const CancelPtr& cancel, const QList<Image
     m_planned = m_planning;
   }
   const int sent = int(messages().size());
-  const Message message = userMessage(text, images);
+  const Message message = userMessage(text, images, files);
   append(note.isEmpty() ? message : withNote(message, note));
   std::optional<QMap<QString, QString>> before;
   if (m_options.protectRunLater && m_options.reportRunLater) {

@@ -2,6 +2,7 @@
 #include "compat/Utf8.h"
 
 #include "core/Errors.h"
+#include "core/FileList.h"
 #include "core/Glob.h"
 #include "core/Paths.h"
 #include "core/Process.h"
@@ -24,15 +25,6 @@ constexpr int MAX_GLOB_RESULTS = 200;
 constexpr int MAX_LIST_DEPTH = 6;
 constexpr int MAX_LIST_LINES = 300;
 constexpr int MAX_FILES_PER_FOLDER = 40;
-constexpr int MAX_WALK_ENTRIES = 100000;
-constexpr qint64 MAX_LISTING_CHARS = 32000000;
-const QStringList SKIP_DIRS = {".git", "node_modules", "dist", "build", ".venv", "__pycache__"};
-
-struct FileEntry {
-  QString rel;
-  QString abs;
-};
-
 // Where a search of `target` runs. In a container the project is the same
 // folder inside and out, so it's searched here, where ripgrep is; anything
 // else is the container's own and is searched inside it.
@@ -54,76 +46,6 @@ std::optional<QString> outsideReason(const QJsonObject& input, const ToolContext
 
 QString fileCount(int n) {
   return plural(n, "file");
-}
-
-// Yields every file under `base` as a slash-separated relative path. Doesn't
-// follow symlinked directories, so it can't leave `base`.
-QList<FileEntry> walk(const QString& base, const CancelPtr& cancel) {
-  QList<FileEntry> files;
-  QStringList stack{""};
-  int seen = 0;
-  while (!stack.isEmpty()) {
-    const QString relDir = stack.takeLast();
-    const QFileInfoList entries =
-        QDir(relDir.isEmpty() ? base : base + "/" + relDir).entryInfoList(QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot);
-    for (const QFileInfo& entry : entries) {
-      if (cancelled(cancel) || ++seen > MAX_WALK_ENTRIES) {
-        return files;
-      }
-      const QString rel = relDir.isEmpty() ? entry.fileName() : relDir + "/" + entry.fileName();
-      if (entry.isDir() && !entry.isSymLink()) {
-        if (!SKIP_DIRS.contains(entry.fileName())) {
-          stack << rel;
-        }
-        continue;
-      }
-      files.append({rel, base + "/" + rel});
-    }
-  }
-  return files;
-}
-
-// `rg --files`: much faster than walking the tree on big repositories, and it
-// skips what .gitignore ignores. Hidden files are included.
-QStringList ripgrepListArgs() {
-  QStringList args{"--files", "--hidden", "--color", "never"};
-  for (const QString& dir : SKIP_DIRS) {
-    args << "--glob" << "!" + dir;
-  }
-  return args;
-}
-
-// `find` listing what the built-in walker would: everything but directories, skipping SKIP_DIRS.
-QStringList findArgs() {
-  QStringList skip;
-  for (int i = 0; i < SKIP_DIRS.size(); i++) {
-    if (i) {
-      skip << "-o";
-    }
-    skip << "-name" << SKIP_DIRS[i];
-  }
-  return QStringList{".", "-mindepth", "1", "(", "-type", "d", "("} + skip + QStringList{")", "-prune", ")", "-o", "(", "!", "-type", "d", "-print", ")"};
-}
-
-// Runs a file lister in `base` and returns the paths it prints, one per line.
-QList<FileEntry> listFiles(const SpawnSpec& spec, const QString& base, const CancelPtr& cancel) {
-  RunOptions options;
-  options.cancel = cancel;
-  options.maxCapture = MAX_LISTING_CHARS;
-  options.stopAtCapture = true;
-  const ProcessResult result = runProcess(spec, options);
-  QList<FileEntry> files;
-  for (const QByteArray& raw : result.out.split('\n')) {
-    if (raw.isEmpty()) {
-      continue;
-    }
-    QString rel = utf8(raw);
-    if (rel.startsWith("./")) {
-      rel = rel.mid(2);
-    }
-    files.append({rel, base + "/" + rel});
-  }
-  return files;
 }
 
 // Every file under `base`, as glob and list_files see them: listed inside the

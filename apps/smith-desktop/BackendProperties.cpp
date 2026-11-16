@@ -206,7 +206,7 @@ bool Backend::canUndo() const {
   return m_pAgent && !m_turns.busy() && m_pAgent->canUndo();
 }
 
-QVariantList Backend::suggest(const QString& input) const {
+QVariantList Backend::suggest(const QString& input, int) {
   QStringList models;
   for (const QVariant& model : m_models) {
     models << model.toMap().value("id").toString();
@@ -218,9 +218,13 @@ QVariantList Backend::suggest(const QString& input) const {
       tasks << worktree.task;
     }
   }
-  for (const Suggestion& suggestion : Smith::suggest(input, CompletionContext{m_project.cwd, endpoints(), models, tasks})) {
-    out.append(QVariantMap{
-        {"text", suggestion.text}, {"label", suggestion.label}, {"hint", suggestion.hint}, {"takesArgument", suggestion.takesArgument}});
+  const CompletionContext context{m_project.cwd, endpoints(), models, tasks, [this]() { return m_fileIndex.files(m_project.cwd); }};
+  for (const Suggestion& suggestion : Smith::suggest(input, context)) {
+    out.append(QVariantMap{{"text", suggestion.text},
+                           {"label", suggestion.label},
+                           {"hint", suggestion.hint},
+                           {"takesArgument", suggestion.takesArgument},
+                           {"insert", suggestion.insert}});
   }
   return out;
 }

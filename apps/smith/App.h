@@ -7,6 +7,7 @@
 #include "tui/Renderer.h"
 #include "tui/Terminal.h"
 #include "Entries.h"
+#include "frontend/FileIndex.h"
 #include "frontend/Prompts.h"
 #include "frontend/Turns.h"
 #include "Suggestions.h"
@@ -163,6 +164,8 @@ private:
   Tui::KeyReader m_keys;
   Tui::LineEditor m_editor;
   SuggestionList m_suggestions;
+  // The project's files, for @ mentions.
+  FileIndex m_fileIndex;
   std::unique_ptr<ConnectionCommands> m_pConnection;
   std::unique_ptr<SessionCommands> m_pSessions;
   std::unique_ptr<WorktreeCommands> m_pWorktrees;

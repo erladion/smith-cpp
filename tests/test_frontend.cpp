@@ -4,6 +4,7 @@
 #include "TestUtil.h"
 #include "core/Errors.h"
 #include "core/Server.h"
+#include "frontend/FileIndex.h"
 #include "frontend/Prompts.h"
 #include "frontend/Turns.h"
 
@@ -37,6 +38,7 @@ private Q_SLOTS:
   void undoNoticeListsWhatHappened();
   void turnsAddUpTheirTokens();
   void changesListEachFile();
+  void fileIndexListsInTheBackground();
 };
 
 #ifndef Q_MOC_RUN
@@ -452,6 +454,28 @@ void TestFrontend::changesListEachFile() {
   QCOMPARE(entries[3].name, QString("deleted"));
   QVERIFY(!entries[3].diff);
   QVERIFY_MATCH(entries[3].output, "binary file: 2 → 0 bytes");
+}
+
+void TestFrontend::fileIndexListsInTheBackground() {
+  TempDir one(QDir::tempPath(), "smith-index-");
+  TempDir two(QDir::tempPath(), "smith-index-");
+  write(one.file("a.txt"), "a");
+  write(two.file("src/b.cpp"), "b");
+  FileIndex index;
+  int updates = 0;
+  connect(&index, &FileIndex::updated, this, [&]() { updates++; });
+  // Nothing at first: the listing runs meanwhile.
+  QCOMPARE(index.files(one.path()), QStringList());
+  QTRY_COMPARE(updates, 1);
+  QCOMPARE(index.files(one.path()), QStringList({"a.txt"}));
+  // Asked again soon after, it's kept.
+  QCOMPARE(updates, 1);
+  // Another folder starts over.
+  QCOMPARE(index.files(two.path()), QStringList());
+  QTRY_COMPARE(index.files(two.path()), QStringList({"src/b.cpp"}));
+  // Destroyed while listing: it waits for the thread.
+  FileIndex leaving;
+  leaving.files(one.path());
 }
 
 #endif

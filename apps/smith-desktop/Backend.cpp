@@ -1,7 +1,7 @@
 #include "Backend.h"
 
 #include "core/Errors.h"
-#include "core/Images.h"
+#include "core/Mentions.h"
 #include "core/Jobs.h"
 #include "core/Preferences.h"
 #include "core/Reasoning.h"
@@ -28,6 +28,10 @@ Backend::Backend(const LaunchOptions& launch, QObject* parent) : QObject(parent)
   }
   m_palette = Palette::forTheme(m_theme);
   m_transcript.setPalette(m_palette);
+  connect(&m_fileIndex, &FileIndex::updated, this, [this]() {
+    m_filesListed++;
+    Q_EMIT filesChanged();
+  });
 
   // The agent calls these from its own threads.
   m_hooks.onEvent = [this](const AgentEvent& event) { QMetaObject::invokeMethod(this, [this, event]() { onEvent(event); }, Qt::QueuedConnection); };
@@ -248,8 +252,8 @@ void Backend::submit(const QString& value) {
     return;
   }
   m_transcript.append(Entry::simple(Entry::Kind::User, text));
-  // Image files the message names go along with it.
-  const ImageRefs refs = imagesIn(text, m_project.cwd);
+  // Files it mentions with @, and image files it names, go along with it.
+  const Attachments refs = attachmentsIn(text, m_project.cwd);
   if (!refs.attached.isEmpty()) {
     notice(NoticeLevel::Info, "Attached " + refs.attached.join(", ") + ".");
   }
@@ -258,9 +262,10 @@ void Backend::submit(const QString& value) {
   }
   const std::shared_ptr<Agent> agent = m_pAgent;
   const QList<Image> images = refs.images;
+  const QList<AttachedFile> files = refs.files;
   const bool planning = agent->planning();
   runTurn(
-      planning ? "Planning…" : "Thinking…", [agent, text, images](const CancelPtr& cancel) { agent->send(text, cancel, images); },
+      planning ? "Planning…" : "Thinking…", [agent, text, images, files](const CancelPtr& cancel) { agent->send(text, cancel, images, files); },
       [this, planning]() {
         const TurnStats& turn = m_turns.lastTurn();
         m_transcript.append(Entry::simple(Entry::Kind::Meta, turnSummary(turn.reason, turn.elapsedMs, turn.toolCalls)));

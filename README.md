@@ -111,7 +111,7 @@ Type these in the input box of either app. Tab completes them, and their argumen
 | esc | Interrupt the agent. | Same. |
 | shift+tab | Switch plan mode. | Same, in the input box. |
 | ↑ / ↓ | Recall earlier input. | |
-| tab | Complete a slash command. | Same. |
+| tab | Complete a slash command, or the file after `@`. | Same. |
 | ctrl+c | Quit. | |
 | ctrl+n / ctrl+o / ctrl+k | | New session / open a folder / pick a model. |
 | ctrl+b | | Show or hide the sidebar. |
@@ -411,9 +411,16 @@ commands can't be undone; Smith says which.
   call, which sends the whole conversation again, so it grows quickly with tool calls; the
   context figure beside it is how full the window is. Servers that don't report usage show
   nothing.
+- **Files.** Type `@` and part of a path or file name (`@Agent`, `@src/main`) and Smith offers the
+  project's files (from `rg --files` when ripgrep is installed, so ignored ones are left out); tab
+  or enter puts the highlighted one in. When you send, each file you mention as `@path` (or
+  `@"path with spaces"`, also outside the project) goes along with the message, numbered as
+  `read_file` shows it, so the model doesn't spend a step reading it. Up to 10 files, and the
+  first 2,000 lines of a longer one. The transcript shows your words, and a line saying what was
+  attached.
 - **Images.** Name an image file in your message (a path, quoted or not, as a terminal pastes a
   dropped file) and it is sent along: PNG, JPEG, GIF or WebP, up to 5 MB each, from anywhere on
-  disk. Each picture is labelled with its file, so the model doesn't try to open it. If the
+  disk; `@shot.png` works too. Each picture is labelled with its file, so the model doesn't try to open it. If the
   server refuses the request, the pictures are taken out of the conversation again.
 - **Sub-agents.** The model can hand investigations, or with `can_write` whole pieces of work, to
   sub-agents, several at once. Their changes ask through the main agent, show in the transcript,
@@ -553,14 +560,16 @@ libs/core/                the agent, no UI. Agent.* is the loop: stream, run too
   Tool.*, CustomTools.*   tool definitions, JSON Schema validation, output truncation; tool.json tools
   tools/                  the built-in tools
   ...                     think-tag parser, diff (Myers), undo checkpoints, run-later files,
-                          images, skills, AGENTS.md loading, system prompt
+                          images and @ mentions, file listing, skills, AGENTS.md loading,
+                          system prompt
 libs/compat/              header-only shims over the Qt 5/6 differences, below every library
 libs/tui/                 terminal toolkit: raw mode and signals, inline renderer, keys, line
                           editor, Markdown, pickers, digital rain. Includes nothing else.
 libs/frontend/            what both apps share: Runtime (server, model, sandbox, project,
                           session and agents from the flags and config), running turns on
                           worker threads (Turns), approvals and questions (Prompts), transcript
-                          entries and session replay, commands and completion, task worktrees
+                          entries and session replay, commands and completion (FileIndex
+                          lists the project's files for @), task worktrees
 apps/smith/               the terminal app; main.cpp has the flags and the -p mode
 apps/smith-desktop/       the desktop app: Backend (the QML-facing controller), the transcript
                           model, palette, Markdown to rich text, Window, qml/

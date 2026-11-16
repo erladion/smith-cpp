@@ -21,7 +21,7 @@ public:
   enum class Outcome { NotHandled, Handled, Run };
 
   // Arrows move the highlight, tab fills in the highlighted suggestion, esc
-  // hides them. For Run, `toRun` gets the text to run.
+  // hides them. Enter runs a command (`toRun` gets it) and fills in a file.
   Outcome handle(const Tui::Key& key, const QList<Suggestion>& items, const QString& input, const std::function<void(const QString&)>& setInput,
                  QString& toRun);
 
@@ -31,6 +31,8 @@ public:
   QStringList models;
   // The repository's task worktrees, for completing /land and /drop.
   QStringList tasks;
+  // The project's files, for completing @ mentions.
+  std::function<QStringList()> files;
 
 private:
   int m_index = 0;

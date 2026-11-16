@@ -9,6 +9,8 @@
 #include "core/Themes.h"
 #include "core/Prompt.h"
 #include "core/Images.h"
+#include "core/Mentions.h"
+#include "core/FileList.h"
 #include "core/Permissions.h"
 #include "core/RunLater.h"
 #include "core/Session.h"
@@ -65,6 +67,8 @@ private Q_SLOTS:
   void runLaterSnapshots();
   void runLaterSeesGitFolders();
   void messagesNameTheirImages();
+  void mentionedFilesGoAlong();
+  void projectFilesSkipBuildFolders();
   void permissionRulesCoverCommands();
   void denyRulesFindTheCommandAnywhere();
   void rulesWithoutSandboxTakeOnlyPlainArguments();
@@ -644,6 +648,75 @@ void TestUnits::messagesNameTheirImages() {
   QVERIFY(estimateTokens(heavy) < 2000);
   QVERIFY(estimateTokens(Messages{heavy}) < 2000);
   QVERIFY(estimateTokens(heavy) > estimateTokens(userMessage("look")) + 1000);
+}
+
+void TestUnits::mentionedFilesGoAlong() {
+  TempDir dir(QDir::tempPath(), "smith-mentions-");
+  write(dir.file("src/app.cpp"), "int main() {\n  return 0;\n}\n");
+  write(dir.file("my notes.md"), "# Notes\n");
+  {
+    QFile blob(dir.file("blob.bin"));
+    QVERIFY(blob.open(QIODevice::WriteOnly));
+    blob.write(QByteArray("ab\0cd", 5));
+  }
+  QString longText;
+  for (int i = 1; i <= 2500; i++) {
+    longText += QString("line %1\n").arg(i);
+  }
+  write(dir.file("long.txt"), longText);
+  QDir().mkpath(dir.file("src/sub"));
+  {
+    QFile picture(dir.file("shot.png"));
+    QVERIFY(picture.open(QIODevice::WriteOnly));
+    picture.write(QByteArray("\x89PNG\r\n\x1a\n....", 12));
+  }
+
+  const QString text = "Fix @src/app.cpp, see @\"my notes.md\" and @long.txt. Not @blob.bin, @src/sub, @gone.cpp or @here; "
+                       "mail me@example.com. Again @src/app.cpp, and @shot.png.";
+  const Attachments got = attachmentsIn(text, dir.path());
+  QCOMPARE(got.files.size(), 3);
+  QCOMPARE(got.files[0].shown, QString("src/app.cpp"));
+  QCOMPARE(got.files[0].content, QString("1\tint main() {\n2\t  return 0;\n3\t}"));
+  QVERIFY(!got.files[0].cut);
+  QCOMPARE(got.files[1].shown, QString("my notes.md"));
+  // A long file: only its start, saying so.
+  QVERIFY(got.files[2].cut);
+  QVERIFY(got.files[2].content.endsWith("[Lines 1-2000 of 2500]"));
+  QCOMPARE(got.attached, QStringList({"src/app.cpp (3 lines)", "my notes.md (1 line)", "long.txt (the first 2000 of 2500 lines)", "shot.png (1 kB)"}));
+  // The picture goes as a picture.
+  QCOMPARE(got.images.size(), 1);
+  // What can't go is said; @here and the address aren't paths, so they're words.
+  QCOMPARE(got.problems.size(), 3);
+  QVERIFY_MATCH(got.problems[0], "^blob\\.bin looks like a binary file");
+  QVERIFY_MATCH(got.problems[1], "^src/sub is a folder");
+  QVERIFY_MATCH(got.problems[2], "^There's no file gone\\.cpp");
+
+  // Sent after the text, which is all the transcript shows; they stay when the pictures go.
+  const Message message = userMessage("look", got.images, got.files);
+  QCOMPARE(messageText(message), QString("look"));
+  const QJsonArray parts = message.value("content").toArray();
+  QCOMPARE(parts.size(), 6);
+  QVERIFY_MATCH(parts[1].toObject().value("text").toString(), "^\\[The user attached src/app\\.cpp, [^\\n]*no need to read it again\\.\\]\\n<file path=\"src/app\\.cpp\">\\n1\\tint main");
+  QVERIFY_MATCH(parts[3].toObject().value("text").toString(), "only its start: read_file shows the rest");
+  const QJsonArray kept = withoutImages(message).value("content").toArray();
+  QCOMPARE(kept.size(), 4);
+  QVERIFY(estimateTokens(userMessage("look", {}, got.files)) > estimateTokens(userMessage("look")) + 1000);
+
+  // Outside the project too, shown with ~ or in full.
+  TempDir other(QDir::tempPath(), "smith-elsewhere-");
+  write(other.file("x.h"), "#pragma once\n");
+  QCOMPARE(filesIn("@" + other.file("x.h"), dir.path()).files.value(0).shown, other.file("x.h"));
+  QVERIFY(filesIn("nothing to see", dir.path()).files.isEmpty());
+}
+
+void TestUnits::projectFilesSkipBuildFolders() {
+  TempDir dir(QDir::tempPath(), "smith-files-");
+  write(dir.file("b.txt"), "b");
+  write(dir.file("src/a.cpp"), "a");
+  write(dir.file("build/out.o"), "o");
+  write(dir.file("node_modules/x/index.js"), "x");
+  QCOMPARE(projectFiles(dir.path()), QStringList({"b.txt", "src/a.cpp"}));
+  QCOMPARE(projectFiles(dir.path(), {}, 1), QStringList({"b.txt"}));
 }
 
 void TestUnits::runLaterSeesGitFolders() {

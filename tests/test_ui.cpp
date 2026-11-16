@@ -598,6 +598,35 @@ void TestUi::argumentsComplete() {
   }
   QCOMPARE(texts("/theme l"), QStringList({"/theme light"}));
   QCOMPARE(texts("/sessions "), QStringList({"/sessions all"}));
+  {
+    // @ mentions, from the project's files: path, then name, then anywhere; the files listed only once one is typed.
+    int listed = 0;
+    CompletionContext ctx;
+    ctx.files = [&]() {
+      listed++;
+      return QStringList{"README.md", "libs/core/Agent.cpp", "libs/core/Agent.h", "apps/smith/App.cpp", "docs/my agent notes.md"};
+    };
+    QVERIFY(suggest("fix the agent", ctx).isEmpty());
+    QCOMPARE(listed, 0);
+    bool inserted = true;
+    auto mention = [&](const QString& input) {
+      QStringList out;
+      for (const Suggestion& suggestion : suggest(input, ctx)) {
+        inserted = inserted && suggestion.insert;
+        out << suggestion.text;
+      }
+      return out;
+    };
+    QCOMPARE(mention("fix @libs/core/Agent.h"), QStringList({"fix @libs/core/Agent.h "}));
+    QCOMPARE(mention("fix @Agent"), QStringList({"fix @libs/core/Agent.h ", "fix @libs/core/Agent.cpp ", "fix @\"docs/my agent notes.md\" "}));
+    QCOMPARE(mention("@app.c").value(0), QString("@apps/smith/App.cpp "));
+    QCOMPARE(mention("see\n@READ"), QStringList({"see\n@README.md "}));
+    // Finished (a space after it), or not a mention.
+    QVERIFY(mention("fix @Agent.h now").isEmpty());
+    QVERIFY(mention("mail me@Agent").isEmpty());
+    QVERIFY(listed > 0);
+    QVERIFY2(inserted, "files go into the input; nothing runs");
+  }
   QCOMPARE(texts("/endpoint g"), QStringList({"/endpoint gpu-box"}));
   QCOMPARE(texts("/model oss"), QStringList({"/model gpt-oss-20b"}));
   QVERIFY2(texts("/help ").isEmpty(), "no arguments to complete");

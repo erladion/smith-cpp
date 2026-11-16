@@ -1,5 +1,6 @@
 #pragma once
 
+#include "frontend/FileIndex.h"
 #include "frontend/Prompts.h"
 #include "frontend/Runtime.h"
 #include "frontend/Turns.h"
@@ -83,6 +84,8 @@ class Backend : public QObject {
   // Tokens of the turn under way or the last one: "12k in · 845 out · 34 tok/s", and the same at length.
   Q_PROPERTY(QString usage READ usage NOTIFY changed)
   Q_PROPERTY(QString usageDetail READ usageDetail NOTIFY changed)
+  // Goes up when the project's files have been listed again, so @ suggestions are asked for again.
+  Q_PROPERTY(int filesListed READ filesListed NOTIFY filesChanged)
   // The branch, when the project is a task worktree.
   Q_PROPERTY(QString worktreeBranch READ worktreeBranch NOTIFY changed)
   // Whether the project is in a git repository (so task worktrees can be made).
@@ -148,6 +151,7 @@ public:
   bool planning() const;
   QString usage() const { return usageText(m_turns.usage()); }
   QString usageDetail() const;
+  int filesListed() const { return m_filesListed; }
   QString worktreeBranch() const { return m_project.worktreeBranch; }
   bool inRepository() const { return m_inRepository; }
   QVariantList worktrees() const { return m_worktrees; }
@@ -196,8 +200,9 @@ public:
   Q_INVOKABLE void closeLanding();
   // Removes a worktree and its branch, leaving it first if it's the project; `discard` drops unlanded work.
   Q_INVOKABLE void removeWorktree(const QString& path, bool discard);
-  // Completions for a slash command being typed, as in the terminal: [{text, label, hint, takesArgument}].
-  Q_INVOKABLE QVariantList suggest(const QString& input) const;
+  // Completions for a slash command or an @ mention being typed, as in the terminal: [{text, label, hint, takesArgument, insert}].
+  // `filesListed` is only there so a binding asks again once the files are listed.
+  Q_INVOKABLE QVariantList suggest(const QString& input, int filesListed = 0);
   // The idle stream of glyphs for the status bar.
   Q_INVOKABLE QString codeStreamText(int offset, int width) const;
   // /theme: switches the look now, and remembers it. The current one again re-reads its file.
@@ -224,6 +229,7 @@ Q_SIGNALS:
   void landingChanged();
   // /drop: the window asks before dropping the worktree at `path`.
   void confirmDrop(const QString& path);
+  void filesChanged();
 
 private:
   void ready();
@@ -274,6 +280,8 @@ private:
   bool m_allSessions = false;
   QVariantList m_sessions;
   QList<Worktree> m_worktreeList;
+  FileIndex m_fileIndex;
+  int m_filesListed = 0;
   QVariantList m_worktrees;
   bool m_inRepository = false;
   // Listings finish in any order; only the newest one counts.

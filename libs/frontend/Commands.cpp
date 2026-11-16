@@ -8,6 +8,9 @@
 #include "frontend/Folders.h"
 
 #include <QDir>
+#include <QRegularExpression>
+
+#include <algorithm>
 
 namespace Smith {
 
@@ -49,6 +52,46 @@ QList<Completion> completeTask(const QString& typed, const CompletionContext& ct
   for (const QString& task : ctx.tasks) {
     if (task.startsWith(typed)) {
       out.append(Completion{task, "smith/" + task});
+    }
+  }
+  return out;
+}
+
+constexpr int MAX_MENTION_SUGGESTIONS = 50;
+
+// Files for the @ mention being typed at the end of `input`: those whose path
+// starts with what's typed, then those whose name does, then those that
+// contain it anywhere; shorter paths first in each.
+QList<Suggestion> mentionSuggestions(const QString& input, const CompletionContext& ctx) {
+  static const QRegularExpression typing(R"re((?:^|(?<=\s))@"?([^\s"]*)$)re");
+  const QRegularExpressionMatch match = typing.match(input);
+  if (!match.hasMatch() || !ctx.files) {
+    return {};
+  }
+  const QString typed = match.captured(1);
+  const QString before = input.left(match.capturedStart());
+  QList<QStringList> ranks(3);
+  for (const QString& file : ctx.files()) {
+    const QString name = file.mid(file.lastIndexOf('/') + 1);
+    if (file.startsWith(typed, Qt::CaseInsensitive)) {
+      ranks[0] << file;
+    } else if (name.startsWith(typed, Qt::CaseInsensitive)) {
+      ranks[1] << file;
+    } else if (file.contains(typed, Qt::CaseInsensitive)) {
+      ranks[2] << file;
+    }
+  }
+  QList<Suggestion> out;
+  for (QStringList& rank : ranks) {
+    std::stable_sort(rank.begin(), rank.end(), [](const QString& a, const QString& b) { return a.size() < b.size(); });
+    for (const QString& file : rank) {
+      if (out.size() >= MAX_MENTION_SUGGESTIONS) {
+        return out;
+      }
+      const QString written = file.contains(' ') ? "\"" + file + "\"" : file;
+      Suggestion suggestion{before + "@" + written + " ", file, {}, false};
+      suggestion.insert = true;
+      out.append(suggestion);
     }
   }
   return out;
@@ -142,7 +185,10 @@ QString commandHelp() {
 }
 
 QList<Suggestion> suggest(const QString& input, const CompletionContext& ctx) {
-  if (!input.startsWith('/') || input.contains('\n')) {
+  if (!input.startsWith('/')) {
+    return mentionSuggestions(input, ctx);
+  }
+  if (input.contains('\n')) {
     return {};
   }
   const int space = input.indexOf(' ');

@@ -11,7 +11,9 @@ add_library(smith_core STATIC
   Glob.cpp
   History.cpp
   Http.cpp
+  FileList.cpp
   Images.cpp
+  Mentions.cpp
   Instructions.cpp
   Jobs.cpp
   Json.cpp

@@ -82,6 +82,7 @@ private Q_SLOTS:
   void longCommandsStayInTheWindow();
   void switchesTheme();
   void plansThenCarriesOut();
+  void mentionsAttachFiles();
 
 private:
   void shot(const QString& name);
@@ -656,6 +657,40 @@ void TestDesktop::plansThenCarriesOut() {
   QVERIFY(listed);
   QVERIFY2(g_qmlWarnings.isEmpty(), qPrintable(g_qmlWarnings.join('\n')));
   shot("20-changes");
+}
+
+void TestDesktop::mentionsAttachFiles() {
+  auto* window = qobject_cast<QQuickWindow*>(root());
+  auto* input = root()->findChild<QQuickItem*>("composerInput");
+  auto* box = root()->findChild<QQuickItem*>("suggestions");
+  window->requestActivate();
+  input->forceActiveFocus();
+  // The project's files, once listed; enter puts the highlighted one in, and sends nothing.
+  input->setProperty("text", "what does @gre");
+  QTRY_VERIFY(box->isVisible());
+  QTRY_COMPARE(box->property("files").toBool(), true);
+  shot("21-mention");
+  QTest::keyClick(window, Qt::Key_Return);
+  QTRY_COMPARE(input->property("text").toString(), QString("what does @greet.py "));
+  QTRY_VERIFY(!box->isVisible());
+  QVERIFY(!m_pBackend->busy());
+
+  m_pFake->setScript({FakeServer::text("It greets whoever you name.")});
+  m_pFake->clearRequests();
+  input->setProperty("text", "what does @greet.py do?");
+  QTest::keyClick(window, Qt::Key_Return);
+  QTRY_VERIFY_WITH_TIMEOUT(!m_pBackend->busy(), 15000);
+  const QJsonArray parts = m_pFake->requests().value(0).value("messages").toArray().last().toObject().value("content").toArray();
+  QCOMPARE(parts.size(), 2);
+  QCOMPARE(parts[0].toObject().value("text").toString(), QString("what does @greet.py do?"));
+  QVERIFY_MATCH(parts[1].toObject().value("text").toString(), "<file path=\"greet\\.py\">\\n1\\timport sys");
+  bool told = false;
+  auto* model = m_pBackend->transcript();
+  for (int i = 0; i < model->rowCount(); i++) {
+    told = told || model->data(model->index(i), Desktop::TranscriptModel::TextRole).toString().startsWith("Attached greet.py (");
+  }
+  QVERIFY(told);
+  QVERIFY2(g_qmlWarnings.isEmpty(), qPrintable(g_qmlWarnings.join('\n')));
 }
 
 #endif

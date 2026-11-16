@@ -24,7 +24,7 @@ QList<Suggestion> SuggestionList::items(const QString& input, const QString& cwd
   if (m_dismissedFor && *m_dismissedFor == input) {
     return {};
   }
-  return suggest(input, CompletionContext{cwd, endpoints, models, tasks});
+  return suggest(input, CompletionContext{cwd, endpoints, models, tasks, files});
 }
 
 SuggestionList::Outcome SuggestionList::handle(const Tui::Key& key, const QList<Suggestion>& items, const QString& input,
@@ -42,12 +42,22 @@ SuggestionList::Outcome SuggestionList::handle(const Tui::Key& key, const QList<
     // A command that takes an argument gets a space, so its completions show.
     static const QRegularExpression argumentMark(R"([\[|])");
     const Suggestion& chosen = items[at];
+    if (chosen.insert) {
+      setInput(chosen.text);
+      m_index = 0;
+      return Outcome::Handled;
+    }
     const bool takesArgs = !chosen.text.contains(' ') && argumentMark.match(chosen.label).hasMatch();
     setInput(chosen.text + (takesArgs ? " " : ""));
     m_index = 0;
     return Outcome::Handled;
   }
   case KeyName::Return:
+    if (items[at].insert) {
+      setInput(items[at].text);
+      m_index = 0;
+      return Outcome::Handled;
+    }
     toRun = items[at].text;
     return Outcome::Run;
   case KeyName::Escape:
@@ -82,7 +92,8 @@ QList<Line> SuggestionList::lines(const QList<Suggestion>& items, int width) con
         width));
   }
   const int more = items.size() - (start + MAX_SHOWN);
-  out.append(Line{Span{QString("   %1tab completes · enter runs · esc hides").arg(more > 0 ? QString("%1 more · ").arg(more) : QString()), DIM}});
+  const QString keys = items.first().insert ? "tab or enter attaches it · esc hides" : "tab completes · enter runs · esc hides";
+  out.append(Line{Span{QString("   %1%2").arg(more > 0 ? QString("%1 more · ").arg(more) : QString(), keys), DIM}});
   return out;
 }
 

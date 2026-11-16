@@ -12,7 +12,8 @@ Rectangle {
     property var history: []
     property int browsing: -1
     property int suggestionIndex: 0
-    readonly property var suggestions: input.text.startsWith("/") && !input.text.includes("\n") && !dismissed ? Backend.suggest(input.text) : []
+    // Commands while typing one; files for an @ mention at the end of a message.
+    readonly property var suggestions: !dismissed && (input.text.startsWith("/") || input.text.includes("@")) ? Backend.suggest(input.text, Backend.filesListed) : []
     property bool dismissed: false
 
     function focusInput() { input.forceActiveFocus() }
@@ -129,6 +130,12 @@ Rectangle {
                                 event.accepted = true
                                 return
                             }
+                            const highlighted = suggestions[Math.min(composer.suggestionIndex, suggestions.length - 1)]
+                            if (highlighted.insert && (event.key === Qt.Key_Tab || event.key === Qt.Key_Return || event.key === Qt.Key_Enter)) {
+                                composer.setText(highlighted.text)
+                                event.accepted = true
+                                return
+                            }
                             if (event.key === Qt.Key_Tab) {
                                 const chosen = suggestions[Math.min(composer.suggestionIndex, suggestions.length - 1)]
                                 const takesArgs = !chosen.text.includes(" ") && /[\[|]/.test(chosen.label)
@@ -195,15 +202,16 @@ Rectangle {
         }
     }
 
-    // Command suggestions, above the box.
+    // Command or file suggestions, above the box: eight rows, scrolling to the highlighted one.
     Rectangle {
         objectName: "suggestions"
+        readonly property bool files: composer.suggestions.length > 0 && composer.suggestions[0].insert === true
         visible: composer.suggestions.length > 0 && input.activeFocus
         anchors.bottom: parent.top
         anchors.bottomMargin: 6
         anchors.left: parent.left
         width: Math.min(parent.width, 640)
-        height: suggestionList.contentHeight + 34
+        height: Math.min(composer.suggestions.length, 8) * 26 + 34
         color: Theme.surfaceRaised
         border.color: Theme.borderStrong
         radius: Theme.radius
@@ -215,7 +223,9 @@ Rectangle {
             anchors.bottomMargin: 28
             clip: true
             interactive: false
-            model: composer.suggestions.slice(0, 8)
+            model: composer.suggestions
+            currentIndex: Math.min(composer.suggestionIndex, count - 1)
+            onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
             delegate: Rectangle {
                 id: suggestion
                 required property var modelData
@@ -230,17 +240,19 @@ Rectangle {
                     spacing: 12
                     Text {
                         textFormat: Text.PlainText
-                        width: 180
+                        // A file's path takes the row, and keeps its end (the name) when it's long.
+                        width: suggestion.modelData.insert ? suggestion.width - 16 : 180
                         text: suggestion.modelData.label
                         color: composer.suggestionIndex === suggestion.index ? Theme.accent : Theme.text
                         font.family: Theme.mono
                         font.pixelSize: Theme.smallSize
                         font.bold: composer.suggestionIndex === suggestion.index
-                        elide: Text.ElideRight
+                        elide: suggestion.modelData.insert ? Text.ElideLeft : Text.ElideRight
                     }
                     Text {
                         textFormat: Text.PlainText
                         // What's left of the row, so a long hint ends in … inside the box.
+                        visible: !suggestion.modelData.insert
                         width: suggestion.width - 8 - 180 - 12 - 8
                         text: suggestion.modelData.hint
                         color: Theme.textFaint
@@ -263,7 +275,8 @@ Rectangle {
             anchors.left: parent.left
             anchors.bottom: parent.bottom
             anchors.margins: 8
-            text: "tab completes · enter runs · esc hides"
+            text: (parent.files && composer.suggestions.length > 8 ? composer.suggestions.length + " files · " : "")
+                  + (parent.files ? "tab or enter attaches it · esc hides" : "tab completes · enter runs · esc hides")
             color: Theme.textFaint
             font.family: Theme.textFamily
             font.pixelSize: Theme.tinySize

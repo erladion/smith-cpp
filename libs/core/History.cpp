@@ -26,14 +26,28 @@ Message userMessage(const QString& text) {
   return Message{{"role", "user"}, {"content", text}};
 }
 
-Message userMessage(const QString& text, const QList<Image>& images) {
-  if (images.isEmpty()) {
+namespace {
+
+const QString IMAGE_LABEL = "[The image %1, attached here: no need to open the file.]";
+
+} // namespace
+
+Message userMessage(const QString& text, const QList<Image>& images, const QList<AttachedFile>& files) {
+  if (images.isEmpty() && files.isEmpty()) {
     return userMessage(text);
   }
   QJsonArray parts{QJsonObject{{"type", "text"}, {"text", text}}};
+  for (const AttachedFile& file : files) {
+    const QString note = file.cut ? QString("only its start: read_file shows the rest") : QString("no need to read it again");
+    parts.append(QJsonObject{
+        {"type", "text"},
+        {"text", QString("[The user attached %1, with line numbers as read_file shows them; %2.]\n<file path=\"%1\">\n%3\n</file>")
+                     .arg(file.shown, note, file.content)},
+    });
+  }
   for (const Image& image : images) {
     const QString file = image.path.isEmpty() ? image.name : image.path;
-    parts.append(QJsonObject{{"type", "text"}, {"text", QString("[The image %1, attached here: no need to open the file.]").arg(file)}});
+    parts.append(QJsonObject{{"type", "text"}, {"text", IMAGE_LABEL.arg(file)}});
     const QString url = QString("data:%1;base64,%2").arg(image.type, QString::fromLatin1(image.data.toBase64()));
     parts.append(QJsonObject{{"type", "image_url"}, {"image_url", QJsonObject{{"url", url}}}});
   }
@@ -53,8 +67,17 @@ Message withoutImages(const Message& message) {
   if (!hasImages(message)) {
     return message;
   }
+  // Attached files stay; the pictures and the lines naming them go.
+  const QString label = IMAGE_LABEL.left(IMAGE_LABEL.indexOf("%1"));
+  QJsonArray kept;
+  for (const QJsonValue& part : message.value("content").toArray()) {
+    const QJsonObject object = part.toObject();
+    if (object.value("type").toString() == "text" && !object.value("text").toString().startsWith(label)) {
+      kept.append(object);
+    }
+  }
   Message plain = message;
-  plain["content"] = messageText(message);
+  plain["content"] = kept.size() == 1 ? QJsonValue(messageText(message)) : QJsonValue(kept);
   return plain;
 }
 

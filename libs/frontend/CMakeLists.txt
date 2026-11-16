@@ -1,12 +1,13 @@
 # What both apps share: starting up from the flags and config (Runtime), the
 # hooks a frontend gives an agent, transcript entries and replaying them,
 # running turns and asking the user (Turns, Prompts), slash commands,
-# greetings, durations, folder listings and task worktrees.
+# greetings, durations, folder and file listings and task worktrees.
 add_library(smith_frontend STATIC
   Activity.cpp
   Commands.cpp
   Duration.cpp
   Entry.cpp
+  FileIndex.cpp
   Folders.cpp
   Greetings.cpp
   Prompts.cpp

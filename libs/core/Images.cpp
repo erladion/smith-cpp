@@ -55,6 +55,10 @@ ImageRefs imagesIn(const QString& text, const QString& cwd) {
     static const QRegularExpression trailing(R"([,.;:!?)\]]+$)");
     if (match.captured(1).isEmpty() && match.captured(2).isEmpty()) {
       path.remove(trailing);
+      // Mentioned like a file to attach: @shot.png.
+      if (path.startsWith('@')) {
+        path.remove(0, 1);
+      }
     }
     if (!extension.match(path).hasMatch()) {
       continue;

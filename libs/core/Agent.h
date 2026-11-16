@@ -165,8 +165,8 @@ public:
   // Compares the files the agent changed with how they were before its first change. Reads them from disk.
   SessionChanges sessionChanges() const;
 
-  // Runs one user turn, with pictures to show the model if any. Throws on API errors; interruption via `cancel` is not an error.
-  void send(const QString& text, const CancelPtr& cancel, const QList<Image>& images = {});
+  // Runs one user turn, with pictures and files to show the model if any. Throws on API errors; interruption via `cancel` is not an error.
+  void send(const QString& text, const CancelPtr& cancel, const QList<Image>& images = {}, const QList<AttachedFile>& files = {});
   // Summarizes the conversation now, regardless of how full the context is.
   void compactNow(const CancelPtr& cancel);
   // One quick reply from the model, outside the conversation: no history, no

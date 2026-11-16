@@ -14,6 +14,8 @@ struct CompletionContext {
   QStringList models;
   // The repository's task worktrees, for /worktree, /land and /drop.
   QStringList tasks;
+  // The project's files, for @ mentions; asked for only when one is typed.
+  std::function<QStringList()> files;
 };
 
 struct Completion {
@@ -42,11 +44,14 @@ struct Suggestion {
   QString hint;
   // Whether choosing it should leave the input open for an argument rather than run it.
   bool takesArgument = false;
+  // A file for an @ mention: tab and enter both put it in the input, and nothing runs.
+  bool insert = false;
 };
 
 // Suggestions for what's typed so far: command names while typing the
 // command ("/h" → /help), then the argument's completions once a space
-// follows a command that has them ("/reasoning h" → high).
+// follows a command that has them ("/reasoning h" → high). In a message,
+// files for the @ mention at its end ("fix @Agent" → libs/core/Agent.cpp).
 QList<Suggestion> suggest(const QString& input, const CompletionContext& ctx);
 
 // What switching plan mode on or off did, for the transcript.
