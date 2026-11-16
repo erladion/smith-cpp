@@ -5,8 +5,10 @@
 #include "frontend/Activity.h"
 
 #include <QDateTime>
+#include <QPointer>
 
 #include <memory>
+#include <utility>
 
 namespace Smith {
 
@@ -177,7 +179,11 @@ void TurnRunner::runTask(const QString& activity, const QString& baseUrl, std::f
 void TurnRunner::launch(std::function<void()> work, std::function<void()> finished) {
   QThread* thread = QThread::create(std::move(work));
   m_workers << thread;
-  connect(thread, &QThread::finished, this, [this, thread, finished]() {
+  connect(thread, &QThread::finished, this, [this, thread = QPointer<QThread>(thread), finished]() {
+    // Already deleted by close.
+    if (!thread) {
+      return;
+    }
     m_workers.removeAll(thread);
     thread->deleteLater();
     if (!m_closed && finished) {
@@ -201,9 +207,12 @@ void TurnRunner::close() {
   interrupt();
   m_pClosing->cancel();
   // The threads stop at their next check of their cancel token.
-  for (QThread* thread : m_workers) {
+  // Deleted here: what would delete them later is not called after close.
+  for (QThread* thread : std::as_const(m_workers)) {
     thread->wait();
+    delete thread;
   }
+  m_workers.clear();
 }
 
 Entry undoNotice(const UndoResult& result, const QString& cwd) {
