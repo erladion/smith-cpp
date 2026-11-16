@@ -88,7 +88,7 @@ ImageRefs imagesIn(const QString& text, const QString& cwd) {
       // Named like an image, but isn't one of these: left as the text it is.
       continue;
     }
-    refs.images.append(Image{name, type, data});
+    refs.images.append(Image{name, type, data, file});
     refs.attached << QString("%1 (%2)").arg(name, sizeText(data.size()));
   }
   return refs;

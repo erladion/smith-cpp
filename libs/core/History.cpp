@@ -17,11 +17,9 @@ QString messageText(const Message& message) {
   if (!content.isArray()) {
     return {};
   }
-  QString text;
-  for (const QJsonValue& part : content.toArray()) {
-    text += part.toObject().value("text").toString();
-  }
-  return text;
+  // The text comes first; the parts after it are pictures and their labels.
+  const QJsonArray parts = content.toArray();
+  return parts.isEmpty() ? QString() : parts.first().toObject().value("text").toString();
 }
 
 Message userMessage(const QString& text) {
@@ -34,6 +32,8 @@ Message userMessage(const QString& text, const QList<Image>& images) {
   }
   QJsonArray parts{QJsonObject{{"type", "text"}, {"text", text}}};
   for (const Image& image : images) {
+    const QString file = image.path.isEmpty() ? image.name : image.path;
+    parts.append(QJsonObject{{"type", "text"}, {"text", QString("[The image %1, attached here: no need to open the file.]").arg(file)}});
     const QString url = QString("data:%1;base64,%2").arg(image.type, QString::fromLatin1(image.data.toBase64()));
     parts.append(QJsonObject{{"type", "image_url"}, {"image_url", QJsonObject{{"url", url}}}});
   }

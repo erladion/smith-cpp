@@ -694,9 +694,12 @@ void TestAgent::imagesGoWithTheMessage() {
   auto h = make();
   h->agent->send("what is this?", makeCancel(), images);
   const QJsonArray parts = lastMessage(m_pFake->requests()[0]).value("content").toArray();
-  QCOMPARE(parts.size(), 2);
+  QCOMPARE(parts.size(), 3);
   QCOMPARE(parts[0].toObject().value("text").toString(), QString("what is this?"));
-  QVERIFY(parts[1].toObject().value("image_url").toObject().value("url").toString().startsWith("data:image/png;base64,"));
+  // Named, so the model doesn't go looking for the file.
+  QVERIFY_MATCH(parts[1].toObject().value("text").toString(), "^\\[The image shot\\.png, attached here");
+  QCOMPARE(messageText(lastMessage(m_pFake->requests()[0])), QString("what is this?"));
+  QVERIFY(parts[2].toObject().value("image_url").toObject().value("url").toString().startsWith("data:image/png;base64,"));
   // It stays in the conversation for the turns after.
   h->agent->send("sure?", makeCancel());
   QVERIFY(hasImages(messagesOf(m_pFake->requests()[1])[1].toObject()));

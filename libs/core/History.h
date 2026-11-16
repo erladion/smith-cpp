@@ -32,8 +32,12 @@ struct Image {
   // "image/png" and the like.
   QString type;
   QByteArray data;
+  // The file it came from, named to the model with the picture.
+  QString path;
 };
-// A user message with pictures: content parts, the text first.
+// A user message with pictures: content parts, the text first, then each
+// picture after a line naming its file, so the model knows it already has the
+// file the text names and doesn't go and open it.
 Message userMessage(const QString& text, const QList<Image>& images);
 // Whether a message carries pictures, and the same message without them.
 bool hasImages(const Message& message);

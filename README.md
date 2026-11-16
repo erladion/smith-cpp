@@ -167,8 +167,9 @@ TypeScript version doesn't have them.
   With `--sandbox off` these tools aren't offered. `"timeoutMs"` sets the time limit (5 minutes
   by default).
 - **Images.** Name an image file in your message (a path, quoted or not, as a terminal pastes a
-  dropped file) and it is sent along: PNG, JPEG, GIF or WebP, up to 5 MB each. If the server
-  refuses the request, the pictures are taken out of the conversation again.
+  dropped file) and it is sent along: PNG, JPEG, GIF or WebP, up to 5 MB each, from anywhere
+  on disk. Each picture is labelled with its file, so the model doesn't try to open it. If the
+  server refuses the request, the pictures are taken out of the conversation again.
 - **Sub-agents that do work.** `task` with `can_write` hands a sub-agent a piece of work, not only
   an investigation. Its changes ask for approval through the main agent, show in the transcript,
   and are undone with the turn. Several can run at once; the model is told to give them separate

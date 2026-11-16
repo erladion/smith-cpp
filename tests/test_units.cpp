@@ -568,8 +568,12 @@ void TestUnits::messagesNameTheirImages() {
   QVERIFY(hasImages(message));
   QCOMPARE(messageText(message), QString("look"));
   const QJsonArray parts = message.value("content").toArray();
-  QCOMPARE(parts.size(), 3);
-  QCOMPARE(parts[1].toObject().value("image_url").toObject().value("url").toString(), QString("data:image/png;base64,") + png.toBase64());
+  // Text, then a label naming each picture's file before it.
+  QCOMPARE(parts.size(), 5);
+  QCOMPARE(parts[1].toObject().value("text").toString(),
+           QString("[The image %1, attached here: no need to open the file.]").arg(dir.file("shot.png")));
+  QCOMPARE(parts[2].toObject().value("image_url").toObject().value("url").toString(), QString("data:image/png;base64,") + png.toBase64());
+  QVERIFY_MATCH(parts[3].toObject().value("text").toString(), "my shots/after fix\\.JPG, attached here");
   QCOMPARE(withoutImages(message), userMessage("look"));
   QCOMPARE(userMessage("look", {}), userMessage("look"));
 
