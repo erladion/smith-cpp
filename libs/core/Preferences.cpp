@@ -34,6 +34,10 @@ Preferences loadPreferences() {
   if (isReasoningLevel(reasoning)) {
     prefs.reasoning = reasoning;
   }
+  const QString theme = raw.value("theme").toString();
+  if (themeNamed(theme)) {
+    prefs.theme = theme;
+  }
   prefs.endpoint = raw.value("endpoint").toString();
   const QJsonObject models = raw.value("models").toObject();
   for (auto it = models.begin(); it != models.end(); ++it) {
@@ -61,6 +65,9 @@ void savePreferences(const PreferenceChange& change) {
   if (!change.reasoning.isEmpty()) {
     prefs.reasoning = change.reasoning;
   }
+  if (!change.theme.isEmpty()) {
+    prefs.theme = change.theme;
+  }
   if (!change.endpoint.isEmpty()) {
     prefs.endpoint = change.endpoint;
   }
@@ -77,6 +84,9 @@ void savePreferences(const PreferenceChange& change) {
   QJsonObject out;
   if (!prefs.reasoning.isEmpty()) {
     out["reasoning"] = prefs.reasoning;
+  }
+  if (!prefs.theme.isEmpty()) {
+    out["theme"] = prefs.theme;
   }
   if (!prefs.endpoint.isEmpty()) {
     out["endpoint"] = prefs.endpoint;
@@ -105,6 +115,10 @@ void savePreferences(const PreferenceChange& change) {
   if (handle.commit()) {
     privateFile(preferencesFile());
   }
+}
+
+Theme preferredTheme(Theme configured) {
+  return themeNamed(loadPreferences().theme).value_or(configured);
 }
 
 } // namespace Smith

@@ -45,7 +45,9 @@ Button {
 
     background: Rectangle {
         radius: Theme.radius
-        color: control.down ? Qt.darker(fill, 1.2) : control.hovered ? Qt.lighter(fill, Theme.matrix ? 1.6 : 1.25) : fill
+        // Hovering lightens a dark fill and darkens a light one.
+        color: control.down ? Qt.darker(fill, Theme.light ? 1.12 : 1.2)
+               : control.hovered ? (Theme.light ? Qt.darker(fill, 1.06) : Qt.lighter(fill, Theme.matrix ? 1.6 : 1.25)) : fill
         border.width: control.kind === "ghost" ? 0 : 1
         border.color: control.kind === "normal" ? (control.hovered ? Theme.borderStrong : Theme.border) : control.tone
         readonly property color fill: control.kind === "primary" ? Theme.accentWash

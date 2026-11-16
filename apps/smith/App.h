@@ -143,6 +143,8 @@ private:
   void listSkills();
   void manageJobs(const QString& arg);
   void setNetwork(const QString& arg);
+  // /theme: a picker without an argument.
+  void setTheme(const QString& arg);
 
   TuiOptions m_options;
   AgentHooks m_hooks;

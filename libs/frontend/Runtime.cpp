@@ -486,6 +486,7 @@ void Runtime::savePreferences(const PreferenceUpdate& update) {
   }
   PreferenceChange change;
   change.reasoning = update.reasoning;
+  change.theme = update.theme;
   if (!update.model.isEmpty()) {
     change.endpoint = update.server->name();
     change.modelBaseUrl = update.server->baseUrl();

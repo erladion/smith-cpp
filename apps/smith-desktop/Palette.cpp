@@ -48,6 +48,32 @@ Palette Palette::forTheme(Theme theme) {
     palette.textFamily = palette.monoFamily;
     return palette;
   }
+  palette.textFamily = QFontDatabase::systemFont(QFontDatabase::GeneralFont).family();
+  if (theme == Theme::Light) {
+    palette.window = QColor("#f6f7f9");
+    palette.surface = QColor("#ffffff");
+    palette.surfaceRaised = QColor("#eef0f3");
+    palette.border = QColor("#dde1e6");
+    palette.borderStrong = QColor("#c2c8d0");
+    palette.text = QColor("#1f2328");
+    palette.textDim = QColor("#57606a");
+    palette.textFaint = QColor("#8c959f");
+    palette.accent = QColor("#0969da");
+    palette.accentSoft = QColor("#3b82d6");
+    palette.accentWash = QColor("#ddeeff");
+    palette.code = QColor("#0b7285");
+    palette.codeWash = QColor("#f0f3f6");
+    palette.info = QColor("#0969da");
+    palette.warn = QColor("#9a6700");
+    palette.error = QColor("#cf222e");
+    palette.added = QColor("#1a7f37");
+    palette.addedWash = QColor("#dafbe1");
+    palette.removed = QColor("#cf222e");
+    palette.removedWash = QColor("#ffebe9");
+    palette.userWash = QColor("#eaf1fb");
+    palette.selection = QColor("#b6d7ff");
+    return palette;
+  }
   palette.window = QColor("#17181b");
   palette.surface = QColor("#1e1f23");
   palette.surfaceRaised = QColor("#26282d");
@@ -70,7 +96,6 @@ Palette Palette::forTheme(Theme theme) {
   palette.removedWash = QColor("#2e1c1f");
   palette.userWash = QColor("#232a33");
   palette.selection = QColor("#2c4a6b");
-  palette.textFamily = QFontDatabase::systemFont(QFontDatabase::GeneralFont).family();
   return palette;
 }
 

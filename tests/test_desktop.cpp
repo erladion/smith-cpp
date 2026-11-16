@@ -7,6 +7,7 @@
 #include "TestUtil.h"
 
 #include "core/Dirs.h"
+#include "core/Preferences.h"
 #include "core/Sandbox.h"
 #include "Backend.h"
 #include "Window.h"
@@ -71,6 +72,7 @@ private Q_SLOTS:
   void switchesSessions();
   void deletesAnotherSession();
   void landsATaskWorktree();
+  void switchesTheme();
 
 private:
   void shot(const QString& name);
@@ -351,6 +353,51 @@ void TestDesktop::landsATaskWorktree() {
   QVERIFY(git(repo, {"branch", "--list", "smith/shout"}).trimmed().isEmpty());
   QVERIFY2(g_qmlWarnings.isEmpty(), qPrintable(g_qmlWarnings.join('\n')));
   shot("12-removed");
+}
+
+void TestDesktop::switchesTheme() {
+  const QString before = m_pBackend->theme();
+  // From another theme, when the run is already light (SMITH_TEST_THEME=light).
+  if (before == "light") {
+    m_pBackend->setTheme("plain");
+  }
+  auto color = [&](const char* name) { return m_pBackend->palette().value(name).value<QColor>(); };
+  // The ⋯ menu's items are drawn in the theme, not the style's default look.
+  QObject* menu = root()->findChild<QObject*>("moreMenu");
+  QVERIFY(menu);
+  QMetaObject::invokeMethod(menu, "open");
+  QTRY_VERIFY(menu->property("opened").toBool());
+  auto item = [&](int index) {
+    QQuickItem* found = nullptr;
+    QMetaObject::invokeMethod(menu, "itemAt", Q_RETURN_ARG(QQuickItem*, found), Q_ARG(int, index));
+    return found;
+  };
+  QCOMPARE(menu->property("count").toInt(), 4);
+  QCOMPARE(item(0)->property("text").toString(), QString("Theme…"));
+  auto textColor = [&](int index) { return item(index)->property("contentItem").value<QQuickItem*>()->property("color").value<QColor>(); };
+  QCOMPARE(textColor(1), color("text"));
+  shot("13-menu");
+  QMetaObject::invokeMethod(menu, "close");
+
+  // /theme without a name opens the picker; with one it switches now, and is remembered.
+  m_pBackend->submit("/theme");
+  QTRY_COMPARE(root()->property("pickerKind").toString(), QString("theme"));
+  QObject* picker = root()->findChild<QObject*>("picker");
+  QVERIFY(picker);
+  QTRY_VERIFY(picker->property("opened").toBool());
+  QMetaObject::invokeMethod(picker, "close");
+  m_pBackend->submit("/theme light");
+  QCOMPARE(m_pBackend->theme(), QString("light"));
+  QCOMPARE(color("window"), QColor("#f6f7f9"));
+  QTRY_COMPARE(root()->property("color").value<QColor>(), color("window"));
+  QCOMPARE(textColor(1), color("text"));
+  QCOMPARE(loadPreferences().theme, QString("light"));
+  QTRY_VERIFY(!picker->property("visible").toBool());
+  shot("14-light");
+
+  m_pBackend->setTheme(before);
+  QCOMPARE(m_pBackend->theme(), before);
+  QVERIFY2(g_qmlWarnings.isEmpty(), qPrintable(g_qmlWarnings.join('\n')));
 }
 
 #endif

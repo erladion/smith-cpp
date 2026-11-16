@@ -3,6 +3,7 @@
 #include "core/Errors.h"
 #include "core/Images.h"
 #include "core/Jobs.h"
+#include "core/Preferences.h"
 #include "core/Reasoning.h"
 #include "tui/Rain.h"
 #include "frontend/Duration.h"
@@ -20,7 +21,7 @@ namespace Smith::Desktop {
 Backend::Backend(const LaunchOptions& launch, QObject* parent) : QObject(parent), m_launch(launch) {
   try {
     const Config config = loadConfig();
-    m_theme = config.theme;
+    m_theme = preferredTheme(config.theme);
     m_codeStream = config.codeStream;
   } catch (const std::exception&) {
     // start() reports a broken config file; until then, the default look.
@@ -52,6 +53,14 @@ void Backend::setInstance(Backend* backend) {
 
 QStringList Backend::spinnerFrames() const {
   return Smith::spinnerFrames(m_theme);
+}
+
+QVariantList Backend::themes() const {
+  QVariantList out;
+  for (const QString& name : THEME_NAMES) {
+    out << QVariantMap{{"value", name}, {"label", name}, {"hint", themeHint(*themeNamed(name))}};
+  }
+  return out;
 }
 
 QStringList Backend::reasoningLevels() const {

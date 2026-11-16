@@ -1,5 +1,6 @@
 #include "frontend/Commands.h"
 
+#include "core/Config.h"
 #include "core/Dirs.h"
 #include "core/Permissions.h"
 #include "core/Tool.h"
@@ -61,6 +62,10 @@ const QList<CommandSpec>& commands() {
     for (const QString& level : REASONING_LEVELS) {
       reasoning.append(Completion{level, reasoningHint(level)});
     }
+    QList<Completion> themes;
+    for (const QString& name : THEME_NAMES) {
+      themes.append(Completion{name, themeHint(*themeNamed(name))});
+    }
     return QList<CommandSpec>{
         {"/help", {}, "show the commands and keys", {}},
         {"/endpoint", "[name]", "pick a configured endpoint, or switch to one by name",
@@ -84,6 +89,7 @@ const QList<CommandSpec>& commands() {
            return out;
          }},
         {"/reasoning", "[level]", "pick how much the model thinks: " + REASONING_LEVELS.join(", "), fixed(reasoning)},
+        {"/theme", "[name]", "pick how Smith looks: " + THEME_NAMES.join(", "), fixed(themes)},
         {"/sessions", "[all]", "switch to another session from this folder (all: from every folder)",
          fixed({Completion{"all", "sessions from every folder"}})},
         {"/name", "[name]", "show or set the current session's name", {}},

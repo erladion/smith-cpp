@@ -40,6 +40,7 @@ private Q_SLOTS:
   void deletingASessionRemovesItsLogs();
   void toolLogAppendsPrivateLines();
   void preferencesArePrivate();
+  void themePickedIsRemembered();
   void sessionsHaveNames();
   void recordsReplacesAndReloads();
   void listingsShowFirstMessage();
@@ -225,6 +226,24 @@ void TestUnits::preferencesArePrivate() {
   QCOMPARE(mode(config + "/smith/preferences.json"), QString("600"));
   QCOMPARE(mode(config + "/smith"), QString("700"));
   QVERIFY2(mode(config) == "755", "only the agent's own folder is made private");
+}
+
+void TestUnits::themePickedIsRemembered() {
+  QCOMPARE(themeNamed("light"), std::optional<Theme>(Theme::Light));
+  QCOMPARE(themeName(Theme::Plain), QString("plain"));
+  QVERIFY(!themeNamed("solarized"));
+
+  const QString config = m_pData->file("theme-config");
+  EnvGuard env("XDG_CONFIG_HOME", config);
+  // Until one is picked, the config's.
+  QCOMPARE(preferredTheme(Theme::Plain), Theme::Plain);
+  PreferenceChange change;
+  change.theme = "light";
+  savePreferences(change);
+  QCOMPARE(preferredTheme(Theme::Matrix), Theme::Light);
+  // Other choices saved later keep it.
+  savePreferences(PreferenceChange{"high", {}, {}, {}});
+  QCOMPARE(loadPreferences().theme, QString("light"));
 }
 
 void TestUnits::sessionsHaveNames() {

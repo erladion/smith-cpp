@@ -58,6 +58,8 @@ ApplicationWindow {
             return { title: "Select reasoning level", items: Backend.reasoningLevels.map(l => ({ value: l, label: l, hint: hints[l] || "" })),
                      current: Backend.reasoning, empty: "" }
         }
+        case "theme":
+            return { title: "Select theme", items: Backend.themes, current: Backend.theme, empty: "" }
         case "recent":
             return { title: "Open a recent project", items: Backend.recentProjects.map(p => ({ value: p.path, label: p.name, hint: p.hint + " · " + p.where })),
                      current: "", empty: "No other folders have sessions yet." }
@@ -77,6 +79,7 @@ ApplicationWindow {
 
     Picker {
         id: picker
+        objectName: "picker"
         title: window.pickerSpec.title
         items: window.pickerSpec.items
         current: window.pickerSpec.current
@@ -86,6 +89,7 @@ ApplicationWindow {
             case "model": Backend.setModel(value); break
             case "endpoint": Backend.setEndpoint(value); break
             case "reasoning": Backend.setReasoning(value); break
+            case "theme": Backend.setTheme(value); break
             case "recent": Backend.openProject(value); break
             case "jobs": Backend.stopJob(value); break
             case "worktrees": Backend.switchToWorktree(value); break

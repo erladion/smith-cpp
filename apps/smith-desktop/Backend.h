@@ -35,10 +35,13 @@ class Backend : public QObject {
   // "starting", "ready" or "failed".
   Q_PROPERTY(QString state READ state NOTIFY changed)
   Q_PROPERTY(QString startupError READ startupError NOTIFY changed)
-  Q_PROPERTY(bool matrix READ matrix CONSTANT)
+  Q_PROPERTY(QString theme READ theme NOTIFY themeChanged)
+  Q_PROPERTY(bool matrix READ matrix NOTIFY themeChanged)
   Q_PROPERTY(bool codeStream READ codeStream CONSTANT)
-  Q_PROPERTY(QVariantMap palette READ palette CONSTANT)
-  Q_PROPERTY(QStringList spinnerFrames READ spinnerFrames CONSTANT)
+  Q_PROPERTY(QVariantMap palette READ palette NOTIFY themeChanged)
+  Q_PROPERTY(QStringList spinnerFrames READ spinnerFrames NOTIFY themeChanged)
+  // For the theme picker: [{value, label, hint}].
+  Q_PROPERTY(QVariantList themes READ themes CONSTANT)
   Q_PROPERTY(QStringList reasoningLevels READ reasoningLevels CONSTANT)
   Q_PROPERTY(QString version READ version CONSTANT)
   Q_PROPERTY(TranscriptModel* transcript READ transcript CONSTANT)
@@ -95,7 +98,9 @@ public:
 
   QString state() const { return m_state; }
   QString startupError() const { return m_startupError; }
+  QString theme() const { return themeName(m_theme); }
   bool matrix() const { return m_theme == Theme::Matrix; }
+  QVariantList themes() const;
   bool codeStream() const { return m_codeStream; }
   QVariantMap palette() const { return m_palette.toVariant(); }
   QStringList spinnerFrames() const;
@@ -183,16 +188,19 @@ public:
   Q_INVOKABLE QVariantList suggest(const QString& input) const;
   // The idle stream of glyphs for the status bar.
   Q_INVOKABLE QString codeStreamText(int offset, int width) const;
+  // /theme: switches the look now, and remembers it.
+  Q_INVOKABLE void setTheme(const QString& name);
   // Stops what is running and quits.
   Q_INVOKABLE void quit();
 
 Q_SIGNALS:
   void changed();
   void promptChanged();
+  void themeChanged();
   void sessionsChanged();
   // Text to put back in the input box (an undone turn, or queued messages that weren't delivered).
   void restoreInput(const QString& text);
-  // A command wants a picker: "model", "endpoint", "reasoning", "sessions", "folder", "jobs", "skills".
+  // A command wants a picker: "model", "endpoint", "reasoning", "theme", "sessions", "folder", "jobs", "skills".
   void openPicker(const QString& kind);
   // /redpill.
   void redPill();

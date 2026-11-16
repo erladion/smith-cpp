@@ -3,7 +3,7 @@
 namespace Smith {
 
 QStringList spinnerFrames(Theme theme) {
-  if (theme == Theme::Plain) {
+  if (theme != Theme::Matrix) {
     return {"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"};
   }
   // Half-width katakana, one column wide like the braille dots.

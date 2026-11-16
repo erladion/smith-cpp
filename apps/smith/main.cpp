@@ -333,7 +333,7 @@ int run(QCoreApplication& app) {
   options.sessions = runtime->sessions();
   options.resumed = runtime->resumedHistory();
   options.resumedLastUsed = runtime->resumedLastUsed();
-  options.theme = config.theme;
+  options.theme = preferredTheme(config.theme);
   options.codeStream = config.codeStream;
   options.jobs = runtime->jobs();
   options.savePreferences = [runtime](const PreferenceUpdate& update) { runtime->savePreferences(update); };
@@ -351,7 +351,8 @@ int run(QCoreApplication& app) {
   const QString name = session->name();
   static const QRegularExpression whitespace(R"(\s)");
   const QString resumeWith = !name.isEmpty() && !whitespace.match(name).hasMatch() ? name : session->id();
-  const QString goodbye = config.theme == Theme::Matrix ? farewell(started.elapsed()) + "\n" : QString();
+  // As /theme left it.
+  const QString goodbye = preferredTheme(config.theme) == Theme::Matrix ? farewell(started.elapsed()) + "\n" : QString();
   out(QString("%1Session %2%3. Resume with: smith --resume %4").arg(goodbye, name.isEmpty() ? QString() : "\"" + name + "\" ", session->id(), resumeWith));
   return 0;
 }

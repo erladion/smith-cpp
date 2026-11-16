@@ -33,8 +33,17 @@ struct Endpoint {
   std::optional<int> contextSize;
 };
 
-// "matrix" adds digital rain at startup and a katakana spinner; "plain" none of it.
-enum class Theme { Matrix, Plain };
+// "matrix" adds digital rain at startup and a katakana spinner; "plain" and
+// "light" none of it. In the terminal, plain and light look the same: its own
+// colors decide the shades.
+enum class Theme { Matrix, Plain, Light };
+
+// The themes' names, as the config and /theme take them.
+extern const QStringList THEME_NAMES;
+QString themeName(Theme theme);
+std::optional<Theme> themeNamed(const QString& name);
+// What a theme looks like, for pickers.
+QString themeHint(Theme theme);
 
 struct Config {
   QString file;

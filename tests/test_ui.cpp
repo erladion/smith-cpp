@@ -521,7 +521,8 @@ QStringList texts(const QString& input, const CompletionContext& ctx = completio
 
 void TestUi::slashListsAndNarrows() {
   QCOMPARE(texts("/").size(), commands().size());
-  QCOMPARE(texts("/h"), QStringList({"/help"}));
+  QCOMPARE(texts("/hel"), QStringList({"/help"}));
+  QCOMPARE(texts("/h").first(), QString("/help"));
   QCOMPARE(texts("/n").mid(0, 3), QStringList({"/name", "/new", "/network"}));
   QCOMPARE(texts("/net").first(), QString("/network"));
   QCOMPARE(texts("/xyz"), QStringList());
@@ -531,6 +532,8 @@ void TestUi::argumentsComplete() {
   QCOMPARE(texts("/reasoning "), QStringList({"/reasoning default", "/reasoning off", "/reasoning low", "/reasoning medium", "/reasoning high"}));
   QCOMPARE(texts("/reasoning h"), QStringList({"/reasoning high"}));
   QCOMPARE(texts("/network o"), QStringList({"/network on", "/network off"}));
+  QCOMPARE(texts("/theme "), QStringList({"/theme matrix", "/theme plain", "/theme light"}));
+  QCOMPARE(texts("/theme l"), QStringList({"/theme light"}));
   QCOMPARE(texts("/sessions "), QStringList({"/sessions all"}));
   QCOMPARE(texts("/endpoint g"), QStringList({"/endpoint gpu-box"}));
   QCOMPARE(texts("/model oss"), QStringList({"/model gpt-oss-20b"}));

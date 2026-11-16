@@ -87,6 +87,7 @@ struct PreferenceUpdate {
   ServerPtr server;
   QString model;
   QString reasoning;
+  QString theme;
 };
 
 // A value one thread waits for and another provides: the user's answer to

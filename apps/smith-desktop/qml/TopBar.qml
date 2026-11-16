@@ -20,6 +20,22 @@ Rectangle {
         color: Theme.border
     }
 
+    component ThemedItem: MenuItem {
+        id: menuItem
+        implicitHeight: 32
+        leftPadding: 14
+        rightPadding: 14
+        contentItem: Text {
+            textFormat: Text.PlainText
+            text: menuItem.text
+            color: menuItem.enabled ? Theme.text : Theme.textFaint
+            font.family: Theme.textFamily
+            font.pixelSize: Theme.smallSize
+            verticalAlignment: Text.AlignVCenter
+        }
+        background: Rectangle { color: menuItem.highlighted ? Theme.accentWash : "transparent" }
+    }
+
     component Chip: SmithButton {
         property string label
         property string value
@@ -143,31 +159,27 @@ Rectangle {
         }
         SmithButton {
             text: "⋯"
-            tip: "Skills, background jobs and help"
+            tip: "Theme, skills, background jobs and help"
             onClicked: more.open()
             Menu {
                 id: more
+                objectName: "moreMenu"
+                // Right-aligned under the button, so it stays in the window.
+                x: parent.width - width
                 y: parent.height + 4
+                topPadding: 4
+                bottomPadding: 4
                 background: Rectangle {
                     implicitWidth: 220
                     color: Theme.surfaceRaised
                     border.color: Theme.borderStrong
                     radius: Theme.radius
                 }
-                delegate: MenuItem {
-                    id: menuItem
-                    contentItem: Text {
-                        textFormat: Text.PlainText
-                        text: menuItem.text
-                        color: menuItem.enabled ? Theme.text : Theme.textFaint
-                        font.family: Theme.textFamily
-                        font.pixelSize: Theme.smallSize
-                    }
-                    background: Rectangle { color: menuItem.highlighted ? Theme.accentWash : "transparent" }
-                }
-                MenuItem { text: "Skills…"; onTriggered: bar.pick("skills") }
-                MenuItem { text: "Background jobs…"; onTriggered: bar.pick("jobs") }
-                MenuItem { text: "Commands and keys"; onTriggered: Backend.submit("/help") }
+                // Written out, not from a model, so each is a ThemedItem: a Menu's delegate only makes the items it creates itself.
+                ThemedItem { text: "Theme…"; onTriggered: bar.pick("theme") }
+                ThemedItem { text: "Skills…"; onTriggered: bar.pick("skills") }
+                ThemedItem { text: "Background jobs…"; onTriggered: bar.pick("jobs") }
+                ThemedItem { text: "Commands and keys"; onTriggered: Backend.submit("/help") }
             }
         }
     }

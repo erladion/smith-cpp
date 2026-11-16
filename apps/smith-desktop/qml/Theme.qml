@@ -7,6 +7,7 @@ import Smith.Desktop 1.0
 QtObject {
     readonly property var p: Backend.palette
     readonly property bool matrix: Backend.matrix
+    readonly property bool light: Backend.theme === "light"
 
     readonly property color window: p.window
     readonly property color surface: p.surface

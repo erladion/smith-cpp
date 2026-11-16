@@ -8,9 +8,9 @@
 
 namespace Smith::Desktop {
 
-// The desktop app's colors and fonts, for the config's theme. "matrix" is
-// green on near-black with monospace throughout, like the TUI's matrix
-// theme; "plain" is a neutral dark theme.
+// The desktop app's colors and fonts, for the theme. "matrix" is green on
+// near-black with monospace throughout, like the TUI's matrix theme; "plain"
+// is a neutral dark theme and "light" a neutral light one.
 struct Palette {
   QColor window;
   QColor surface;

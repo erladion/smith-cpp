@@ -59,6 +59,8 @@ void App::runCommand(const QString& text) {
     } else {
       m_pConnection->setReasoning(arg);
     }
+  } else if (command == "/theme") {
+    setTheme(arg);
   } else if (command == "/network") {
     setNetwork(arg);
   } else if (command == "/permissions") {
@@ -171,6 +173,34 @@ void App::setNetwork(const QString& arg) {
                               ? " The container was removed for that; the next command starts a new one, without what was installed in the old one."
                               : QString();
   print(Entry::notice(NoticeLevel::Info, QString("Sandboxed commands now have network %1.%2").arg(arg, restart)));
+}
+
+void App::setTheme(const QString& arg) {
+  const auto apply = [this](Theme theme) {
+    m_options.theme = theme;
+    m_options.savePreferences(PreferenceUpdate{{}, {}, {}, themeName(theme)});
+    // The terminal's own colors decide the shades, so light only differs in the desktop app.
+    const QString note = theme == Theme::Light ? " Here it looks like plain: your terminal's colors decide the shades." : QString();
+    print(Entry::notice(NoticeLevel::Info, QString("Theme: %1.%2").arg(themeName(theme), note)));
+    render();
+  };
+  if (!arg.isEmpty()) {
+    if (const auto theme = themeNamed(arg)) {
+      apply(*theme);
+    } else {
+      print(Entry::notice(NoticeLevel::Error, QString("Unknown theme \"%1\". Use one of: %2.").arg(arg, THEME_NAMES.join(", "))));
+    }
+    return;
+  }
+  QList<Tui::PickerItem> items;
+  for (const QString& name : THEME_NAMES) {
+    items.append({name, name, themeHint(*themeNamed(name))});
+  }
+  openPicker(std::make_unique<Tui::Picker>("Select theme", items, themeName(m_options.theme)), [this, apply](const QString& name) {
+    if (const auto theme = themeNamed(name); theme && *theme != m_options.theme) {
+      apply(*theme);
+    }
+  });
 }
 
 } // namespace Smith::Ui

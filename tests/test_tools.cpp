@@ -649,6 +649,9 @@ void TestTools::configMaxSteps() {
   QCOMPARE(loadConfig(writeConfig(m_pDir->path(), "nosteps.json", {})).maxSteps, std::optional<int>());
   QVERIFY_THROWS_MATCH(loadConfig(writeConfig(m_pDir->path(), "badsteps.json", {{"maxSteps", 0}})), "Invalid[\\s\\S]*maxSteps");
   QVERIFY_THROWS_MATCH(loadConfig(writeConfig(m_pDir->path(), "strsteps.json", {{"maxSteps", "50"}})), "Invalid[\\s\\S]*maxSteps");
+  QCOMPARE(loadConfig(writeConfig(m_pDir->path(), "light.json", {{"theme", "light"}})).theme, Theme::Light);
+  QVERIFY_THROWS_MATCH(loadConfig(writeConfig(m_pDir->path(), "badtheme.json", {{"theme", "neon"}})),
+                       "expected one of \"matrix\"\\|\"plain\"\\|\"light\"");
 }
 
 void TestTools::configRejectsInvalidFiles() {

@@ -90,6 +90,10 @@ TranscriptModel::TranscriptModel(QObject* parent) : QAbstractListModel(parent) {
 
 void TranscriptModel::setPalette(const Palette& palette) {
   m_palette = palette;
+  // Answers are HTML in the palette's colors.
+  if (!m_entries.isEmpty()) {
+    Q_EMIT dataChanged(index(0), index(int(m_entries.size()) - 1));
+  }
 }
 
 int TranscriptModel::rowCount(const QModelIndex& parent) const {

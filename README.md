@@ -82,6 +82,7 @@ Type these in the input box of either app. Tab completes them, and their argumen
 | `/endpoint [name]` | Pick a configured endpoint, or switch to one by name. |
 | `/model [name]` | Pick a model from the server, or switch to one by name. |
 | `/reasoning [level]` | Pick how much the model thinks: `default`, `off`, `low`, `medium` or `high`. |
+| `/theme [name]` | Pick how Smith looks: `matrix`, `plain` or `light`. It switches at once and is remembered. |
 | `/sessions [all]` | Switch to another session from this folder (`all`: from every folder). |
 | `/name [name]` | Show or set the current session's name. |
 | `/open` | Pick a project folder: a recent one, or browse to one. |
@@ -140,7 +141,7 @@ optional; an unknown key or a wrong value stops Smith with a message saying wher
 | `maxSteps` | `50` | Model calls allowed per message you send. |
 | `subagents` | `true` | Whether the model can hand work to sub-agents (the `task` tool). |
 | `toolLog` | `true` | Whether tool calls are logged to `~/.local/share/smith/logs/<session>.jsonl`. |
-| `theme` | `"matrix"` | `"matrix"`: green on black, digital rain at startup and a katakana spinner. `"plain"`: none of that. |
+| `theme` | `"matrix"` | `"matrix"`: green on black, digital rain at startup and a katakana spinner. `"plain"`: a neutral dark look, none of that. `"light"`: the same, dark on light. A theme picked with `/theme` takes precedence. |
 | `codeStream` | `true` | With the matrix theme: the idle stream of glyphs in the status line. |
 | `protectRunLater` | `true` | Changes to files that run outside the sandbox later always ask, and are reported (see [Files that run later](#files-that-run-later)). |
 | `permissions.allow` | `[]` | What runs without asking: a tool's name, or `"bash:<start of a command>"`. |
@@ -159,7 +160,8 @@ optional; an unknown key or a wrong value stops Smith with a message saying wher
 | `sandbox.projects.<folder>` | | For `container`: an `image` and `mounts` for projects in that folder. The most specific folder wins. |
 
 Smith also remembers some choices between runs, in `~/.config/smith/preferences.json`: the last
-endpoint, the model per server, the reasoning level, and what you allowed per project.
+endpoint, the model per server, the reasoning level, the theme picked with `/theme`, and what you
+allowed per project.
 
 ### Permissions
 
@@ -415,7 +417,8 @@ there, so the agent may need to install or build first.
   undo and compact. The status bar shows the sandbox, how full the context is, and background
   jobs.
 
-The theme follows `theme` in the config.
+`/theme` (or "Theme…" in the ⋯ menu) switches between `matrix`, `plain` and `light`. In the
+terminal, `plain` and `light` look the same: there your terminal's own colours decide the shades.
 
 ## Trying it without a model
 

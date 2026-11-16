@@ -16,6 +16,32 @@
 
 namespace Smith {
 
+const QStringList THEME_NAMES = {"matrix", "plain", "light"};
+
+QString themeName(Theme theme) {
+  return THEME_NAMES[int(theme)];
+}
+
+std::optional<Theme> themeNamed(const QString& name) {
+  const int index = THEME_NAMES.indexOf(name);
+  if (index < 0) {
+    return std::nullopt;
+  }
+  return Theme(index);
+}
+
+QString themeHint(Theme theme) {
+  switch (theme) {
+  case Theme::Matrix:
+    return "green on black, with digital rain";
+  case Theme::Plain:
+    return "neutral dark";
+  case Theme::Light:
+    return "dark on light";
+  }
+  return {};
+}
+
 const QString EXAMPLE_CONFIG = R"({
   "default": "local",
   "maxSteps": 50,
@@ -295,10 +321,10 @@ Config loadConfig(const QString& file) {
   config.subagents = check.boolean(root, "subagents", {}).value_or(true);
   config.toolLog = check.boolean(root, "toolLog", {}).value_or(true);
   if (const auto theme = check.string(root, "theme", {})) {
-    if (*theme == "matrix" || *theme == "plain") {
-      config.theme = *theme == "plain" ? Theme::Plain : Theme::Matrix;
+    if (const auto named = themeNamed(*theme)) {
+      config.theme = *named;
     } else {
-      check.problem("theme", R"(Invalid option: expected one of "matrix"|"plain")");
+      check.problem("theme", QString("Invalid option: expected one of \"%1\"").arg(THEME_NAMES.join("\"|\"")));
     }
   }
   config.codeStream = check.boolean(root, "codeStream", {}).value_or(true);

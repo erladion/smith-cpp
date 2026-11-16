@@ -1,6 +1,7 @@
 #include "Backend.h"
 
 #include "core/Jobs.h"
+#include "core/Preferences.h"
 #include "core/Reasoning.h"
 #include "core/Tool.h"
 #include "frontend/Commands.h"
@@ -88,6 +89,12 @@ void Backend::runCommand(const QString& text) {
     } else {
       setReasoning(arg);
     }
+  } else if (command == "/theme") {
+    if (arg.isEmpty()) {
+      Q_EMIT openPicker("theme");
+    } else {
+      setTheme(arg);
+    }
   } else if (command == "/network") {
     if (arg == "on" || arg == "off") {
       setNetwork(arg == "on");
@@ -114,6 +121,29 @@ void Backend::runCommand(const QString& text) {
   } else {
     notice(NoticeLevel::Error, QString("Unknown command %1. Type /help for the list.").arg(command));
   }
+}
+
+void Backend::setTheme(const QString& name) {
+  const auto theme = themeNamed(name);
+  if (!theme) {
+    notice(NoticeLevel::Error, QString("Unknown theme \"%1\". Use one of: %2.").arg(name, THEME_NAMES.join(", ")));
+    return;
+  }
+  if (*theme == m_theme) {
+    return;
+  }
+  m_theme = *theme;
+  m_palette = Palette::forTheme(m_theme);
+  m_transcript.setPalette(m_palette);
+  if (m_pRuntime) {
+    m_pRuntime->savePreferences(PreferenceUpdate{{}, {}, {}, name});
+  } else {
+    PreferenceChange change;
+    change.theme = name;
+    savePreferences(change);
+  }
+  notice(NoticeLevel::Info, QString("Theme: %1.").arg(name));
+  Q_EMIT themeChanged();
 }
 
 void Backend::setReasoning(const QString& level) {
