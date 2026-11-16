@@ -23,6 +23,8 @@ public:
     // Streamed: these deltas, then a chunk with `finish`, then usage.
     QList<QJsonObject> deltas;
     QString finish = "stop";
+    // Sent in pieces that each start with an event's JSON, as a network may split it.
+    bool split = false;
     // Plain: a whole, non-streamed message with this content.
     std::optional<QString> content;
     // An error response with this status and "error" object.
@@ -41,6 +43,12 @@ public:
   static QJsonObject garbled() { return QJsonObject{{"__garbled", true}}; }
 
   static Reply text(const QString& text) { return stream({QJsonObject{{"content", text}}}, "stop"); }
+
+  static Reply split(const Reply& streamed) {
+    Reply reply = streamed;
+    reply.split = true;
+    return reply;
+  }
 
   static Reply plain(const QString& content) {
     Reply reply;
@@ -212,8 +220,22 @@ private:
     chunk(QJsonArray{QJsonObject{{"index", 0}, {"delta", QJsonObject{}}, {"finish_reason", reply.finish}}});
     chunk(QJsonArray{}, QJsonObject{{"usage", QJsonObject{{"prompt_tokens", 100}, {"completion_tokens", 10}, {"total_tokens", 110}}}});
     stream += "data: [DONE]\n\n";
-    socket->write("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\nContent-Length: " + QByteArray::number(stream.size()) +
-                  "\r\n\r\n" + stream);
+    const QByteArray status =
+        "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\nContent-Length: " + QByteArray::number(stream.size()) + "\r\n\r\n";
+    if (!reply.split) {
+      socket->write(status + stream);
+    } else {
+      socket->write(status);
+      // Cut each "data: {" after the space.
+      int from = 0;
+      for (int at = stream.indexOf("data: {"); at >= 0; at = stream.indexOf("data: {", at + 1)) {
+        socket->write(stream.mid(from, at + 6 - from));
+        socket->waitForBytesWritten();
+        QThread::msleep(20);
+        from = at + 6;
+      }
+      socket->write(stream.mid(from));
+    }
     socket->flush();
     socket->disconnectFromHost();
   }

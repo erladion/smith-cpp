@@ -297,12 +297,15 @@ QJsonObject postJson(const QString& url, const QString& apiKey, const QJsonObjec
 int postStream(const QString& url, const QString& apiKey, const QJsonObject& body, const CancelPtr& cancel,
                 const std::function<void(const QJsonObject&)>& onChunk) {
   SseParser parser;
+  bool decided = false;
   bool plainJson = false;
   QByteArray plain;
   perform("POST", url, apiKey, QJsonDocument(body).toJson(QJsonDocument::Compact), DEFAULT_TIMEOUT_MS, cancel, [&](const QByteArray& data) {
-    // A server that ignores "stream" answers with one JSON object.
-    if (!plainJson && plain.isEmpty() && data.trimmed().startsWith('{')) {
-      plainJson = true;
+    // A server that ignores "stream" answers with one JSON object. Only the
+    // start of the body tells: later pieces of a stream can start with "{" too.
+    if (!decided && !data.trimmed().isEmpty()) {
+      decided = true;
+      plainJson = data.trimmed().startsWith('{');
     }
     if (plainJson) {
       plain += data;

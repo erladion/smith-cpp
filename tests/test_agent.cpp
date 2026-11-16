@@ -37,6 +37,7 @@ private Q_SLOTS:
   void unsandboxedCommandsAlwaysAsk();
   void commandsLikeOneAllowedStopAsking();
   void unreadableChunksAreReported();
+  void streamSplitBeforeJsonIsRead();
   void messageTypedDuringToolCallIsDelivered();
   void messageTypedDuringAnswerKeepsTurnGoing();
   void subagentReportsBack();
@@ -529,6 +530,14 @@ void TestAgent::unreadableChunksAreReported() {
   auto clean = make();
   clean->agent->send("hi", makeCancel());
   QVERIFY(!hasNotice(clean->events, "couldn't be read as JSON"));
+}
+
+void TestAgent::streamSplitBeforeJsonIsRead() {
+  m_pFake->setScript({FakeServer::split(FakeServer::stream({QJsonObject{{"content", "Hello"}}, QJsonObject{{"content", " there"}}}, "stop"))});
+  auto h = make();
+  h->agent->send("hi", makeCancel());
+  QCOMPARE(textOf(h->events, BlockKind::Text), QString("Hello there"));
+  QVERIFY(endsWithDone(h->events, DoneReason::Stop));
 }
 
 void TestAgent::messageTypedDuringToolCallIsDelivered() {
