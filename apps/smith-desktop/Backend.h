@@ -5,6 +5,7 @@
 #include "frontend/Turns.h"
 #include "frontend/Worktrees.h"
 #include "Palette.h"
+#include "core/Themes.h"
 #include "TranscriptModel.h"
 
 #include <QObject>
@@ -40,8 +41,6 @@ class Backend : public QObject {
   Q_PROPERTY(bool codeStream READ codeStream CONSTANT)
   Q_PROPERTY(QVariantMap palette READ palette NOTIFY themeChanged)
   Q_PROPERTY(QStringList spinnerFrames READ spinnerFrames NOTIFY themeChanged)
-  // For the theme picker: [{value, label, hint}].
-  Q_PROPERTY(QVariantList themes READ themes CONSTANT)
   Q_PROPERTY(QStringList reasoningLevels READ reasoningLevels CONSTANT)
   Q_PROPERTY(QString version READ version CONSTANT)
   Q_PROPERTY(TranscriptModel* transcript READ transcript CONSTANT)
@@ -98,9 +97,8 @@ public:
 
   QString state() const { return m_state; }
   QString startupError() const { return m_startupError; }
-  QString theme() const { return themeName(m_theme); }
-  bool matrix() const { return m_theme == Theme::Matrix; }
-  QVariantList themes() const;
+  QString theme() const { return m_theme.name; }
+  bool matrix() const { return m_theme.base == Theme::Matrix; }
   bool codeStream() const { return m_codeStream; }
   QVariantMap palette() const { return m_palette.toVariant(); }
   QStringList spinnerFrames() const;
@@ -188,8 +186,12 @@ public:
   Q_INVOKABLE QVariantList suggest(const QString& input) const;
   // The idle stream of glyphs for the status bar.
   Q_INVOKABLE QString codeStreamText(int offset, int width) const;
-  // /theme: switches the look now, and remembers it.
+  // /theme: switches the look now, and remembers it. The current one again re-reads its file.
   Q_INVOKABLE void setTheme(const QString& name);
+  // For the theme picker, read now: [{value, label, hint}].
+  Q_INVOKABLE QVariantList themeChoices() const;
+  // Opens the theme picker, first telling about theme files it can't use.
+  Q_INVOKABLE void pickTheme();
   // Stops what is running and quits.
   Q_INVOKABLE void quit();
 
@@ -236,7 +238,9 @@ private:
   static inline Backend* s_instance = nullptr;
 
   LaunchOptions m_launch;
-  Theme m_theme = Theme::Matrix;
+  ThemeSpec m_theme;
+  // Why the theme to start with couldn't be used, shown once ready.
+  QStringList m_themeWarnings;
   bool m_codeStream = true;
   Palette m_palette;
   TranscriptModel m_transcript;

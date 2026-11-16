@@ -27,6 +27,7 @@ add_library(smith_core STATIC
   Server.cpp
   Session.cpp
   Skills.cpp
+  Themes.cpp
   Think.cpp
   Tool.cpp
   ToolLog.cpp

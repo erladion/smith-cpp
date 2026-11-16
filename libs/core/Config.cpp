@@ -4,6 +4,7 @@
 #include "core/Dirs.h"
 #include "core/Errors.h"
 #include "core/Json.h"
+#include "core/Themes.h"
 
 #include <QDir>
 #include <QFile>
@@ -321,10 +322,11 @@ Config loadConfig(const QString& file) {
   config.subagents = check.boolean(root, "subagents", {}).value_or(true);
   config.toolLog = check.boolean(root, "toolLog", {}).value_or(true);
   if (const auto theme = check.string(root, "theme", {})) {
-    if (const auto named = themeNamed(*theme)) {
-      config.theme = *named;
+    // A theme file that can't be used is reported when it's loaded, without stopping Smith.
+    if (themeNamed(*theme) || QFile::exists(themesDir() + "/" + *theme + ".json")) {
+      config.theme = *theme;
     } else {
-      check.problem("theme", QString("Invalid option: expected one of \"%1\"").arg(THEME_NAMES.join("\"|\"")));
+      check.problem("theme", QString("Invalid option: expected one of \"%1\", or a file's name in %2").arg(THEME_NAMES.join("\"|\""), tildify(themesDir())));
     }
   }
   config.codeStream = check.boolean(root, "codeStream", {}).value_or(true);

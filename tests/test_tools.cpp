@@ -649,9 +649,13 @@ void TestTools::configMaxSteps() {
   QCOMPARE(loadConfig(writeConfig(m_pDir->path(), "nosteps.json", {})).maxSteps, std::optional<int>());
   QVERIFY_THROWS_MATCH(loadConfig(writeConfig(m_pDir->path(), "badsteps.json", {{"maxSteps", 0}})), "Invalid[\\s\\S]*maxSteps");
   QVERIFY_THROWS_MATCH(loadConfig(writeConfig(m_pDir->path(), "strsteps.json", {{"maxSteps", "50"}})), "Invalid[\\s\\S]*maxSteps");
-  QCOMPARE(loadConfig(writeConfig(m_pDir->path(), "light.json", {{"theme", "light"}})).theme, Theme::Light);
+  QCOMPARE(loadConfig(writeConfig(m_pDir->path(), "light.json", {{"theme", "light"}})).theme, QString("light"));
   QVERIFY_THROWS_MATCH(loadConfig(writeConfig(m_pDir->path(), "badtheme.json", {{"theme", "neon"}})),
-                       "expected one of \"matrix\"\\|\"plain\"\\|\"light\"");
+                       "expected one of \"matrix\"\\|\"plain\"\\|\"light\", or a file's name in");
+  // A theme file of yours.
+  EnvGuard config("XDG_CONFIG_HOME", m_pDir->file("xdg"));
+  write(m_pDir->file("xdg/smith/themes/neon.json"), "{}");
+  QCOMPARE(loadConfig(writeConfig(m_pDir->path(), "neon.json", {{"theme", "neon"}})).theme, QString("neon"));
 }
 
 void TestTools::configRejectsInvalidFiles() {

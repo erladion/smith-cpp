@@ -42,7 +42,7 @@ enum class Theme { Matrix, Plain, Light };
 extern const QStringList THEME_NAMES;
 QString themeName(Theme theme);
 std::optional<Theme> themeNamed(const QString& name);
-// What a theme looks like, for pickers.
+// What a built-in theme looks like, for pickers.
 QString themeHint(Theme theme);
 
 struct Config {
@@ -55,7 +55,8 @@ struct Config {
   bool subagents = true;
   // Whether tool calls are logged to logs/<session>.jsonl.
   bool toolLog = true;
-  Theme theme = Theme::Matrix;
+  // A built-in theme's name, or a file's in the themes folder (see Themes.h).
+  QString theme = "matrix";
   // Whether the matrix theme shows the idle stream of glyphs in the status line.
   bool codeStream = true;
   SandboxConfig sandbox;

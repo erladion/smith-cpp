@@ -293,7 +293,7 @@ void App::exitApp() {
 }
 
 bool App::matrix() const {
-  return m_options.theme == Theme::Matrix;
+  return m_options.theme.base == Theme::Matrix;
 }
 
 bool App::streaming() const {

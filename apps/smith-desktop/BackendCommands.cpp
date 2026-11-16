@@ -91,7 +91,7 @@ void Backend::runCommand(const QString& text) {
     }
   } else if (command == "/theme") {
     if (arg.isEmpty()) {
-      Q_EMIT openPicker("theme");
+      pickTheme();
     } else {
       setTheme(arg);
     }
@@ -123,13 +123,18 @@ void Backend::runCommand(const QString& text) {
   }
 }
 
-void Backend::setTheme(const QString& name) {
-  const auto theme = themeNamed(name);
-  if (!theme) {
-    notice(NoticeLevel::Error, QString("Unknown theme \"%1\". Use one of: %2.").arg(name, THEME_NAMES.join(", ")));
-    return;
+void Backend::pickTheme() {
+  for (const QString& problem : listThemes().problems) {
+    notice(NoticeLevel::Warn, problem);
   }
-  if (*theme == m_theme) {
+  Q_EMIT openPicker("theme");
+}
+
+void Backend::setTheme(const QString& name) {
+  QString problem;
+  const std::optional<ThemeSpec> theme = findTheme(name, &problem);
+  if (!theme) {
+    notice(NoticeLevel::Error, problem);
     return;
   }
   m_theme = *theme;

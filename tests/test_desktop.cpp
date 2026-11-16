@@ -8,6 +8,7 @@
 
 #include "core/Dirs.h"
 #include "core/Preferences.h"
+#include "core/Themes.h"
 #include "core/Sandbox.h"
 #include "Backend.h"
 #include "Window.h"
@@ -362,6 +363,14 @@ void TestDesktop::switchesTheme() {
     m_pBackend->setTheme("plain");
   }
   auto color = [&](const char* name) { return m_pBackend->palette().value(name).value<QColor>(); };
+  // Theme files set colors by the names the window uses.
+  QStringList names = m_pBackend->palette().keys();
+  names.removeAll("monoFamily");
+  names.removeAll("textFamily");
+  QStringList known = DESKTOP_COLORS;
+  names.sort();
+  known.sort();
+  QCOMPARE(names, known);
   // The ⋯ menu's items are drawn in the theme, not the style's default look.
   QObject* menu = root()->findChild<QObject*>("moreMenu");
   QVERIFY(menu);
@@ -394,6 +403,23 @@ void TestDesktop::switchesTheme() {
   QCOMPARE(loadPreferences().theme, QString("light"));
   QTRY_VERIFY(!picker->property("visible").toBool());
   shot("14-light");
+
+  // A theme file of yours: listed in the picker, and its colors over its base's.
+  write(m_pHome->file("config/smith/themes/night.json"), R"({"description": "Easy at night", "base": "plain", "colors": {"accent": "#ff8800"}})");
+  bool listed = false;
+  for (const QVariant& choice : m_pBackend->themeChoices()) {
+    listed = listed || (choice.toMap().value("value") == "night" && choice.toMap().value("hint") == "Easy at night");
+  }
+  QVERIFY(listed);
+  m_pBackend->submit("/theme night");
+  QCOMPARE(m_pBackend->theme(), QString("night"));
+  QCOMPARE(color("accent"), QColor("#ff8800"));
+  QCOMPARE(color("window"), QColor("#17181b"));
+  QVERIFY(!m_pBackend->matrix());
+  // Edited, then picked again: the new colors.
+  write(m_pHome->file("config/smith/themes/night.json"), R"({"base": "plain", "colors": {"accent": "#00aa55"}})");
+  m_pBackend->setTheme("night");
+  QCOMPARE(color("accent"), QColor("#00aa55"));
 
   m_pBackend->setTheme(before);
   QCOMPARE(m_pBackend->theme(), before);

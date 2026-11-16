@@ -7,7 +7,8 @@ import Smith.Desktop 1.0
 QtObject {
     readonly property var p: Backend.palette
     readonly property bool matrix: Backend.matrix
-    readonly property bool light: Backend.theme === "light"
+    // A light window, whatever the theme is called: hovering darkens instead of lightening.
+    readonly property bool light: (Math.max(window.r, window.g, window.b) + Math.min(window.r, window.g, window.b)) / 2 > 0.5
 
     readonly property color window: p.window
     readonly property color surface: p.surface

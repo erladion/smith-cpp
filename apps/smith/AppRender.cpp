@@ -87,7 +87,7 @@ QList<Line> App::liveLines() {
         lines.append(truncate(line, w));
       }
     } else {
-      const Spinner& spinner = spinnerFor(m_options.theme);
+      const Spinner& spinner = spinnerFor(m_options.theme.base);
       lines.append(Line{});
       lines.append(truncate(Line{Span{spinner.frames[m_frame % spinner.frames.size()], fg(spinner.color)}, Span{" " + activity + elapsed, DIM}}, w));
     }

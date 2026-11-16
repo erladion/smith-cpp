@@ -21,7 +21,7 @@ namespace Smith::Desktop {
 Backend::Backend(const LaunchOptions& launch, QObject* parent) : QObject(parent), m_launch(launch) {
   try {
     const Config config = loadConfig();
-    m_theme = preferredTheme(config.theme);
+    m_theme = startingTheme(config.theme, &m_themeWarnings);
     m_codeStream = config.codeStream;
   } catch (const std::exception&) {
     // start() reports a broken config file; until then, the default look.
@@ -52,13 +52,13 @@ void Backend::setInstance(Backend* backend) {
 }
 
 QStringList Backend::spinnerFrames() const {
-  return Smith::spinnerFrames(m_theme);
+  return Smith::spinnerFrames(m_theme.base);
 }
 
-QVariantList Backend::themes() const {
+QVariantList Backend::themeChoices() const {
   QVariantList out;
-  for (const QString& name : THEME_NAMES) {
-    out << QVariantMap{{"value", name}, {"label", name}, {"hint", themeHint(*themeNamed(name))}};
+  for (const ThemeSpec& theme : listThemes().themes) {
+    out << QVariantMap{{"value", theme.name}, {"label", theme.name}, {"hint", themeHint(theme)}};
   }
   return out;
 }
@@ -116,7 +116,7 @@ void Backend::ready() {
   m_state = "ready";
   const Messages resumed = m_pRuntime->resumedHistory();
   printBanner(!resumed.isEmpty(), m_pRuntime->resumedLastUsed());
-  for (const QString& warning : m_pRuntime->warnings()) {
+  for (const QString& warning : m_pRuntime->warnings() + m_themeWarnings) {
     notice(NoticeLevel::Warn, warning);
   }
   for (const Entry& entry : historyToEntries(resumed, m_project.tools)) {

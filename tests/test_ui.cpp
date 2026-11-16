@@ -453,6 +453,21 @@ void TestUi::themesColorTheTerminal() {
   QCOMPARE(toAnsi(warning), QString("careful"));
   setColors(true);
 
+  // A theme file's: red follows its error color, and what it sets for the terminal wins.
+  ThemeSpec night;
+  night.base = Theme::Plain;
+  night.colors = {{"error", 0x112233}, {"accent", 0x445566}, {"text", 0x778899}};
+  night.terminal = {{"blue", 0xabcdef}};
+  const Palette custom = Ui::terminalPalette(night);
+  QCOMPARE(custom.shades[size_t(Color::Red)], std::optional<Rgb>(0x112233));
+  QCOMPARE(custom.shades[size_t(Color::Blue)], std::optional<Rgb>(0xabcdef));
+  QCOMPARE(custom.shades[size_t(Color::White)], std::optional<Rgb>(0x778899));
+  QCOMPARE(custom.shades[size_t(Color::Magenta)], Ui::terminalPalette(Theme::Plain).shades[size_t(Color::Magenta)]);
+  // On plain, text stays the terminal's; on matrix it follows the theme's text.
+  QVERIFY(!custom.shades[size_t(Color::None)]);
+  night.base = Theme::Matrix;
+  QCOMPARE(Ui::terminalPalette(night).shades[size_t(Color::None)], std::optional<Rgb>(0x778899));
+
   setPalette({});
   setColorDepth(detectColorDepth());
 }

@@ -59,7 +59,7 @@ ApplicationWindow {
                      current: Backend.reasoning, empty: "" }
         }
         case "theme":
-            return { title: "Select theme", items: Backend.themes, current: Backend.theme, empty: "" }
+            return { title: "Select theme", items: Backend.themeChoices(), current: Backend.theme, empty: "" }
         case "recent":
             return { title: "Open a recent project", items: Backend.recentProjects.map(p => ({ value: p.path, label: p.name, hint: p.hint + " · " + p.where })),
                      current: "", empty: "No other folders have sessions yet." }

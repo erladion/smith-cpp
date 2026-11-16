@@ -27,4 +27,21 @@ Tui::Palette terminalPalette(Theme theme) {
   return {};
 }
 
+Tui::Palette terminalPalette(const ThemeSpec& theme) {
+  Tui::Palette out = terminalPalette(theme.base);
+  for (int i = 0; i < TERMINAL_COLORS.size(); i++) {
+    const QString& name = TERMINAL_COLORS[i];
+    const QString follows = DERIVED_TERMINAL_COLORS.value(name);
+    if (theme.terminal.contains(name)) {
+      out.shades[size_t(i)] = theme.terminal.value(name);
+    } else if (!follows.isEmpty() && theme.colors.contains(follows)) {
+      out.shades[size_t(i)] = theme.colors.value(follows);
+    } else if (name == "text" && theme.base == Theme::Matrix && theme.colors.contains("text")) {
+      // Only matrix colors text in the terminal; the others leave it to the terminal.
+      out.shades[size_t(i)] = theme.colors.value("text");
+    }
+  }
+  return out;
+}
+
 } // namespace Smith::Ui

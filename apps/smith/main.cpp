@@ -15,6 +15,7 @@
 #include "core/Session.h"
 #include "core/Skills.h"
 #include "core/ToolLog.h"
+#include "core/Themes.h"
 #include "core/Toolchain.h"
 #include "core/tools/Tools.h"
 #include "tui/Terminal.h"
@@ -333,7 +334,7 @@ int run(QCoreApplication& app) {
   options.sessions = runtime->sessions();
   options.resumed = runtime->resumedHistory();
   options.resumedLastUsed = runtime->resumedLastUsed();
-  options.theme = preferredTheme(config.theme);
+  options.theme = startingTheme(config.theme, &options.warnings);
   options.codeStream = config.codeStream;
   options.jobs = runtime->jobs();
   options.savePreferences = [runtime](const PreferenceUpdate& update) { runtime->savePreferences(update); };
@@ -352,7 +353,7 @@ int run(QCoreApplication& app) {
   static const QRegularExpression whitespace(R"(\s)");
   const QString resumeWith = !name.isEmpty() && !whitespace.match(name).hasMatch() ? name : session->id();
   // As /theme left it.
-  const QString goodbye = preferredTheme(config.theme) == Theme::Matrix ? farewell(started.elapsed()) + "\n" : QString();
+  const QString goodbye = startingTheme(config.theme).base == Theme::Matrix ? farewell(started.elapsed()) + "\n" : QString();
   out(QString("%1Session %2%3. Resume with: smith --resume %4").arg(goodbye, name.isEmpty() ? QString() : "\"" + name + "\" ", session->id(), resumeWith));
   return 0;
 }

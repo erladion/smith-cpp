@@ -176,7 +176,7 @@ Rectangle {
                     radius: Theme.radius
                 }
                 // Written out, not from a model, so each is a ThemedItem: a Menu's delegate only makes the items it creates itself.
-                ThemedItem { text: "Theme…"; onTriggered: bar.pick("theme") }
+                ThemedItem { text: "Theme…"; onTriggered: Backend.pickTheme() }
                 ThemedItem { text: "Skills…"; onTriggered: bar.pick("skills") }
                 ThemedItem { text: "Background jobs…"; onTriggered: bar.pick("jobs") }
                 ThemedItem { text: "Commands and keys"; onTriggered: Backend.submit("/help") }

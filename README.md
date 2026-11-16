@@ -82,7 +82,7 @@ Type these in the input box of either app. Tab completes them, and their argumen
 | `/endpoint [name]` | Pick a configured endpoint, or switch to one by name. |
 | `/model [name]` | Pick a model from the server, or switch to one by name. |
 | `/reasoning [level]` | Pick how much the model thinks: `default`, `off`, `low`, `medium` or `high`. |
-| `/theme [name]` | Pick how Smith looks: `matrix`, `plain` or `light`. It switches at once and is remembered. |
+| `/theme [name]` | Pick how Smith looks: `matrix`, `plain`, `light` or [one of yours](#themes). It switches at once and is remembered. |
 | `/sessions [all]` | Switch to another session from this folder (`all`: from every folder). |
 | `/name [name]` | Show or set the current session's name. |
 | `/open` | Pick a project folder: a recent one, or browse to one. |
@@ -141,7 +141,7 @@ optional; an unknown key or a wrong value stops Smith with a message saying wher
 | `maxSteps` | `50` | Model calls allowed per message you send. |
 | `subagents` | `true` | Whether the model can hand work to sub-agents (the `task` tool). |
 | `toolLog` | `true` | Whether tool calls are logged to `~/.local/share/smith/logs/<session>.jsonl`. |
-| `theme` | `"matrix"` | `"matrix"`: green on black, digital rain at startup and a katakana spinner. `"plain"`: a neutral dark look, none of that. `"light"`: the same, dark on light. A theme picked with `/theme` takes precedence. |
+| `theme` | `"matrix"` | The [theme](#themes): `"matrix"`, `"plain"`, `"light"` or one of yours. A theme picked with `/theme` takes precedence. |
 | `codeStream` | `true` | With the matrix theme: the idle stream of glyphs in the status line. |
 | `protectRunLater` | `true` | Changes to files that run outside the sandbox later always ask, and are reported (see [Files that run later](#files-that-run-later)). |
 | `permissions.allow` | `[]` | What runs without asking: a tool's name, or `"bash:<start of a command>"`. |
@@ -184,6 +184,49 @@ the config file can allow or refuse things everywhere:
   against mistakes, not against everything: a script or a git alias that pushes isn't seen.
 - `/permissions` lists what runs without asking here, and `/permissions reset` forgets what
   you allowed in this project.
+
+### Themes
+
+`/theme` switches the theme in either app, at once, and remembers the choice. There are three
+built in:
+
+| Theme | Look |
+|---|---|
+| `matrix` | Green on black in monospace, with digital rain at startup, a katakana spinner and Agent Smith's greetings. |
+| `plain` | A neutral dark look, with none of that. |
+| `light` | The same, dark on light. In the terminal it keeps your terminal's background, so it's for a terminal with a light one. |
+
+In the terminal, the themes use the same colours as the desktop app when the terminal shows
+24-bit colour (Smith checks `COLORTERM`, Windows Terminal and `TERM`), or the nearest of 256
+colours. With only 16 colours, the terminal's own shades stay.
+
+**Your own themes** are JSON files in `~/.config/smith/themes/`. The file's name is the theme's
+name, so `~/.config/smith/themes/night.json` is `/theme night`:
+
+```json
+{
+  "description": "Easy on the eyes at night",
+  "base": "plain",
+  "colors": { "window": "#1e1e2e", "surface": "#24273a", "text": "#cdd6f4", "accent": "#89b4fa", "error": "#f38ba8" },
+  "terminal": { "magenta": "#cba6f7" }
+}
+```
+
+| Key | What it does |
+|---|---|
+| `description` | Shown beside the theme in the picker. |
+| `base` | The built-in theme it starts from: `matrix`, `plain` (the default) or `light`. Every colour the file doesn't set is the base's, and a `matrix` base brings the rain, spinner and greetings. |
+| `colors` | The desktop app's colours, any of: `window`, `surface`, `surfaceRaised`, `border`, `borderStrong`, `text`, `textDim`, `textFaint`, `accent`, `accentSoft`, `accentWash`, `code`, `codeWash`, `info`, `warn`, `error`, `added`, `addedWash`, `removed`, `removedWash`, `userWash`, `selection`. |
+| `terminal` | The terminal's colours, any of: `text`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`, `gray`. |
+
+Colours are `"#rrggbb"` or `"#rgb"`. The terminal follows the desktop colours where they mean
+the same thing: `red` follows `error`, `green` `added`, `yellow` `warn`, `blue` `accent`, `cyan`
+`code`, `white` `text` and `gray` `textDim`. Set `terminal` only for what should differ. Text
+without a colour of its own stays the terminal's, except on a `matrix` base, where it follows
+`text`.
+
+Theme files are read each time you pick one, so to try an edit, run `/theme <name>` again. A
+file with a mistake isn't offered, and `/theme` says what's wrong with it.
 
 ## Environment variables
 
@@ -366,12 +409,6 @@ commands can't be undone; Smith says which.
   context size, give it with `--context-size` or `contextSize`.
 - **Scripts.** `smith -p "explain src/main.cpp"` runs one prompt and prints the answer. Add `-y`
   to let it change things without asking.
-- **Themes.** `/theme` switches between `matrix`, `plain` and `light` in either app, at once,
-  and remembers the choice. In the terminal the themes use their own colours, the same as the
-  desktop app's, when the terminal shows 24-bit colour (most do; Smith checks `COLORTERM`,
-  Windows Terminal and `TERM`) or the nearest of 256 colours. With only 16 colours, the
-  terminal's own shades stay. `light` keeps your terminal's background, so it's for a terminal
-  with a light one.
 - **Sessions** are saved as you go, in `~/.local/share/smith/sessions/`, readable only by you.
   `-c` continues the last one in a folder, `-r` resumes one by name, and `/name` names the
   current one.
@@ -491,6 +528,7 @@ libs/core/                the agent, no UI. Agent.* is the loop: stream, run too
   Context.*               token estimates, trimming, summary prompt, overflow detection
   Session.*, ToolLog.*    JSONL session logs, per-session tool-call log
   Config.*, Preferences.* config file and remembered choices
+  Themes.*                built-in themes and theme files
   Sandbox.*               bubblewrap and "no sandbox"; ContainerSandbox.* for podman/docker
   Permissions.*           allow and deny rules
   Process.*, Jobs.*       QProcess runs in their own process group; background jobs

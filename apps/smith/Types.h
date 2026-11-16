@@ -2,6 +2,7 @@
 
 #include "frontend/Frontend.h"
 #include "core/Config.h"
+#include "core/Themes.h"
 #include "core/Jobs.h"
 #include "core/Sandbox.h"
 
@@ -42,7 +43,7 @@ struct TuiOptions {
   std::optional<QDateTime> resumedLastUsed;
   // Remembers the user's endpoint, model and reasoning choices for next time.
   std::function<void(const PreferenceUpdate&)> savePreferences;
-  Theme theme = Theme::Matrix;
+  ThemeSpec theme;
   // With the matrix theme: the idle stream of glyphs in the status line.
   bool codeStream = true;
   // Commands the agent started in the background (/jobs, the status line).

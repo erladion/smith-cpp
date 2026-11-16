@@ -34,10 +34,7 @@ Preferences loadPreferences() {
   if (isReasoningLevel(reasoning)) {
     prefs.reasoning = reasoning;
   }
-  const QString theme = raw.value("theme").toString();
-  if (themeNamed(theme)) {
-    prefs.theme = theme;
-  }
+  prefs.theme = raw.value("theme").toString();
   prefs.endpoint = raw.value("endpoint").toString();
   const QJsonObject models = raw.value("models").toObject();
   for (auto it = models.begin(); it != models.end(); ++it) {
@@ -115,10 +112,6 @@ void savePreferences(const PreferenceChange& change) {
   if (handle.commit()) {
     privateFile(preferencesFile());
   }
-}
-
-Theme preferredTheme(Theme configured) {
-  return themeNamed(loadPreferences().theme).value_or(configured);
 }
 
 } // namespace Smith

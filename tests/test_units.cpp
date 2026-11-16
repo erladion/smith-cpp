@@ -6,6 +6,7 @@
 #include "core/Dirs.h"
 #include "core/Errors.h"
 #include "core/Preferences.h"
+#include "core/Themes.h"
 #include "core/Prompt.h"
 #include "core/Images.h"
 #include "core/Permissions.h"
@@ -236,14 +237,56 @@ void TestUnits::themePickedIsRemembered() {
   const QString config = m_pData->file("theme-config");
   EnvGuard env("XDG_CONFIG_HOME", config);
   // Until one is picked, the config's.
-  QCOMPARE(preferredTheme(Theme::Plain), Theme::Plain);
+  QCOMPARE(startingTheme("plain").name, QString("plain"));
   PreferenceChange change;
   change.theme = "light";
   savePreferences(change);
-  QCOMPARE(preferredTheme(Theme::Matrix), Theme::Light);
+  QCOMPARE(startingTheme("matrix").name, QString("light"));
   // Other choices saved later keep it.
   savePreferences(PreferenceChange{"high", {}, {}, {}});
   QCOMPARE(loadPreferences().theme, QString("light"));
+
+  // A theme file starts from a built-in one and sets some colors.
+  write(config + "/smith/themes/night.json",
+        R"({"description": "Easy at night", "base": "matrix", "colors": {"accent": "#89b4fa", "error": "#f38ba8"}, "terminal": {"magenta": "#cba"}})");
+  const std::optional<ThemeSpec> night = findTheme("night");
+  QVERIFY(night);
+  QCOMPARE(night->base, Theme::Matrix);
+  QCOMPARE(night->colors.value("accent"), quint32(0x89b4fa));
+  QCOMPARE(night->terminal.value("magenta"), quint32(0xccbbaa));
+  QCOMPARE(themeHint(*night), QString("Easy at night"));
+  // Without a base, plain.
+  write(config + "/smith/themes/bare.json", R"({"colors": {"window": "#000000"}})");
+  QCOMPARE(findTheme("bare")->base, Theme::Plain);
+  QCOMPARE(themeHint(*findTheme("bare")), QString("yours, from plain"));
+
+  // Files that can't be used say why, and the others are still listed.
+  write(config + "/smith/themes/typo.json", R"({"colors": {"acent": "#ffffff"}})");
+  write(config + "/smith/themes/odd.json", R"({"colors": {"accent": "blue"}})");
+  write(config + "/smith/themes/light.json", R"({})");
+  const ThemeList list = listThemes();
+  QStringList names;
+  for (const ThemeSpec& theme : list.themes) {
+    names << theme.name;
+  }
+  QCOMPARE(names, QStringList({"matrix", "plain", "light", "bare", "night"}));
+  QCOMPARE(list.problems.size(), 3);
+  QVERIFY_MATCH(list.problems.join('\n'), "typo\\.json has no color \"acent\"|\"colors\" has no color \"acent\"");
+  QVERIFY_MATCH(list.problems.join('\n'), "colors\\.accent isn't a color");
+  QVERIFY_MATCH(list.problems.join('\n'), "light\\.json has the name of a built-in theme");
+  QString problem;
+  QVERIFY(!findTheme("missing", &problem));
+  QVERIFY_MATCH(problem, "There's no theme \"missing\"");
+
+  // A picked theme whose file broke since: the config's, and why.
+  change.theme = "typo";
+  savePreferences(change);
+  QStringList warnings;
+  QCOMPARE(startingTheme("night", &warnings).name, QString("night"));
+  QVERIFY_MATCH(warnings.join('\n'), "typo\\.json");
+  warnings.clear();
+  QCOMPARE(startingTheme("odd", &warnings).name, QString("matrix"));
+  QVERIFY_MATCH(warnings.last(), "Using matrix\\.$");
 }
 
 void TestUnits::sessionsHaveNames() {

@@ -99,17 +99,41 @@ Palette Palette::forTheme(Theme theme) {
   return palette;
 }
 
-QVariantMap Palette::toVariant() const {
-  return QVariantMap{
-      {"window", window},           {"surface", surface},         {"surfaceRaised", surfaceRaised},
-      {"border", border},           {"borderStrong", borderStrong}, {"text", text},
-      {"textDim", textDim},         {"textFaint", textFaint},     {"accent", accent},
-      {"accentSoft", accentSoft},   {"accentWash", accentWash},   {"code", code},
-      {"codeWash", codeWash},       {"info", info},               {"warn", warn},
-      {"error", error},             {"added", added},             {"addedWash", addedWash},
-      {"removed", removed},         {"removedWash", removedWash}, {"userWash", userWash},
-      {"selection", selection},     {"monoFamily", monoFamily},   {"textFamily", textFamily},
+namespace {
+
+// The colors by the names theme files and QML use (DESKTOP_COLORS).
+const QList<QPair<QString, QColor Palette::*>>& colorMembers() {
+  static const QList<QPair<QString, QColor Palette::*>> members = {
+      {"window", &Palette::window},         {"surface", &Palette::surface},       {"surfaceRaised", &Palette::surfaceRaised},
+      {"border", &Palette::border},         {"borderStrong", &Palette::borderStrong}, {"text", &Palette::text},
+      {"textDim", &Palette::textDim},       {"textFaint", &Palette::textFaint},   {"accent", &Palette::accent},
+      {"accentSoft", &Palette::accentSoft}, {"accentWash", &Palette::accentWash}, {"code", &Palette::code},
+      {"codeWash", &Palette::codeWash},     {"info", &Palette::info},             {"warn", &Palette::warn},
+      {"error", &Palette::error},           {"added", &Palette::added},           {"addedWash", &Palette::addedWash},
+      {"removed", &Palette::removed},       {"removedWash", &Palette::removedWash}, {"userWash", &Palette::userWash},
+      {"selection", &Palette::selection},
   };
+  return members;
+}
+
+} // namespace
+
+Palette Palette::forTheme(const ThemeSpec& theme) {
+  Palette palette = forTheme(theme.base);
+  for (const auto& [name, member] : colorMembers()) {
+    if (theme.colors.contains(name)) {
+      palette.*member = QColor(QRgb(theme.colors.value(name)));
+    }
+  }
+  return palette;
+}
+
+QVariantMap Palette::toVariant() const {
+  QVariantMap out{{"monoFamily", monoFamily}, {"textFamily", textFamily}};
+  for (const auto& [name, member] : colorMembers()) {
+    out.insert(name, this->*member);
+  }
+  return out;
 }
 
 } // namespace Smith::Desktop

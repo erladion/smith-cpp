@@ -177,39 +177,42 @@ void App::setNetwork(const QString& arg) {
 }
 
 void App::setTheme(const QString& arg) {
-  const auto apply = [this](Theme theme) {
-    m_options.theme = theme;
-    Tui::setPalette(terminalPalette(theme));
-    m_options.savePreferences(PreferenceUpdate{{}, {}, {}, themeName(theme)});
+  // Applied again when it's the current one, so an edited theme file shows.
+  const auto apply = [this](const QString& name) {
+    QString problem;
+    const std::optional<ThemeSpec> theme = findTheme(name, &problem);
+    if (!theme) {
+      print(Entry::notice(NoticeLevel::Error, problem));
+      return;
+    }
+    m_options.theme = *theme;
+    Tui::setPalette(terminalPalette(*theme));
+    m_options.savePreferences(PreferenceUpdate{{}, {}, {}, theme->name});
     QString note;
-    if (theme == Theme::Light) {
+    if (theme->base == Theme::Light) {
       note = " It suits a terminal with a light background.";
     }
     if (Tui::detectColorDepth() == Tui::ColorDepth::Basic) {
       note += " This terminal shows 16 colors, so its own shades stay.";
     }
-    print(Entry::notice(NoticeLevel::Info, QString("Theme: %1.%2").arg(themeName(theme), note)));
+    print(Entry::notice(NoticeLevel::Info, QString("Theme: %1.%2").arg(theme->name, note)));
     // Everything on screen again, in the new colors.
     m_printedWidth = -1;
     reprint();
   };
   if (!arg.isEmpty()) {
-    if (const auto theme = themeNamed(arg)) {
-      apply(*theme);
-    } else {
-      print(Entry::notice(NoticeLevel::Error, QString("Unknown theme \"%1\". Use one of: %2.").arg(arg, THEME_NAMES.join(", "))));
-    }
+    apply(arg);
     return;
   }
-  QList<Tui::PickerItem> items;
-  for (const QString& name : THEME_NAMES) {
-    items.append({name, name, themeHint(*themeNamed(name))});
+  const ThemeList themes = listThemes();
+  for (const QString& problem : themes.problems) {
+    print(Entry::notice(NoticeLevel::Warn, problem));
   }
-  openPicker(std::make_unique<Tui::Picker>("Select theme", items, themeName(m_options.theme)), [this, apply](const QString& name) {
-    if (const auto theme = themeNamed(name); theme && *theme != m_options.theme) {
-      apply(*theme);
-    }
-  });
+  QList<Tui::PickerItem> items;
+  for (const ThemeSpec& theme : themes.themes) {
+    items.append({theme.name, theme.name, themeHint(theme)});
+  }
+  openPicker(std::make_unique<Tui::Picker>("Select theme", items, m_options.theme.name), apply);
 }
 
 } // namespace Smith::Ui

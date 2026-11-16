@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/Config.h"
+#include "core/Themes.h"
 
 #include <QColor>
 #include <QString>
@@ -40,6 +41,8 @@ struct Palette {
   QString textFamily;
 
   static Palette forTheme(Theme theme);
+  // A theme file's: its base's, with the colors it sets.
+  static Palette forTheme(const ThemeSpec& theme);
   QVariantMap toVariant() const;
 };
 

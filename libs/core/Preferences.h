@@ -1,7 +1,5 @@
 #pragma once
 
-#include "core/Config.h"
-
 #include <QMap>
 #include <QString>
 #include <QStringList>
@@ -36,8 +34,5 @@ struct PreferenceChange {
 
 // Merges the non-empty fields into the saved preferences. Failing to save is ignored.
 void savePreferences(const PreferenceChange& change);
-
-// The theme picked with /theme, else the config's.
-Theme preferredTheme(Theme configured);
 
 } // namespace Smith
