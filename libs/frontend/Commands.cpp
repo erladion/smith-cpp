@@ -11,6 +11,7 @@
 #include <QRegularExpression>
 
 #include <algorithm>
+#include <array>
 
 namespace Smith {
 
@@ -70,7 +71,7 @@ QList<Suggestion> mentionSuggestions(const QString& input, const CompletionConte
   }
   const QString typed = match.captured(1);
   const QString before = input.left(match.capturedStart());
-  QList<QStringList> ranks(3);
+  std::array<QStringList, 3> ranks;
   for (const QString& file : ctx.files()) {
     const QString name = file.mid(file.lastIndexOf('/') + 1);
     if (file.startsWith(typed, Qt::CaseInsensitive)) {
