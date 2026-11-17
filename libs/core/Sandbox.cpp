@@ -206,8 +206,11 @@ public:
   QString describe(const QString&) const override { return QString("not sandboxed (%1)").arg(m_reason); }
 
   // Nothing is isolated, but tokens and keys in your environment still stay out of the agent's commands.
-  SpawnSpec spawnSpec(const QString& command, const QString& cwd) override {
-    return SpawnSpec{"bash", {"-c", command}, sandboxEnv(ENV_ALLOW, m_extraEnv), cwd, {}};
+  using Sandbox::spawnSpec;
+  SpawnSpec spawnSpec(const QString& command, const QString& cwd, const CommandAccess& access) override {
+    QProcessEnvironment env = sandboxEnv(ENV_ALLOW, m_extraEnv);
+    addVariables(env, access.env);
+    return SpawnSpec{"bash", {"-c", command}, env, cwd, {}};
   }
 
   SpawnSpec programSpec(const QString& file, const QStringList& args, const QString& project, const QString& chdir) override {
@@ -296,8 +299,10 @@ public:
     return QString("sandboxed: writes limited to the project, home folder hidden, network %1").arg(network() ? "on" : "off");
   }
 
-  SpawnSpec spawnSpec(const QString& command, const QString& cwd) override {
-    SpawnSpec spec = bwrap("bash", {"-c", command}, cwd, {}, network());
+  using Sandbox::spawnSpec;
+  SpawnSpec spawnSpec(const QString& command, const QString& cwd, const CommandAccess& access) override {
+    SpawnSpec spec = bwrap("bash", {"-c", command}, cwd, {}, network() || access.network);
+    addVariables(spec.env, access.env);
     if (m_limiter.isEmpty()) {
       return spec;
     }
@@ -492,6 +497,14 @@ private:
 };
 
 } // namespace
+
+void addVariables(QProcessEnvironment& env, const QStringList& names) {
+  for (const QString& name : names) {
+    if (qEnvironmentVariableIsSet(name.toUtf8().constData())) {
+      env.insert(name, qEnvironmentVariable(name.toUtf8().constData()));
+    }
+  }
+}
 
 const QRegularExpression PROXY_VARS("^(HTTP_PROXY|HTTPS_PROXY|NO_PROXY|ALL_PROXY|http_proxy|https_proxy|no_proxy|all_proxy)$");
 

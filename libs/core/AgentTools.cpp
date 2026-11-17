@@ -268,6 +268,9 @@ ToolResult Agent::runTool(const ToolCall& call, const CancelPtr& cancel) {
       request.hasSandbox = true;
       request.sandboxActive = sandbox->active();
       request.sandboxDescription = sandbox->describe(m_options.cwd);
+      if (!tool->extraAccess.isEmpty()) {
+        request.sandboxDescription += "; this tool also gets " + tool->extraAccess;
+      }
     }
     request.canAllowAlways = !unsandboxed;
     request.similar = tool->name == BASH_TOOL ? commandPrefix(args.value("command").toString(), unsandboxed) : QString();

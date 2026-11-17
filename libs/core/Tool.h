@@ -55,6 +55,8 @@ struct ToolDef {
   std::optional<bool> subagents;
   // Runs inside the sandbox when one is active (shown in the approval prompt).
   bool sandboxed = false;
+  // What a call gets beyond what commands get, for the approval prompt: "the network, JIRA_TOKEN".
+  QString extraAccess;
   // One-line description of a call, shown in the transcript and approval prompt.
   std::function<QString(const QJsonObject&)> summarize;
   // For read-only tools: why this call needs approval anyway (e.g. it reads outside the project).

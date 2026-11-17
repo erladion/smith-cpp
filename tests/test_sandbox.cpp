@@ -55,6 +55,7 @@ private Q_SLOTS:
   // skill folders (from features.test.ts, which needs bwrap too)
   void skillFoldersReadableInSandbox();
   void customToolsRunInTheSandbox();
+  void yourToolsCanHaveNetworkAndVariables();
 
   // containers
   void mountsAreReadAsWritten();
@@ -499,6 +500,44 @@ void TestSandbox::customToolsRunInTheSandbox() {
   sandbox->dispose();
 }
 
+void TestSandbox::yourToolsCanHaveNetworkAndVariables() {
+  REQUIRE_BWRAP();
+  FakeHome fake;
+  FakeServer server;
+  EnvGuard token("SMITH_TEST_TRACKER_TOKEN", QString("t0ken"));
+  TempDir mine(homeDir(), ".agent-test-tools-");
+  TempDir theirs(QDir::tempPath(), "agent-project-tools-");
+  const QString manifest = QString(R"({"description": "Look up an issue.", "network": true, "env": ["SMITH_TEST_TRACKER_TOKEN"],
+      "command": "(exec 3<>/dev/tcp/127.0.0.1/%1) 2>/dev/null && echo connected || echo blocked; echo \"token=$SMITH_TEST_TRACKER_TOKEN\""})")
+                               .arg(server.port());
+  write(mine.file("tracker/tool.json"), manifest);
+  write(theirs.file("project_tracker/tool.json"), manifest);
+  write(mine.file("bad/tool.json"), R"({"description": "Bad.", "command": "true", "env": ["not a name"]})");
+  write(mine.file("unset/tool.json"), R"({"description": "Unset.", "command": "true", "env": ["SMITH_TEST_NOT_SET_ANYWHERE"]})");
+
+  const LoadedTools loaded = loadCustomTools({{theirs.path(), false}, {mine.path(), true}}, {});
+  QStringList names;
+  for (const ToolDef& tool : loaded.tools) {
+    names << tool.name;
+  }
+  QCOMPARE(names, QStringList({"project_tracker", "tracker", "unset"}));
+  const QString warnings = loaded.warnings.join('\n');
+  QVERIFY_MATCH(warnings, "project_tracker is the project's, so it gets no network or variables");
+  QVERIFY_MATCH(warnings, "bad/tool\\.json has an \"env\" entry that isn't a variable name");
+  QVERIFY_MATCH(warnings, "unset asks for SMITH_TEST_NOT_SET_ANYWHERE, which isn't set where Smith started");
+  QCOMPARE(loaded.tools[1].extraAccess, QString("the network, SMITH_TEST_TRACKER_TOKEN"));
+  QVERIFY(loaded.tools[0].extraAccess.isEmpty());
+
+  // The network off: your tool reaches the server and gets its token; the project's tool and bash get neither.
+  const auto sandbox = bwrap();
+  sandbox->setReadOnlyPaths(loaded.dirs);
+  const ToolContext ctx = context(fake.project(), sandbox);
+  QCOMPARE(run(loaded.tools[1], {}, ctx).content, QString("connected\ntoken=t0ken"));
+  QCOMPARE(run(loaded.tools[0], {}, ctx).content, QString("blocked\ntoken="));
+  QCOMPARE(sh(sandbox, fake.project(), "echo \"token=$SMITH_TEST_TRACKER_TOKEN\"").content, QString("token="));
+  sandbox->dispose();
+}
+
 void TestSandbox::skillFoldersReadableInSandbox() {
   REQUIRE_BWRAP();
   TempDir project(QDir::tempPath(), "agent-proj-");
@@ -680,6 +719,13 @@ void TestSandbox::containerVariables() {
   EnvGuard proxy("HTTPS_PROXY", QString("http://proxy.example:3128"));
   const auto sandbox = container({}, {}, {"BUILD_MODE=release"});
   QCOMPARE(sh(sandbox, dir.path(), "echo \"$BUILD_MODE|$HTTPS_PROXY\"").content, QString("release|"));
+  // One of your tools: its variables go in; the network can't, for one command, so it's refused with why.
+  EnvGuard token("SMITH_TEST_TRACKER_TOKEN", QString("t0ken"));
+  const ToolContext ctx = context(dir.path(), sandbox);
+  QCOMPARE(runShellCommand("echo $SMITH_TEST_TRACKER_TOKEN", 60000, ctx, CommandAccess{false, {"SMITH_TEST_TRACKER_TOKEN"}}).content, QString("t0ken"));
+  const ToolResult refused = runShellCommand("true", 60000, ctx, CommandAccess{true, {}});
+  QVERIFY(refused.isError);
+  QVERIFY_MATCH(refused.content, "turning it on for every command \\(/network on\\)");
   sandbox->setNetwork(true);
   QCOMPARE(sh(sandbox, dir.path(), "echo \"$BUILD_MODE|$HTTPS_PROXY\"").content, QString("release|http://proxy.example:3128"));
   sandbox->dispose();

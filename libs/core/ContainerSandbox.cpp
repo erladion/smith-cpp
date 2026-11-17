@@ -104,7 +104,12 @@ QString ContainerSandbox::describe(const QString& project) const {
   return QString("in a %1 container (%2): only the project%3, network %4").arg(m_settings.runtime, settings.image, extra, network() ? "on" : "off");
 }
 
-SpawnSpec ContainerSandbox::spawnSpec(const QString& command, const QString& cwd) {
+SpawnSpec ContainerSandbox::spawnSpec(const QString& command, const QString& cwd, const CommandAccess& access) {
+  if (access.network && !network()) {
+    // The container was started without a network, and one command can't be given one.
+    throw SmithError("This tool needs the network, and in the container sandbox that means turning it on for every command (/network on). "
+                     "The bwrap sandbox can give it to this tool alone.");
+  }
   const QString name = container(cwd);
   // The command runs as a background job with job control on, so it gets a
   // process group of its own; its id goes to a file, so a timeout or
@@ -113,7 +118,13 @@ SpawnSpec ContainerSandbox::spawnSpec(const QString& command, const QString& cwd
   const QString wrapper = R"SH(set -m; bash -c "$1" & p=$!; set +m; echo $p > "$2"; wait $p; s=$?; rm -f "$2"; exit $s)SH";
   const QString runtime = m_settings.runtime;
   QStringList args{"exec", "-w", cwd};
-  args << envArgs() << name << "bash" << "-c" << wrapper << "bash" << command << pidFile;
+  args << envArgs();
+  QProcessEnvironment extra;
+  addVariables(extra, access.env);
+  for (const QString& variable : extra.keys()) {
+    args << "-e" << QString("%1=%2").arg(variable, extra.value(variable));
+  }
+  args << name << "bash" << "-c" << wrapper << "bash" << command << pidFile;
   SpawnSpec spec{runtime, args, hostEnv(), {}, {}};
   spec.kill = [runtime, name, pidFile]() {
     const QString stop = QString(R"SH(kill -KILL -- -"$(cat %1 2>/dev/null)" 2>/dev/null; rm -f %1)SH").arg(pidFile);

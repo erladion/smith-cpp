@@ -58,6 +58,14 @@ struct SandboxOptions {
   ContainerSettings container;
 };
 
+// More than shell commands get, for one of your own tools (tool.json's "network" and "env").
+struct CommandAccess {
+  // The network, even while it's off for everything else.
+  bool network = false;
+  // Variables from Smith's own environment, by name, that commands don't otherwise get.
+  QStringList env;
+};
+
 // For a path outside the project that belongs to the sandbox itself (its
 // private /tmp, a container's own files): where it really is on this machine
 // (`host`, inside `root`), or both empty if it has no place here at all.
@@ -91,7 +99,9 @@ public:
   // One line for the banner and approval prompts.
   virtual QString describe(const QString& project = {}) const = 0;
   // How to run `command` with bash in `cwd` (the project).
-  virtual SpawnSpec spawnSpec(const QString& command, const QString& cwd) = 0;
+  SpawnSpec spawnSpec(const QString& command, const QString& cwd) { return spawnSpec(command, cwd, CommandAccess{}); }
+  // The same with more access. Throws SmithError when this sandbox can't give it.
+  virtual SpawnSpec spawnSpec(const QString& command, const QString& cwd, const CommandAccess& access) = 0;
   // How to run a program directly (no shell), starting in `chdir` (default: the project). No network.
   virtual SpawnSpec programSpec(const QString& file, const QStringList& args, const QString& project, const QString& chdir = {}) = 0;
   // Reads a file as commands see it. Throws SmithError with a code (ENOENT, EISDIR, ...).
@@ -126,6 +136,8 @@ protected:
 QProcessEnvironment hostEnv();
 // The variables for sandboxed commands: those matching `allowed`, then `extra` from the config.
 QProcessEnvironment sandboxEnv(const QRegularExpression& allowed, const QStringList& extra);
+// Adds the variables `names` from Smith's own environment (those that are set).
+void addVariables(QProcessEnvironment& env, const QStringList& names);
 extern const QRegularExpression PROXY_VARS;
 
 // Whether a path is off limits to the agent's file tools.

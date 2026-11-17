@@ -19,6 +19,11 @@ namespace Smith {
 // project folder, always in the sandbox, with the call's arguments as JSON on
 // stdin and SMITH_TOOL_DIR set to the tool's folder; what it prints is the
 // result, and a non-zero exit is an error.
+//
+// Your own tools can also have "network": true (the network for this tool,
+// while other commands stay offline) and "env": ["NAME", ...] (those variables
+// from Smith's environment, for this tool alone), e.g. for an issue tracker
+// on the local network and its token.
 struct ToolRoot {
   QString dir;
   // Yours, not the project's: only these may say readOnly, which lets a tool

@@ -20,6 +20,13 @@ ToolDef listFilesTool();
 ToolDef grepTool();
 ToolDef globTool();
 
+struct CommandAccess;
+
+// Runs `command` with bash in the sandbox until it ends or `timeoutMs` passes,
+// as bash does: the output, an error for a non-zero exit, a note when the
+// sandbox looks to blame. `access` gives it more than commands get.
+ToolResult runShellCommand(const QString& command, int timeoutMs, const ToolContext& ctx, const CommandAccess& access);
+
 // `bash`; with `jobs`, it can also start commands in the background.
 ToolDef bashTool(const std::shared_ptr<BackgroundJobs>& jobs = {});
 // bash_output and bash_kill, for commands bash started in the background.

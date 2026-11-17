@@ -29,14 +29,29 @@ QString trimEnd(QString text) {
   return text;
 }
 
-// Runs a command to completion (or its timeout) in the sandbox.
 ToolResult runCommand(const QJsonObject& input, const ToolContext& ctx) {
-  const QString command = input.value("command").toString();
-  const int timeoutMs = input.value("timeout_ms").toInt(DEFAULT_TIMEOUT_MS);
+  return runShellCommand(input.value("command").toString(), input.value("timeout_ms").toInt(DEFAULT_TIMEOUT_MS), ctx, CommandAccess{});
+}
+
+QJsonObject commandProperties(bool background) {
+  QList<QPair<QString, QJsonObject>> properties = {
+      {"command", Schema::string("The command to run", 1)},
+      {"timeout_ms", Schema::integer("Timeout in milliseconds", 1, MAX_TIMEOUT_MS)},
+  };
+  if (background) {
+    properties.append({"run_in_background",
+                       Schema::boolean("Start it and return at once, for servers, watchers and long builds; read its output with bash_output")});
+  }
+  return Schema::object(properties, {"command"});
+}
+
+} // namespace
+
+ToolResult runShellCommand(const QString& command, int timeoutMs, const ToolContext& ctx, const CommandAccess& access) {
   const auto sandbox = ctx.sandboxOrNone();
   SpawnSpec spec;
   try {
-    spec = sandbox->spawnSpec(command, ctx.cwd);
+    spec = sandbox->spawnSpec(command, ctx.cwd, access);
   } catch (const SmithError& error) {
     // E.g. the container couldn't start.
     return ToolResult::error(error.message());
@@ -75,20 +90,6 @@ ToolResult runCommand(const QJsonObject& input, const ToolContext& ctx) {
   }
   return ToolResult{body};
 }
-
-QJsonObject commandProperties(bool background) {
-  QList<QPair<QString, QJsonObject>> properties = {
-      {"command", Schema::string("The command to run", 1)},
-      {"timeout_ms", Schema::integer("Timeout in milliseconds", 1, MAX_TIMEOUT_MS)},
-  };
-  if (background) {
-    properties.append({"run_in_background",
-                       Schema::boolean("Start it and return at once, for servers, watchers and long builds; read its output with bash_output")});
-  }
-  return Schema::object(properties, {"command"});
-}
-
-} // namespace
 
 ToolDef bashTool(const std::shared_ptr<BackgroundJobs>& jobs) {
   ToolDef tool;

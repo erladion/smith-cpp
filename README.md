@@ -287,6 +287,8 @@ A folder with a `tool.json` is a tool the model can call. The folder's name is t
 | `parameters` | no | A JSON Schema of `"type": "object"` for the arguments. Without one, the tool takes none. |
 | `readOnly` | no | `true` lets one of your own tools run without asking, and alongside other read-only calls. A project's tools always ask. |
 | `timeoutMs` | no | The time limit, from 1 second to 10 minutes. Default: 5 minutes. |
+| `network` | no | `true` gives one of your own tools the network, while the agent's other commands stay offline. |
+| `env` | no | Names of variables from Smith's environment that one of your own tools gets, such as a token. Other commands don't get them. |
 
 The command gets the call's arguments as JSON on stdin, and `SMITH_TOOL_DIR` is set to the
 tool's folder. What it prints is the result the model sees; a non-zero exit tells the model the
@@ -318,10 +320,52 @@ if args.get("pattern"):
 sys.exit(subprocess.run(command).returncode)
 ```
 
+A tool for a service on your network, such as a self-hosted Jira, in `~/.config/smith/tools/jira_issue/`:
+
+```json
+{
+  "description": "Read a Jira issue: its summary, status, description and comments. Give its key, e.g. PROJ-123.",
+  "parameters": {
+    "type": "object",
+    "properties": { "key": { "type": "string", "description": "The issue key, e.g. PROJ-123" } },
+    "required": ["key"]
+  },
+  "command": "python3 \"$SMITH_TOOL_DIR/issue.py\"",
+  "readOnly": true,
+  "network": true,
+  "env": ["JIRA_URL", "JIRA_TOKEN"]
+}
+```
+
+with `issue.py` beside it (a personal access token; Jira Server and Data Center take it as a
+bearer token):
+
+```python
+import json, os, sys, urllib.request
+
+key = json.load(sys.stdin)["key"]
+request = urllib.request.Request(
+    f"{os.environ['JIRA_URL']}/rest/api/2/issue/{key}?fields=summary,status,description,comment",
+    headers={"Authorization": f"Bearer {os.environ['JIRA_TOKEN']}"})
+fields = json.load(urllib.request.urlopen(request, timeout=30))["fields"]
+print(f"{key}: {fields['summary']} ({fields['status']['name']})\n\n{fields.get('description') or ''}")
+for comment in fields["comment"]["comments"]:
+    print(f"\n--- {comment['author']['displayName']}:\n{comment['body']}")
+```
+
+Set `JIRA_URL` and `JIRA_TOKEN` where you start Smith. With an internal CA, add `SSL_CERT_FILE`
+to `env` as well.
+
 Good to know:
 
-- Tools always run in the sandbox, with the network as `/network` has it, and their folder can be
-  read but not written. With `--sandbox off`, they aren't offered at all.
+- Tools always run in the sandbox, and their folder can be read but not written. They have the
+  network as `/network` has it, unless they have `"network": true`. With `--sandbox off`, they
+  aren't offered at all.
+- `network` and `env` are for your own tools only: a project's tool could have been written by
+  the agent, so it doesn't get them (Smith says so at startup). The approval prompt says what a
+  tool gets beyond other commands, and Smith warns at startup about a variable in `env` that isn't
+  set. In the container sandbox, `network` can't be given to one tool: there it needs
+  `/network on`, and the tool says so if it isn't.
 - They ask like a shell command does, and `permissions.allow` can name them (`"run_tests"`).
 - A project's tools always ask, even with `readOnly`, since the agent could have written them. A
   change under `.agents/tools/` is reported like other [files that run later](#files-that-run-later).

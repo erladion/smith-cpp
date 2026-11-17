@@ -32,7 +32,8 @@ public:
   void setNetwork(bool on) override;
 
   QString describe(const QString& project = {}) const override;
-  SpawnSpec spawnSpec(const QString& command, const QString& cwd) override;
+  using Sandbox::spawnSpec;
+  SpawnSpec spawnSpec(const QString& command, const QString& cwd, const CommandAccess& access) override;
   SpawnSpec programSpec(const QString& file, const QStringList& args, const QString& project, const QString& chdir = {}) override;
   QByteArray readBytes(const QString& file, const QString& project) override;
   void writeBytes(const QString& file, const QByteArray& content, const QString& project) override;
