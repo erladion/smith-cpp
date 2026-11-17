@@ -195,7 +195,8 @@ void TestController::commandsReplyOrAskForPickers() {
   m_pController->submit("/plan maybe");
   QVERIFY_MATCH(texts().last(), "^Use /plan to switch plan mode");
   // Without an argument, the app's picker.
-  for (const QString& command : {"/model", "/endpoint", "/reasoning", "/sessions all", "/open", "/skills", "/jobs", "/theme"}) {
+  const QStringList commands{"/model", "/endpoint", "/reasoning", "/sessions all", "/open", "/skills", "/jobs", "/theme"};
+  for (const QString& command : commands) {
     m_pController->submit(command);
   }
   QCOMPARE(m_seen.pickers, QStringList({"model:", "endpoint:", "reasoning:", "sessions:all", "open:", "skills:", "jobs:", "theme:"}));
