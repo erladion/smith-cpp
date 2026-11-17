@@ -19,10 +19,10 @@ namespace Smith::Desktop {
 
 QVariantList Backend::todos() const {
   QVariantList out;
-  if (!m_pAgent) {
+  if (!m_controller.agent()) {
     return out;
   }
-  for (const Todo& todo : m_pAgent->todos()) {
+  for (const Todo& todo : m_controller.agent()->todos()) {
     const QString status = todo.status == TodoStatus::Completed ? "completed" : todo.status == TodoStatus::InProgress ? "in_progress" : "pending";
     out.append(QVariantMap{{"content", todo.content}, {"status", status}});
   }
@@ -30,14 +30,14 @@ QVariantList Backend::todos() const {
 }
 
 QStringList Backend::queued() const {
-  return m_pAgent ? m_pAgent->queuedMessages() : QStringList();
+  return m_controller.agent() ? m_controller.agent()->queuedMessages() : QStringList();
 }
 
 QVariantMap Backend::approval() const {
-  if (!m_prompts.approval()) {
+  if (!m_controller.prompts().approval()) {
     return {};
   }
-  const ApprovalRequest& request = *m_prompts.approval();
+  const ApprovalRequest& request = *m_controller.prompts().approval();
   QVariantMap map{
       {"tool", request.tool},
       {"summary", request.summary},
@@ -66,7 +66,7 @@ QVariantMap Backend::approval() const {
 }
 
 QVariantMap Backend::question() const {
-  const Question* asked = m_prompts.question();
+  const Question* asked = m_controller.prompts().question();
   if (!asked) {
     return {};
   }
@@ -74,11 +74,11 @@ QVariantMap Backend::question() const {
 }
 
 QString Backend::endpoint() const {
-  return m_pServer ? m_pServer->name() : QString();
+  return m_controller.server() ? m_controller.server()->name() : QString();
 }
 
 QString Backend::serverLabel() const {
-  return m_pServer ? m_pServer->label() : QString();
+  return m_controller.server() ? m_controller.server()->label() : QString();
 }
 
 QStringList Backend::endpoints() const {
@@ -92,11 +92,11 @@ QStringList Backend::endpoints() const {
 }
 
 QString Backend::model() const {
-  return m_pAgent ? m_pAgent->model() : QString();
+  return m_controller.agent() ? m_controller.agent()->model() : QString();
 }
 
 QString Backend::reasoning() const {
-  return m_pAgent ? m_pAgent->reasoning() : QString();
+  return m_controller.agent() ? m_controller.agent()->reasoning() : QString();
 }
 
 bool Backend::sandboxActive() const {
@@ -108,7 +108,7 @@ QString Backend::sandboxKind() const {
 }
 
 QString Backend::sandboxDescription() const {
-  return m_pRuntime ? m_pRuntime->sandbox()->describe(m_project.cwd) : QString();
+  return m_pRuntime ? m_pRuntime->sandbox()->describe(m_controller.project().cwd) : QString();
 }
 
 bool Backend::network() const {
@@ -137,24 +137,24 @@ QVariantList Backend::jobs() const {
 }
 
 QString Backend::projectName() const {
-  const QString name = QFileInfo(m_project.cwd).fileName();
-  return name.isEmpty() ? m_project.cwd : name;
+  const QString name = QFileInfo(m_controller.project().cwd).fileName();
+  return name.isEmpty() ? m_controller.project().cwd : name;
 }
 
 QVariantList Backend::skills() const {
   QVariantList out;
-  for (const Skill& skill : m_project.skills) {
+  for (const Skill& skill : m_controller.project().skills) {
     out.append(QVariantMap{{"name", skill.name}, {"description", QString(skill.description).simplified()}});
   }
   return out;
 }
 
 QString Backend::sessionId() const {
-  return m_sessionControl.currentId ? m_sessionControl.currentId() : QString();
+  return m_controller.options().sessions.currentId ? m_controller.options().sessions.currentId() : QString();
 }
 
 QString Backend::sessionName() const {
-  return m_sessionControl.currentName ? m_sessionControl.currentName() : QString();
+  return m_controller.options().sessions.currentName ? m_controller.options().sessions.currentName() : QString();
 }
 
 void Backend::setAllSessions(bool all) {
@@ -166,11 +166,11 @@ void Backend::setAllSessions(bool all) {
 
 QVariantList Backend::recentProjects() const {
   QVariantList out;
-  if (!m_sessionControl.recentProjects) {
+  if (!m_controller.options().sessions.recentProjects) {
     return out;
   }
-  for (const RecentProject& project : m_sessionControl.recentProjects()) {
-    if (project.cwd == m_project.cwd || !pathExists(project.cwd)) {
+  for (const RecentProject& project : m_controller.options().sessions.recentProjects()) {
+    if (project.cwd == m_controller.project().cwd || !pathExists(project.cwd)) {
       continue;
     }
     out.append(QVariantMap{
@@ -183,18 +183,26 @@ QVariantList Backend::recentProjects() const {
   return out;
 }
 
+QVariantList Backend::models() const {
+  QVariantList out;
+  for (const ModelInfo& model : m_controller.models()) {
+    out.append(QVariantMap{{"id", model.id}, {"context", model.contextSize.value_or(0)}});
+  }
+  return out;
+}
+
 bool Backend::planning() const {
-  return m_pAgent && m_pAgent->planning();
+  return m_controller.agent() && m_controller.agent()->planning();
 }
 
 QString Backend::usageDetail() const {
-  const TurnUsage& usage = m_turns.usage();
+  const TurnUsage& usage = m_controller.turns().usage();
   if (usage.calls == 0) {
     return {};
   }
   const QLocale english(QLocale::English);
   QString text = QString("%1: %2, %3 prompt tokens sent (the whole conversation, again with each call) and %4 generated")
-                     .arg(m_turns.busy() ? "This turn so far" : "The last turn", plural(usage.calls, "model call"),
+                     .arg(m_controller.turns().busy() ? "This turn so far" : "The last turn", plural(usage.calls, "model call"),
                           english.toString(usage.promptTokens), english.toString(usage.completionTokens));
   if (const std::optional<double> speed = usage.tokensPerSecond()) {
     text += QString(", at %1 tokens a second").arg(english.toString(*speed, 'f', 1));
@@ -203,13 +211,13 @@ QString Backend::usageDetail() const {
 }
 
 bool Backend::canUndo() const {
-  return m_pAgent && !m_turns.busy() && m_pAgent->canUndo();
+  return m_controller.agent() && !m_controller.turns().busy() && m_controller.agent()->canUndo();
 }
 
 QVariantList Backend::suggest(const QString& input, int) {
   QStringList models;
-  for (const QVariant& model : m_models) {
-    models << model.toMap().value("id").toString();
+  for (const ModelInfo& model : m_controller.models()) {
+    models << model.id;
   }
   QVariantList out;
   QStringList tasks;
@@ -218,7 +226,7 @@ QVariantList Backend::suggest(const QString& input, int) {
       tasks << worktree.task;
     }
   }
-  const CompletionContext context{m_project.cwd, endpoints(), models, tasks, [this]() { return m_fileIndex.files(m_project.cwd); }};
+  const CompletionContext context{m_controller.project().cwd, endpoints(), models, tasks, [this]() { return m_controller.files(); }};
   for (const Suggestion& suggestion : Smith::suggest(input, context)) {
     out.append(QVariantMap{{"text", suggestion.text},
                            {"label", suggestion.label},

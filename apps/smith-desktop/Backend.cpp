@@ -1,18 +1,11 @@
 #include "Backend.h"
 
 #include "core/Errors.h"
-#include "core/Mentions.h"
 #include "core/Jobs.h"
-#include "core/Preferences.h"
 #include "core/Reasoning.h"
-#include "tui/Rain.h"
-#include "frontend/Duration.h"
-#include "frontend/Greetings.h"
-#include "frontend/Replay.h"
 #include "frontend/Activity.h"
 
 #include <QCoreApplication>
-#include <QDateTime>
 #include <QJSEngine>
 #include <QQmlEngine>
 
@@ -28,18 +21,36 @@ Backend::Backend(const LaunchOptions& launch, QObject* parent) : QObject(parent)
   }
   m_palette = Palette::forTheme(m_theme);
   m_transcript.setPalette(m_palette);
-  connect(&m_fileIndex, &FileIndex::updated, this, [this]() {
+
+  m_controller.setAppCommands([this](const QString& command, const QString& arg) { return runAppCommand(command, arg); });
+  connect(&m_controller, &Controller::changed, this, &Backend::changed);
+  connect(&m_controller, &Controller::entryAdded, this, [this](const Entry& entry) { m_transcript.append(entry); });
+  connect(&m_controller, &Controller::startedOver, this, [this](const QList<Entry>& entries) {
+    m_transcript.clear();
+    for (const Entry& entry : entries) {
+      m_transcript.append(entry);
+    }
+  });
+  connect(&m_controller, &Controller::agentEvent, this, &Backend::onAgentEvent);
+  connect(&m_controller, &Controller::turnEnded, this, [this]() { m_transcript.finishLive(); });
+  connect(&m_controller, &Controller::inputRestored, this, &Backend::restoreInput);
+  connect(&m_controller, &Controller::inputAppended, this, &Backend::appendInput);
+  connect(&m_controller, &Controller::pickerRequested, this, &Backend::onPickerRequested);
+  connect(&m_controller, &Controller::themeChanged, this, &Backend::onThemeChanged);
+  connect(&m_controller, &Controller::modelsChanged, this, &Backend::changed);
+  connect(&m_controller, &Controller::sessionsChanged, this, &Backend::refreshSessions);
+  connect(&m_controller, &Controller::projectChanged, this, [this]() {
+    // The project may be another repository, or another worktree of this one.
+    refreshWorktrees();
+    Q_EMIT changed();
+  });
+  connect(&m_controller, &Controller::redPill, this, &Backend::redPill);
+  connect(&m_controller, &Controller::quitRequested, this, &Backend::quit);
+  connect(&m_controller.prompts(), &Prompts::changed, this, &Backend::promptChanged);
+  connect(&m_controller.fileIndex(), &FileIndex::updated, this, [this]() {
     m_filesListed++;
     Q_EMIT filesChanged();
   });
-
-  // The agent calls these from its own threads.
-  m_hooks.onEvent = [this](const AgentEvent& event) { QMetaObject::invokeMethod(this, [this, event]() { onEvent(event); }, Qt::QueuedConnection); };
-  m_hooks.approve = [this](const ApprovalRequest& request) { return m_prompts.approve(request); };
-  m_hooks.ask = [this](const Question& question) { return m_prompts.ask(question); };
-  m_prompts.refuseWhen([this]() { return m_turns.interrupted(); });
-  connect(&m_prompts, &Prompts::changed, this, &Backend::promptChanged);
-  connect(&m_turns, &TurnRunner::changed, this, &Backend::changed);
 }
 
 Backend::~Backend() {
@@ -78,7 +89,11 @@ QString Backend::version() const {
 // ---- startup ----
 
 void Backend::launch(std::function<void()> work, std::function<void()> finished) {
-  m_turns.launch(std::move(work), std::move(finished));
+  m_controller.launch(std::move(work), std::move(finished));
+}
+
+void Backend::background(const QString& activity, std::function<std::function<void()>()> work) {
+  m_controller.runTask(activity, std::move(work));
 }
 
 void Backend::start() {
@@ -92,7 +107,7 @@ void Backend::start() {
   auto error = std::make_shared<QString>();
   const LaunchOptions options = m_launch;
   launch(
-      [runtime, error, options, closing = m_turns.closing()]() {
+      [runtime, error, options, closing = m_controller.turns().closing()]() {
         try {
           *runtime = Runtime::start(options, closing);
         } catch (const std::exception& failure) {
@@ -112,74 +127,27 @@ void Backend::start() {
 }
 
 void Backend::ready() {
-  m_pServer = m_pRuntime->server();
-  m_project = m_pRuntime->project();
-  m_sessionControl = m_pRuntime->sessions();
-  m_pAgent = m_pRuntime->createAgent(m_hooks);
-  connect(m_pRuntime->jobs().get(), &BackgroundJobs::changed, this, &Backend::changed, Qt::QueuedConnection);
+  ControllerOptions options = controllerOptions(m_pRuntime);
+  options.theme = m_theme;
+  options.warnings << m_themeWarnings;
+  m_controller.attach(options);
   m_state = "ready";
-  const Messages resumed = m_pRuntime->resumedHistory();
-  printBanner(!resumed.isEmpty(), m_pRuntime->resumedLastUsed());
-  for (const QString& warning : m_pRuntime->warnings() + m_themeWarnings) {
-    notice(NoticeLevel::Warn, warning);
-  }
-  for (const Entry& entry : historyToEntries(resumed, m_project.tools)) {
-    m_transcript.append(entry);
-  }
-  refreshModels();
-  refreshSessions();
-  refreshWorktrees();
+  m_controller.start();
   Q_EMIT changed();
 }
 
-void Backend::printBanner(bool resumed, const std::optional<QDateTime>& lastUsed) {
-  GreetingContext context;
-  context.resumed = resumed;
-  context.lastUsed = lastUsed;
-  if (!resumed) {
-    // A folder no other session has worked in gets its own welcome.
-    const QString current = m_sessionControl.currentId();
-    context.newFolder = true;
-    for (const SessionInfo& info : m_sessionControl.list(false)) {
-      if (info.id != current) {
-        context.newFolder = false;
-      }
-    }
-  }
-  Entry banner;
-  banner.kind = Entry::Kind::Banner;
-  banner.model = m_pAgent->model();
-  banner.server = m_pServer->label();
-  banner.cwd = m_project.cwd;
-  const QString name = m_sessionControl.currentName();
-  banner.session = name.isEmpty() ? m_sessionControl.currentId() : name + " · " + m_sessionControl.currentId();
-  banner.resumed = resumed;
-  banner.sandboxActive = m_pRuntime->sandbox()->active();
-  banner.sandboxDescription = m_pRuntime->sandbox()->describe(m_project.cwd);
-  banner.instructions = m_project.instructions;
-  for (const Skill& skill : m_project.skills) {
-    banner.skills << skill.name;
-  }
-  banner.tools = m_project.customTools;
-  if (matrix()) {
-    banner.greeting = greeting(context);
-  }
-  m_transcript.append(banner);
-}
-
 void Backend::notice(NoticeLevel level, const QString& text) {
-  m_transcript.append(Entry::notice(level, text));
+  m_controller.notice(level, text);
 }
 
 // ---- agent events ----
 
-void Backend::onEvent(const AgentEvent& event) {
+void Backend::onAgentEvent(const AgentEvent& event, const std::optional<Entry>& entry) {
   if (m_closed) {
     return;
   }
-  const std::optional<Entry> entry = m_turns.apply(event);
   if (const auto* delta = std::get_if<Event::Delta>(&event)) {
-    m_turns.setActivity(delta->kind == BlockKind::Text ? "Writing…" : "Thinking…");
+    m_controller.turns().setActivity(delta->kind == BlockKind::Text ? "Writing…" : "Thinking…");
     m_transcript.appendLive(delta->kind, delta->text);
   } else if (std::holds_alternative<Event::ResponseEnd>(event) || std::holds_alternative<Event::ToolPrepare>(event)) {
     m_transcript.finishLive();
@@ -187,158 +155,79 @@ void Backend::onEvent(const AgentEvent& event) {
   if (entry) {
     m_transcript.append(*entry);
   }
-  Q_EMIT changed();
 }
 
+void Backend::onPickerRequested(const QString& kind, const QString& arg) {
+  if (kind == "sessions") {
+    setAllSessions(arg == "all");
+  }
+  Q_EMIT openPicker(kind == "open" ? QString("folder") : kind);
+}
+
+void Backend::onThemeChanged() {
+  m_theme = m_controller.theme();
+  m_palette = Palette::forTheme(m_theme);
+  m_transcript.setPalette(m_palette);
+  Q_EMIT themeChanged();
+}
+
+// ---- approvals and questions ----
+
 void Backend::decide(const QString& decision) {
-  if (!m_prompts.approval()) {
+  Prompts& prompts = m_controller.prompts();
+  if (!prompts.approval()) {
     return;
   }
   if (decision == "allow") {
-    m_prompts.decide(ApprovalDecision::Allow);
+    prompts.decide(ApprovalDecision::Allow);
   } else if (decision == "always") {
-    m_prompts.decide(ApprovalDecision::AllowAlways);
+    prompts.decide(ApprovalDecision::AllowAlways);
   } else if (decision == "similar") {
-    m_prompts.decide(ApprovalDecision::AllowSimilar);
+    prompts.decide(ApprovalDecision::AllowSimilar);
   } else {
-    m_prompts.decide(ApprovalDecision::Deny);
+    prompts.decide(ApprovalDecision::Deny);
     if (decision == "interrupt") {
-      m_turns.interrupt();
+      m_controller.interrupt();
     }
   }
 }
 
 void Backend::answerOption(int index) {
-  m_prompts.answer(Answer{Answer::Kind::Option, index, {}});
+  m_controller.prompts().answer(Answer{Answer::Kind::Option, index, {}});
 }
 
 void Backend::answerText(const QString& text) {
   if (!text.trimmed().isEmpty()) {
-    m_prompts.answer(Answer{Answer::Kind::Text, 0, text.trimmed()});
+    m_controller.prompts().answer(Answer{Answer::Kind::Text, 0, text.trimmed()});
   }
-}
-
-void Backend::dismissQuestion() {
-  m_prompts.answer(Answer{});
 }
 
 void Backend::interrupt() {
-  m_prompts.dismiss();
-  m_turns.interrupt();
+  m_controller.interrupt();
 }
 
-// ---- turns ----
+// ---- messages ----
 
 void Backend::submit(const QString& value) {
-  const QString text = value.trimmed();
-  if (text.isEmpty() || m_state != "ready") {
-    return;
+  if (m_state == "ready") {
+    m_controller.submit(value);
   }
-  if (m_turns.busy()) {
-    if (text.startsWith('/')) {
-      notice(NoticeLevel::Warn, "Commands work once the agent is done. Your command is still in the input box.");
-      Q_EMIT restoreInput(value);
-    } else if (agentRunning()) {
-      // Delivered at the agent's next step.
-      m_pAgent->queue(text);
-    } else {
-      Q_EMIT restoreInput(value);
-    }
-    Q_EMIT changed();
-    return;
-  }
-  if (text.startsWith('/')) {
-    runCommand(text);
-    return;
-  }
-  m_transcript.append(Entry::simple(Entry::Kind::User, text));
-  // Files it mentions with @, and image files it names, go along with it.
-  const Attachments refs = attachmentsIn(text, m_project.cwd);
-  if (!refs.attached.isEmpty()) {
-    notice(NoticeLevel::Info, "Attached " + refs.attached.join(", ") + ".");
-  }
-  for (const QString& problem : refs.problems) {
-    notice(NoticeLevel::Warn, problem);
-  }
-  const std::shared_ptr<Agent> agent = m_pAgent;
-  const QList<Image> images = refs.images;
-  const QList<AttachedFile> files = refs.files;
-  const bool planning = agent->planning();
-  runTurn(
-      planning ? "Planning…" : "Thinking…", [agent, text, images, files](const CancelPtr& cancel) { agent->send(text, cancel, images, files); },
-      [this, planning]() {
-        const TurnStats& turn = m_turns.lastTurn();
-        m_transcript.append(Entry::simple(Entry::Kind::Meta, turnSummary(turn.reason, turn.elapsedMs, turn.toolCalls)));
-        if (turn.reason == "interrupted" && matrix()) {
-          m_transcript.append(Entry::simple(Entry::Kind::Quote, INTERRUPTED));
-        }
-        refreshSessions();
-        // The next queued task, if this one went well; else they wait in the input box.
-        QStringList putBack;
-        if (const std::optional<QString> next = m_turns.afterTurn(putBack)) {
-          QMetaObject::invokeMethod(this, [this, task = *next]() { submit(task); }, Qt::QueuedConnection);
-          return;
-        }
-        if (!putBack.isEmpty()) {
-          notice(NoticeLevel::Warn, putBackText(putBack.size()));
-          Q_EMIT appendInput(putBack.join("\n\n"));
-        }
-        if (planning && turn.reason == "stop" && m_pAgent->planning()) {
-          Q_EMIT openPicker("plan");
-        }
-      },
-      true);
 }
 
 void Backend::queueNext(const QString& value) {
-  const QString text = value.trimmed();
-  if (text.isEmpty() || !agentRunning()) {
-    return;
-  }
-  if (text.startsWith('/')) {
-    notice(NoticeLevel::Warn, "Commands can't be queued. Yours is still in the input box, for when the agent is done.");
-    Q_EMIT restoreInput(value);
-    return;
-  }
-  m_turns.queueNext(text);
+  m_controller.queueNext(value);
 }
 
 void Backend::editNext(int index) {
-  if (index >= 0 && index < m_turns.nextTasks().size()) {
-    Q_EMIT appendInput(m_turns.takeNext(index));
+  if (index >= 0 && index < nextTasks().size()) {
+    Q_EMIT appendInput(m_controller.takeNext(index));
   }
 }
 
 void Backend::dropNext(int index) {
-  if (index >= 0 && index < m_turns.nextTasks().size()) {
-    m_turns.takeNext(index);
+  if (index >= 0 && index < nextTasks().size()) {
+    m_controller.takeNext(index);
   }
-}
-
-void Backend::runTurn(const QString& activity, std::function<void(const CancelPtr&)> work, std::function<void()> then, bool timed) {
-  m_turns.runTurn(
-      activity, m_pServer->baseUrl(), std::move(work),
-      [this, then](const QString& error) {
-        m_transcript.finishLive();
-        if (!error.isEmpty()) {
-          notice(NoticeLevel::Error, error);
-        }
-        // Messages the agent never got (interrupted, error, step limit) go back into the input.
-        const QStringList undelivered = m_pAgent->takeQueued();
-        if (!undelivered.isEmpty()) {
-          notice(NoticeLevel::Warn, "Your queued message wasn't delivered, so it's back in the input box.");
-          Q_EMIT restoreInput(undelivered.join("\n\n"));
-        }
-        if (then) {
-          then();
-        }
-      },
-      timed);
-}
-
-void Backend::background(const QString& activity, std::function<std::function<void()>()> work) {
-  m_turns.runTask(activity, m_pServer ? m_pServer->baseUrl() : QString(), std::move(work),
-                  [this](const QString& error) { notice(NoticeLevel::Error, error); });
 }
 
 // ---- shutdown ----
@@ -348,9 +237,7 @@ void Backend::quit() {
     return;
   }
   m_closed = true;
-  m_turns.interrupt();
-  m_prompts.close();
-  m_turns.close();
+  m_controller.close();
   if (m_pRuntime) {
     m_pRuntime->shutdown();
   }

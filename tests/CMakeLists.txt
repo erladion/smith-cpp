@@ -25,6 +25,11 @@ add_executable(test_frontend test_frontend.cpp TestUtil.h)
 target_link_libraries(test_frontend PRIVATE smith_frontend Qt::Test)
 add_test(NAME frontend COMMAND test_frontend)
 
+# The controller both apps drive, with no UI.
+add_executable(test_controller test_controller.cpp TestUtil.h FakeServer.h)
+target_link_libraries(test_controller PRIVATE smith_frontend Qt::Test)
+add_test(NAME controller COMMAND test_controller)
+
 # The desktop app's QML against the fake server, offscreen.
 if(SMITH_BUILD_DESKTOP)
   add_executable(test_desktop test_desktop.cpp TestUtil.h FakeServer.h)

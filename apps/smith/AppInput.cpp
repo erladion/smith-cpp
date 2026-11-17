@@ -10,22 +10,22 @@ using Tui::KeyName;
 // ---- approvals and questions ----
 
 void App::answer(const Answer& value) {
-  if (!m_prompts.question()) {
+  if (!m_controller.prompts().question()) {
     return;
   }
   m_editor.setValue(m_stashed);
   m_stashed.clear();
-  m_prompts.answer(value);
+  m_controller.prompts().answer(value);
 }
 
 void App::onQuestionKey(const Key& key) {
-  const Question& question = *m_prompts.question();
+  const Question& question = *m_controller.prompts().question();
   const bool typing = !m_editor.value().isEmpty();
   const int n = question.options.size();
   static const QRegularExpression digit("^[1-9]$");
   if (key.name == KeyName::Escape) {
     answer(Answer{});
-    m_turns.interrupt();
+    m_controller.turns().interrupt();
   } else if (!typing && n > 0 && (key.name == KeyName::Up || key.name == KeyName::Down)) {
     m_questionSelected = (m_questionSelected + (key.name == KeyName::Up ? n - 1 : 1)) % n;
   } else if (!typing && key.name == KeyName::Text && digit.match(key.text).hasMatch() && key.text.toInt() <= n) {
@@ -43,14 +43,14 @@ void App::onQuestionKey(const Key& key) {
 // ---- keys ----
 
 QList<Suggestion> App::currentSuggestions() const {
-  if (m_turns.busy() || prompting() || m_picker || m_textPrompt) {
+  if (m_controller.turns().busy() || prompting() || m_picker || m_textPrompt) {
     return {};
   }
   QStringList endpoints;
-  for (const Endpoint& endpoint : m_options.endpoints) {
+  for (const Endpoint& endpoint : m_options.controller.endpoints) {
     endpoints << endpoint.name;
   }
-  return m_suggestions.items(m_editor.value(), m_project.cwd, endpoints);
+  return m_suggestions.items(m_editor.value(), m_controller.project().cwd, endpoints);
 }
 
 void App::onKey(const Key& key) {
@@ -59,24 +59,24 @@ void App::onKey(const Key& key) {
     return;
   }
 
-  if (const ApprovalRequest* approval = m_prompts.approval()) {
+  if (const ApprovalRequest* approval = m_controller.prompts().approval()) {
     const QString letter = key.name == KeyName::Text ? key.text.toLower() : QString();
     if (letter == "y") {
-      m_prompts.decide(ApprovalDecision::Allow);
+      m_controller.prompts().decide(ApprovalDecision::Allow);
     } else if (letter == "a" && approval->canAllowAlways) {
-      m_prompts.decide(ApprovalDecision::AllowAlways);
+      m_controller.prompts().decide(ApprovalDecision::AllowAlways);
     } else if (letter == "s" && !approval->similar.isEmpty()) {
-      m_prompts.decide(ApprovalDecision::AllowSimilar);
+      m_controller.prompts().decide(ApprovalDecision::AllowSimilar);
     } else if (letter == "n") {
-      m_prompts.decide(ApprovalDecision::Deny);
+      m_controller.prompts().decide(ApprovalDecision::Deny);
     } else if (key.name == KeyName::Escape) {
-      m_prompts.decide(ApprovalDecision::Deny);
-      m_turns.interrupt();
+      m_controller.prompts().decide(ApprovalDecision::Deny);
+      m_controller.interrupt();
     }
     return;
   }
 
-  if (m_prompts.question()) {
+  if (m_controller.prompts().question()) {
     onQuestionKey(key);
     return;
   }
@@ -118,16 +118,17 @@ void App::onKey(const Key& key) {
     return;
   }
 
-  if (m_turns.busy()) {
+  if (m_controller.turns().busy()) {
     if (key.name == KeyName::Escape) {
-      m_turns.interrupt();
+      m_controller.interrupt();
     } else if (agentRunning() && key.name == KeyName::Tab && !key.shift && !m_editor.value().trimmed().isEmpty()) {
-      queueNext(m_editor.commit());
-    } else if (agentRunning() && key.name == KeyName::Up && m_editor.value().isEmpty() && !m_turns.nextTasks().isEmpty()) {
+      m_controller.queueNext(m_editor.commit());
+    } else if (agentRunning() && key.name == KeyName::Up && m_editor.value().isEmpty() && !m_controller.turns().nextTasks().isEmpty()) {
       // The last queued task back, to change or drop.
-      m_editor.setValue(m_turns.takeNext());
+      m_editor.setValue(m_controller.takeNext());
     } else if (agentRunning() && m_editor.handle(key)) {
-      queueMessage(m_editor.commit());
+      // Given to the agent at its next step.
+      m_controller.submit(m_editor.commit());
     }
     return;
   }
@@ -138,7 +139,7 @@ void App::onKey(const Key& key) {
   }
 
   if (key.name == KeyName::Tab && key.shift) {
-    setPlanning({});
+    m_controller.setPlanning(!m_controller.agent()->planning());
     return;
   }
 
@@ -151,13 +152,13 @@ void App::onKey(const Key& key) {
   }
   if (handled == SuggestionList::Outcome::Run) {
     m_editor.setValue(toRun);
-    submit(m_editor.commit());
+    m_controller.submit(m_editor.commit());
     return;
   }
 
   const QString before = m_editor.value();
   if (m_editor.handle(key)) {
-    submit(m_editor.commit());
+    m_controller.submit(m_editor.commit());
   }
   if (m_editor.value() != before) {
     m_suggestions.reset();

@@ -322,22 +322,9 @@ int run(QCoreApplication& app) {
   }
 
   Ui::TuiOptions options;
-  options.createAgent = [runtime](const AgentHooks& hooks, const std::optional<AgentSettings>& current) { return runtime->createAgent(hooks, current); };
-  options.server = server;
-  options.endpoints = config.endpoints;
-  options.project = runtime->project();
-  options.switchProject = [runtime](const QString& folder) { return runtime->switchProject(folder); };
-  options.configFile = config.file;
-  options.warnings = runtime->warnings();
-  options.rememberedModel = &Runtime::rememberedModel;
-  options.sandbox = runtime->sandbox();
-  options.sessions = runtime->sessions();
-  options.resumed = runtime->resumedHistory();
-  options.resumedLastUsed = runtime->resumedLastUsed();
-  options.theme = startingTheme(config.theme, &options.warnings);
+  options.controller = controllerOptions(runtime);
+  options.controller.theme = startingTheme(config.theme, &options.controller.warnings);
   options.codeStream = config.codeStream;
-  options.jobs = runtime->jobs();
-  options.savePreferences = [runtime](const PreferenceUpdate& update) { runtime->savePreferences(update); };
 
   QElapsedTimer started;
   started.start();

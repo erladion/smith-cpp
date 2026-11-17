@@ -573,13 +573,16 @@ libs/compat/              header-only shims over the Qt 5/6 differences, below e
 libs/tui/                 terminal toolkit: raw mode and signals, inline renderer, keys, line
                           editor, Markdown, pickers, digital rain. Includes nothing else.
 libs/frontend/            what both apps share: Runtime (server, model, sandbox, project,
-                          session and agents from the flags and config), running turns on
-                          worker threads (Turns), approvals and questions (Prompts), transcript
+                          session and agents from the flags and config); Controller, which
+                          does everything that isn't drawing (messages, turns, the queues,
+                          commands, sessions, model and theme); running turns on worker
+                          threads (Turns), approvals and questions (Prompts), transcript
                           entries and session replay, commands and completion (FileIndex
                           lists the project's files for @), task worktrees
-apps/smith/               the terminal app; main.cpp has the flags and the -p mode
-apps/smith-desktop/       the desktop app: Backend (the QML-facing controller), the transcript
-                          model, palette, Markdown to rich text, Window, qml/
+apps/smith/               the terminal app: draws what the Controller reports, reads keys,
+                          and has its own pickers; main.cpp has the flags and the -p mode
+apps/smith-desktop/       the desktop app: Backend (the Controller as QML properties), the
+                          transcript model, palette, Markdown to rich text, Window, qml/
 tests/                    QtTest suites; FakeServer.h is a scripted streaming server
 ```
 
@@ -594,6 +597,10 @@ never include each other.
   waits all check.
 - **Parallel tools.** Consecutive read-only tool calls each get a thread, and their results go
   back to the model in call order. Approvals are still asked one at a time.
+- **One controller, two faces.** What a command or a message does is written once, in
+  `Controller`; the apps connect to its signals to show entries, put text in the input box or
+  open a picker. A change in behaviour is made there, and the `controller` suite tests it with
+  no UI.
 - **The terminal UI is hand-written:** termios raw mode, `QSocketNotifier` on stdin,
   SIGWINCH/SIGTERM through a self-pipe, and an inline renderer that only redraws the live region
   at the bottom.

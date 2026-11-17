@@ -5,6 +5,7 @@
 add_library(smith_frontend STATIC
   Activity.cpp
   Commands.cpp
+  Controller.cpp
   Duration.cpp
   Entry.cpp
   FileIndex.cpp

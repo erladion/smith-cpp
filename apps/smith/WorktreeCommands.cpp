@@ -28,7 +28,7 @@ void WorktreeCommands::create(const QString& task) {
     m_app.print(Entry::notice(NoticeLevel::Error, "Name the task, e.g. /worktree fix-login. /worktrees lists the ones there are."));
     return;
   }
-  if (!m_app.opts().sandbox->active()) {
+  if (!m_app.opts().controller.sandbox->active()) {
     m_app.print(Entry::notice(NoticeLevel::Error, "Task worktrees need the sandbox: it's what keeps git read-only for the agent. Start Smith "
                                                   "without --sandbox off (or \"sandbox\": \"off\" in the config) to use them."));
     return;
@@ -43,10 +43,10 @@ void WorktreeCommands::create(const QString& task) {
         return;
       }
       if (created.reused) {
-        m_app.sessions().resumeIn(worktree.path, {Entry::notice(NoticeLevel::Info, QString("Back in the task's worktree, on %1.").arg(worktree.branch))});
+        m_app.controller().resumeIn(worktree.path, {Entry::notice(NoticeLevel::Info, QString("Back in the task's worktree, on %1.").arg(worktree.branch))});
         return;
       }
-      m_app.sessions().newSession(
+      m_app.controller().newSession(
           worktree.path, {Entry::notice(NoticeLevel::Info, QString("Made a worktree for the task: %1, on %2 (from %3). The agent's changes stay here; "
                                                                    "git is read-only for it, so it can't commit. /land brings them to your branch.")
                                                                .arg(tildify(worktree.path), worktree.branch, created.from))});
@@ -109,7 +109,7 @@ void WorktreeCommands::showPicker(const QList<Worktree>& worktrees, const QMap<Q
       if (!worktree.main) {
         openMenu(worktree);
       } else if (!isCurrent(worktree)) {
-        m_app.sessions().resumeIn(worktree.path);
+        m_app.controller().resumeIn(worktree.path);
       }
     }
   });
@@ -125,7 +125,7 @@ void WorktreeCommands::openMenu(const Worktree& worktree) {
   const QString title = worktree.branch.isEmpty() ? folderName(worktree.path) : worktree.branch;
   m_app.openPicker(std::make_unique<Tui::Picker>(title, items), [this, worktree](const QString& value) {
     if (value == "switch") {
-      m_app.sessions().resumeIn(worktree.path);
+      m_app.controller().resumeIn(worktree.path);
     } else if (value == "land") {
       startLanding(worktree);
     } else if (value == "drop") {
@@ -328,7 +328,7 @@ void WorktreeCommands::startDrop(const Worktree& worktree) {
 void WorktreeCommands::remove(const Worktree& worktree, const QString& mainPath, bool discard) {
   if (isCurrent(worktree)) {
     // Out of it first: its session, agent and background jobs go with the switch.
-    m_app.sessions().resumeIn(mainPath, {Entry::notice(NoticeLevel::Info, QString("Back in your checkout, %1.").arg(tildify(mainPath)))});
+    m_app.controller().resumeIn(mainPath, {Entry::notice(NoticeLevel::Info, QString("Back in your checkout, %1.").arg(tildify(mainPath)))});
   }
   m_app.withActivity("Removing the worktree…", [this, worktree, discard]() -> std::function<void()> {
     removeWorktree(worktree, true, discard);

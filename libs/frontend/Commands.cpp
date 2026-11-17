@@ -181,7 +181,8 @@ QString commandHelp() {
   }
   return "Commands (type / to see them as you type; tab completes, enter runs):\n" + lines.join('\n') +
          "\nKeys: enter sends · shift+enter, \\ then enter, or ctrl+j adds a new line · esc interrupts the agent\n"
-         "      shift+tab switches plan mode · ↑/↓ recall earlier input · ctrl+c quits";
+         "      tab, while the agent works, queues the next task · shift+tab switches plan mode\n"
+         "      ↑/↓ recall earlier input · ctrl+c quits";
 }
 
 QList<Suggestion> suggest(const QString& input, const CompletionContext& ctx) {

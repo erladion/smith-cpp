@@ -15,7 +15,7 @@ void Backend::refreshWorktrees() {
     return;
   }
   const int generation = ++m_worktreesGeneration;
-  const QString cwd = m_project.cwd;
+  const QString cwd = m_controller.project().cwd;
   auto listed = std::make_shared<std::optional<QList<Worktree>>>();
   auto summaries = std::make_shared<QMap<QString, QString>>();
   launch(
@@ -73,7 +73,7 @@ void Backend::refreshWorktrees() {
 }
 
 bool Backend::isCurrent(const Worktree& worktree) const {
-  const QString cwd = realPath(m_project.cwd);
+  const QString cwd = realPath(m_controller.project().cwd);
   return cwd == worktree.path || cwd.startsWith(worktree.path + "/");
 }
 
@@ -91,7 +91,7 @@ std::optional<Worktree> Backend::worktreeAt(const QString& path) const {
 
 std::optional<Worktree> Backend::findTask(const QString& task) {
   if (!m_inRepository) {
-    notice(NoticeLevel::Error, QString("%1 isn't in a git repository.").arg(tildify(m_project.cwd)));
+    notice(NoticeLevel::Error, QString("%1 isn't in a git repository.").arg(tildify(m_controller.project().cwd)));
     return std::nullopt;
   }
   for (const Worktree& worktree : m_worktreeList) {
@@ -110,7 +110,7 @@ void Backend::setLanding(const QVariantMap& landing) {
 }
 
 void Backend::createWorktree(const QString& task) {
-  if (!m_pAgent || m_turns.busy()) {
+  if (!m_controller.agent() || m_controller.turns().busy()) {
     return;
   }
   const QString name = task.trimmed();
@@ -123,7 +123,7 @@ void Backend::createWorktree(const QString& task) {
                                "--sandbox off (or \"sandbox\": \"off\" in the config) to use them.");
     return;
   }
-  const QString cwd = m_project.cwd;
+  const QString cwd = m_controller.project().cwd;
   background("Making the worktree…", [this, cwd, name]() -> std::function<void()> {
     const CreatedWorktree created = createTaskWorktree(cwd, name);
     return [this, created]() {
@@ -133,10 +133,10 @@ void Backend::createWorktree(const QString& task) {
         return;
       }
       if (created.reused) {
-        resumeIn(worktree.path, {Entry::notice(NoticeLevel::Info, QString("Back in the task's worktree, on %1.").arg(worktree.branch))});
+        m_controller.resumeIn(worktree.path, {Entry::notice(NoticeLevel::Info, QString("Back in the task's worktree, on %1.").arg(worktree.branch))});
         return;
       }
-      startNewSession(worktree.path, {Entry::notice(NoticeLevel::Info, QString("Made a worktree for the task: %1, on %2 (from %3). The agent's "
+      m_controller.newSession(worktree.path, {Entry::notice(NoticeLevel::Info, QString("Made a worktree for the task: %1, on %2 (from %3). The agent's "
                                                                                "changes stay here; git is read-only for it, so it can't commit. "
                                                                                "Land them on your branch when it's done.")
                                                                            .arg(tildify(worktree.path), worktree.branch, created.from))});
@@ -145,17 +145,17 @@ void Backend::createWorktree(const QString& task) {
 }
 
 void Backend::switchToWorktree(const QString& path) {
-  if (!m_pAgent || m_turns.busy()) {
+  if (!m_controller.agent() || m_controller.turns().busy()) {
     return;
   }
   const std::optional<Worktree> worktree = worktreeAt(path);
   if (worktree && !isCurrent(*worktree)) {
-    resumeIn(worktree->path);
+    m_controller.resumeIn(worktree->path);
   }
 }
 
 void Backend::reviewLanding(const QString& path) {
-  if (!m_pAgent || m_turns.busy()) {
+  if (!m_controller.agent() || m_controller.turns().busy()) {
     return;
   }
   const std::optional<Worktree> found = worktreeAt(path);
@@ -171,8 +171,8 @@ void Backend::reviewLanding(const QString& path) {
   }
   const Worktree worktree = *found;
   // What was asked for helps the model name the commit; only known in the worktree's own session.
-  const QString request = isCurrent(worktree) ? firstRequest(m_pAgent->messages()) : QString();
-  const std::shared_ptr<Agent> agent = m_pAgent;
+  const QString request = isCurrent(worktree) ? firstRequest(m_controller.agent()->messages()) : QString();
+  const std::shared_ptr<Agent> agent = m_controller.agent();
   setLanding(QVariantMap{{"stage", "loading"}, {"branch", worktree.branch}});
   background("Reading the changes…", [this, worktree, request, agent]() -> std::function<void()> {
     Landing landing;
@@ -222,7 +222,7 @@ void Backend::reviewLanding(const QString& path) {
 }
 
 void Backend::land(const QString& mode, const QString& message) {
-  if (!m_landingState || m_turns.busy()) {
+  if (!m_landingState || m_controller.turns().busy()) {
     return;
   }
   const Landing landing = *m_landingState;
@@ -280,7 +280,7 @@ void Backend::closeLanding() {
 }
 
 void Backend::removeWorktree(const QString& path, bool discard) {
-  if (!m_pAgent || m_turns.busy()) {
+  if (!m_controller.agent() || m_controller.turns().busy()) {
     return;
   }
   const std::optional<Worktree> found = worktreeAt(path);
@@ -305,7 +305,7 @@ void Backend::removeWorktree(const QString& path, bool discard) {
   }
   if (isCurrent(worktree)) {
     // Out of it first: its session, agent and background jobs go with the switch.
-    resumeIn(mainPath, {Entry::notice(NoticeLevel::Info, QString("Back in your checkout, %1.").arg(tildify(mainPath)))});
+    m_controller.resumeIn(mainPath, {Entry::notice(NoticeLevel::Info, QString("Back in your checkout, %1.").arg(tildify(mainPath)))});
   }
   background("Removing the worktree…", [this, worktree, discard]() -> std::function<void()> {
     Smith::removeWorktree(worktree, true, discard);

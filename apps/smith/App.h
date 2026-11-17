@@ -7,9 +7,7 @@
 #include "tui/Renderer.h"
 #include "tui/Terminal.h"
 #include "Entries.h"
-#include "frontend/FileIndex.h"
-#include "frontend/Prompts.h"
-#include "frontend/Turns.h"
+#include "frontend/Controller.h"
 #include "Suggestions.h"
 #include "Types.h"
 
@@ -28,18 +26,13 @@ class ConnectionCommands;
 class SessionCommands;
 class WorktreeCommands;
 
-// How the session on screen started, for the banner's greeting.
-struct Start {
-  bool resumed = false;
-  std::optional<QDateTime> lastUsed;
-};
-
-// The interactive terminal UI: a transcript above, a live region below. This
-// class runs the screen, the keys and agent turns; the commands that switch
-// session, project, endpoint or model are in SessionCommands and
-// ConnectionCommands, and work through its public part. Its own code is
-// split by what it does: App.cpp (startup, terminal, turns), AppRender.cpp,
-// AppInput.cpp and AppCommands.cpp.
+// The interactive terminal UI: a transcript above, a live region below. What
+// happens is the Controller's (messages, turns, commands, sessions); this
+// class draws it, reads the keys and opens the pickers it asks for. Its code
+// is split by what it does: App.cpp (startup, terminal, the controller's
+// signals), AppRender.cpp, AppInput.cpp and AppCommands.cpp; the pickers for
+// sessions, projects, endpoints and worktrees are in SessionCommands,
+// ConnectionCommands and WorktreeCommands.
 class App : public QObject {
   Q_OBJECT
 
@@ -52,19 +45,14 @@ public:
 
   // ---- for the command modules ----
 
+  Controller& controller() { return m_controller; }
   const TuiOptions& opts() const { return m_options; }
-  const AgentHooks& hooks() const { return m_hooks; }
-  const std::shared_ptr<Agent>& agent() const { return m_pAgent; }
-  void setAgent(const std::shared_ptr<Agent>& agent) { m_pAgent = agent; }
-  const ServerPtr& server() const { return m_pServer; }
-  void setServer(const ServerPtr& server) { m_pServer = server; }
-  const ProjectView& project() const { return m_project; }
-  void setProject(const ProjectView& project) { m_project = project; }
+  const std::shared_ptr<Agent>& agent() const { return m_controller.agent(); }
+  const ServerPtr& server() const { return m_controller.server(); }
+  const ProjectView& project() const { return m_controller.project(); }
 
   // Adds an entry to the transcript.
   void print(const Entry& entry);
-  // Clears the screen and starts a fresh transcript.
-  void startOver(const Start& start, const QList<Entry>& entries);
   // Shows a picker; `onPick` gets the value of the item chosen (not called on esc).
   void openPicker(std::unique_ptr<Tui::Picker> picker, std::function<void(const QString&)> onPick,
                   std::function<void(const QString&)> onAction = {});
@@ -74,13 +62,8 @@ public:
   // Shows a spinner while `work` runs on a worker thread. It returns what to
   // do next on the UI thread; an exception is printed instead.
   void withActivity(const QString& activity, std::function<std::function<void()>()> work);
-  // Cancelled when the app closes; for requests `work` makes, so quitting doesn't wait for them.
-  CancelPtr closing() const { return m_turns.closing(); }
-  // Fetches the server's model list again, for completing /model.
-  void refreshModels();
   // Lists the repository's task worktrees again, for completing /land and /drop.
   void refreshTasks();
-  SessionCommands& sessions() { return *m_pSessions; }
 
 Q_SIGNALS:
   void finished();
@@ -104,7 +87,8 @@ private:
     QString stashed;
   };
 
-  void printBanner(const Start& start);
+  // The transcript starts again with `entries` (the controller's startedOver).
+  void startOver(const QList<Entry>& entries);
   void onInput(const QString& data);
   void onResize();
   void reprint();
@@ -122,7 +106,7 @@ private:
   void render();
   QList<Tui::Line> liveLines();
 
-  void onEvent(const AgentEvent& event);
+  void onAgentEvent(const AgentEvent& event, const std::optional<Entry>& entry);
   void appendDelta(BlockKind kind, const QString& text);
   void flushLive();
 
@@ -132,49 +116,34 @@ private:
 
   QList<Suggestion> currentSuggestions() const;
   void onKey(const Tui::Key& key);
-  void queueMessage(const QString& value);
-  // Tab while the agent works: `value` starts as a turn of its own once this one is done.
-  void queueNext(const QString& value);
-  void submit(const QString& value);
-  void runCommand(const QString& text);
-  // Runs an agent turn; `then` follows on the UI thread. A timed turn is one the user sent.
-  void runBusy(const QString& activity, std::function<void(const CancelPtr&)> work, std::function<void()> then = {}, bool timed = false);
 
   // Full-screen digital rain until it ends or a key is pressed; then `then`.
   void playRain(const Tui::Rain::Options& options, std::function<void()> then);
   void stopRain();
 
-  void undo();
+  // What the terminal does for a command the controller hands it: worktrees.
+  bool runAppCommand(const QString& command, const QString& arg);
+  // The picker the controller asks for.
+  void openPickerFor(const QString& kind, const QString& arg);
   void listSkills();
-  void manageJobs(const QString& arg);
-  void setNetwork(const QString& arg);
-  // /theme: a picker without an argument.
-  void setTheme(const QString& arg);
-  // /plan: switches plan mode, or sets it with "on" or "off".
-  void setPlanning(const QString& arg);
+  void listJobs();
+  void pickTheme();
   // After a turn in plan mode: carry out the plan, or keep planning.
   void offerPlan();
-  void showChanges();
+  void playRedPill();
+  void applyTheme();
 
   TuiOptions m_options;
-  AgentHooks m_hooks;
-  std::shared_ptr<Agent> m_pAgent;
-  ServerPtr m_pServer;
-  ProjectView m_project;
+  Controller m_controller;
   Tui::Terminal m_terminal;
   Tui::InlineRenderer m_renderer;
   Tui::KeyReader m_keys;
   Tui::LineEditor m_editor;
   SuggestionList m_suggestions;
-  // The project's files, for @ mentions.
-  FileIndex m_fileIndex;
   std::unique_ptr<ConnectionCommands> m_pConnection;
   std::unique_ptr<SessionCommands> m_pSessions;
   std::unique_ptr<WorktreeCommands> m_pWorktrees;
 
-  // Approvals and questions from the agent, and the turn or task under way.
-  Prompts m_prompts;
-  TurnRunner m_turns;
   // The option highlighted in the question on screen.
   int m_questionSelected = 0;
 

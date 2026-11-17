@@ -1,9 +1,7 @@
 #pragma once
 
-#include "frontend/FileIndex.h"
-#include "frontend/Prompts.h"
+#include "frontend/Controller.h"
 #include "frontend/Runtime.h"
-#include "frontend/Turns.h"
 #include "frontend/Worktrees.h"
 #include "Palette.h"
 #include "core/Themes.h"
@@ -25,8 +23,9 @@ namespace Smith::Desktop {
 
 // What the QML window works with: startup, the conversation, agent turns,
 // approvals and questions, and the session, project, endpoint and model
-// controls. Agent turns run on worker threads, as in the TUI; everything
-// here is called and changed on the GUI thread. The code is split by section:
+// controls. What happens is the Controller's, as in the terminal app; this
+// turns it into properties, transcript rows and picker requests for QML.
+// Everything here is called and changed on the GUI thread. The code is split by section:
 // Backend.cpp, BackendProperties.cpp, BackendCommands.cpp, BackendSessions.cpp
 // and BackendWorktrees.cpp.
 class Backend : public QObject {
@@ -116,14 +115,14 @@ public:
   QString version() const;
   TranscriptModel* transcript() { return &m_transcript; }
 
-  bool busy() const { return m_turns.busy(); }
-  bool agentRunning() const { return m_turns.agentRunning(); }
-  QString activity() const { return m_turns.activity(); }
-  bool compacting() const { return m_turns.compacting(); }
-  qint64 turnStartedAt() const { return m_turns.startedAt(); }
+  bool busy() const { return m_controller.turns().busy(); }
+  bool agentRunning() const { return m_controller.turns().agentRunning(); }
+  QString activity() const { return m_controller.turns().activity(); }
+  bool compacting() const { return m_controller.turns().compacting(); }
+  qint64 turnStartedAt() const { return m_controller.turns().startedAt(); }
   QVariantList todos() const;
   QStringList queued() const;
-  QStringList nextTasks() const { return m_turns.nextTasks(); }
+  QStringList nextTasks() const { return m_controller.turns().nextTasks(); }
   QVariantMap approval() const;
   QVariantMap question() const;
 
@@ -131,17 +130,17 @@ public:
   QString serverLabel() const;
   QStringList endpoints() const;
   QString model() const;
-  QVariantList models() const { return m_models; }
+  QVariantList models() const;
   QString reasoning() const;
-  qint64 contextTokens() const { return m_turns.tokens().value_or(0); }
-  int contextLimit() const { return m_turns.limit().value_or(0); }
+  qint64 contextTokens() const { return m_controller.turns().tokens().value_or(0); }
+  int contextLimit() const { return m_controller.turns().limit().value_or(0); }
   bool sandboxActive() const;
   QString sandboxKind() const;
   QString sandboxDescription() const;
   bool network() const;
   int jobsRunning() const;
   QVariantList jobs() const;
-  QString projectPath() const { return m_project.cwd; }
+  QString projectPath() const { return m_controller.project().cwd; }
   QString projectName() const;
   QVariantList skills() const;
   QString sessionId() const;
@@ -152,10 +151,10 @@ public:
   QVariantList recentProjects() const;
   bool canUndo() const;
   bool planning() const;
-  QString usage() const { return usageText(m_turns.usage()); }
+  QString usage() const { return usageText(m_controller.turns().usage()); }
   QString usageDetail() const;
   int filesListed() const { return m_filesListed; }
-  QString worktreeBranch() const { return m_project.worktreeBranch; }
+  QString worktreeBranch() const { return m_controller.project().worktreeBranch; }
   bool inRepository() const { return m_inRepository; }
   QVariantList worktrees() const { return m_worktrees; }
   QVariantMap landing() const { return m_landing; }
@@ -174,7 +173,6 @@ public:
   Q_INVOKABLE void decide(const QString& decision);
   Q_INVOKABLE void answerOption(int index);
   Q_INVOKABLE void answerText(const QString& text);
-  Q_INVOKABLE void dismissQuestion();
   Q_INVOKABLE void setModel(const QString& id);
   Q_INVOKABLE void setReasoning(const QString& level);
   Q_INVOKABLE void setEndpoint(const QString& name);
@@ -243,22 +241,15 @@ Q_SIGNALS:
 
 private:
   void ready();
-  void printBanner(bool resumed, const std::optional<QDateTime>& lastUsed);
   void notice(NoticeLevel level, const QString& text);
-  void onEvent(const AgentEvent& event);
-  // Runs an agent turn; `then` follows on the GUI thread. A timed turn is one the user sent.
-  void runTurn(const QString& activity, std::function<void(const CancelPtr&)> work, std::function<void()> then = {}, bool timed = false);
+  void onAgentEvent(const AgentEvent& event, const std::optional<Entry>& entry);
+  void onPickerRequested(const QString& kind, const QString& arg);
+  void onThemeChanged();
   // Runs `work` on a worker thread with `activity` showing; its result runs on the GUI thread.
   void background(const QString& activity, std::function<std::function<void()>()> work);
-  void runCommand(const QString& text);
-  void switchModel(const QString& id);
-  void switchEndpoint(const QString& name, const QString& preferredModel = {});
-  std::optional<QList<Entry>> enterProject(const QString& folder);
-  void startOver(bool resumed, const std::optional<QDateTime>& lastUsed, const QList<Entry>& entries);
   void launch(std::function<void()> work, std::function<void()> finished);
-  void startNewSession(const QString& folder, const QList<Entry>& extra);
-  void openSessionIn(const QString& id, const QString& folder, const QList<Entry>& extra);
-  void resumeIn(const QString& folder, const QList<Entry>& extra = {});
+  // Commands only the window carries out: worktrees, the rain.
+  bool runAppCommand(const QString& command, const QString& arg);
   // The task's worktree from the last listing (the project's own when `task` is empty); notes why not.
   std::optional<Worktree> findTask(const QString& task);
   std::optional<Worktree> worktreeAt(const QString& path) const;
@@ -275,22 +266,13 @@ private:
   Palette m_palette;
   TranscriptModel m_transcript;
   std::shared_ptr<Runtime> m_pRuntime;
-  std::shared_ptr<Agent> m_pAgent;
-  ServerPtr m_pServer;
-  ProjectView m_project;
-  SessionControl m_sessionControl;
-  AgentHooks m_hooks;
+  Controller m_controller;
 
   QString m_state = "starting";
   QString m_startupError;
-  // Approvals and questions from the agent, and the turn or task under way.
-  Prompts m_prompts;
-  TurnRunner m_turns;
-  QVariantList m_models;
   bool m_allSessions = false;
   QVariantList m_sessions;
   QList<Worktree> m_worktreeList;
-  FileIndex m_fileIndex;
   int m_filesListed = 0;
   QVariantList m_worktrees;
   bool m_inRepository = false;

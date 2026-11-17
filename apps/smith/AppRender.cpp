@@ -43,10 +43,10 @@ void App::render() {
     return;
   }
   // The animations only need a timer while one is on screen.
-  if (!m_turns.compacting()) {
+  if (!m_controller.turns().compacting()) {
     m_pStrip.reset();
   }
-  const bool animating = (!m_turns.activity().isEmpty() && !prompting()) || streaming();
+  const bool animating = (!m_controller.turns().activity().isEmpty() && !prompting()) || streaming();
   if (animating && !m_ticker.isActive()) {
     m_ticker.start();
   } else if (!animating && m_ticker.isActive()) {
@@ -66,10 +66,10 @@ QList<Line> App::liveLines() {
       lines.append(wrap(Line{Span{m_live->text, REASONING}}, w));
     }
   }
-  const QString activity = m_turns.activity();
+  const QString activity = m_controller.turns().activity();
   if (!activity.isEmpty() && !prompting()) {
-    const QString elapsed = m_turns.elapsed() ? " · " + formatDuration(*m_turns.elapsed()) : QString();
-    if (m_turns.compacting() && matrix() && Tui::colorsEnabled()) {
+    const QString elapsed = m_controller.turns().elapsed() ? " · " + formatDuration(*m_controller.turns().elapsed()) : QString();
+    if (m_controller.turns().compacting() && matrix() && Tui::colorsEnabled()) {
       // A strip of rain, with the activity beside its middle row.
       if (!m_pStrip) {
         Tui::Rain::Options options;
@@ -87,24 +87,24 @@ QList<Line> App::liveLines() {
         lines.append(truncate(line, w));
       }
     } else {
-      const Spinner& spinner = spinnerFor(m_options.theme.base);
+      const Spinner& spinner = spinnerFor(m_controller.theme().base);
       lines.append(Line{});
       lines.append(truncate(Line{Span{spinner.frames[m_frame % spinner.frames.size()], fg(spinner.color)}, Span{" " + activity + elapsed, DIM}}, w));
     }
     // The step the agent is on, from its checklist.
-    const TodoList todos = m_pAgent->todos();
+    const TodoList todos = m_controller.agent()->todos();
     for (const Todo& todo : todos) {
-      if (todo.status == TodoStatus::InProgress && m_turns.busy()) {
+      if (todo.status == TodoStatus::InProgress && m_controller.turns().busy()) {
         const int done = todos.size() - unfinished(todos).size();
         lines.append(truncate(Line{Span{QString("  ▶ %1/%2 ").arg(done + 1).arg(todos.size()), fg(Color::Yellow)}, Span{todo.content, DIM}}, w));
         break;
       }
     }
   }
-  if (const ApprovalRequest* approval = m_prompts.approval()) {
+  if (const ApprovalRequest* approval = m_controller.prompts().approval()) {
     lines.append(Line{});
     lines.append(approvalBox(*approval, w, m_terminal.rows()));
-  } else if (const Question* question = m_prompts.question()) {
+  } else if (const Question* question = m_controller.prompts().question()) {
     lines.append(Line{});
     lines.append(questionBox(*question, m_questionSelected, w));
     const QList<Line> answer = prefixed(Line{Span{"› ", fg(Color::Cyan)}}, Line{Span{"  ", {}}}, m_editor.render("Your answer"), w - 4);
@@ -112,13 +112,13 @@ QList<Line> App::liveLines() {
   } else if (m_picker) {
     lines.append(Line{});
     lines.append(box(m_picker->picker->lines(), Color::Cyan, w));
-  } else if (m_textPrompt && !m_turns.busy()) {
+  } else if (m_textPrompt && !m_controller.turns().busy()) {
     lines.append(Line{});
     lines.append(truncate(Line{Span{m_textPrompt->title, Style{.bold = true}}, Span{"  enter to confirm · esc cancels", DIM}}, w));
     const QList<Line> prompt = prefixed(Line{Span{"› ", fg(Color::Yellow)}}, Line{Span{"  ", {}}}, m_editor.render({}), w - 4);
     lines.append(box(prompt, Color::Yellow, w, true));
-  } else if (!m_turns.busy() || agentRunning()) {
-    const QStringList queued = m_pAgent->queuedMessages();
+  } else if (!m_controller.turns().busy() || agentRunning()) {
+    const QStringList queued = m_controller.agent()->queuedMessages();
     if (!queued.isEmpty()) {
       lines.append(Line{});
       for (const QString& text : queued) {
@@ -126,7 +126,7 @@ QList<Line> App::liveLines() {
       }
       lines.append(Line{Span{"  queued: the agent gets this at its next step", Style{.dim = true, .italic = true}}});
     }
-    const QStringList next = m_turns.nextTasks();
+    const QStringList next = m_controller.turns().nextTasks();
     if (!next.isEmpty()) {
       lines.append(Line{});
       for (int i = 0; i < next.size(); i++) {
@@ -136,8 +136,8 @@ QList<Line> App::liveLines() {
                                  .arg(next.size() == 1 ? QString("starts") : QString("they start one by one")),
                              Style{.dim = true, .italic = true}}});
     }
-    const bool planning = m_pAgent->planning();
-    const QString placeholder = m_turns.busy() ? "Add to what the agent is doing (enter), or queue the next task (tab)"
+    const bool planning = m_controller.agent()->planning();
+    const QString placeholder = m_controller.turns().busy() ? "Add to what the agent is doing (enter), or queue the next task (tab)"
                                 : planning     ? "Ask for a plan: the agent reads, changes nothing (shift+tab ends plan mode)"
                                                : "Ask for something, or /help";
     const QList<Line> prompt = prefixed(Line{Span{"› ", fg(planning ? Color::Blue : Color::Cyan)}}, Line{Span{"  ", {}}}, m_editor.render(placeholder), w - 4);
@@ -146,20 +146,20 @@ QList<Line> App::liveLines() {
     lines.append(m_suggestions.lines(currentSuggestions(), w));
   }
   Status status;
-  status.endpoint = m_pServer->name();
-  status.model = m_pAgent->model();
-  status.reasoning = m_pAgent->reasoning();
-  status.tokens = m_turns.tokens();
-  status.limit = m_turns.limit();
-  status.sandboxActive = m_options.sandbox->active();
-  status.sandboxType = m_options.sandbox->type();
-  status.network = m_options.sandbox->network();
-  status.busy = m_turns.busy();
+  status.endpoint = m_controller.server()->name();
+  status.model = m_controller.agent()->model();
+  status.reasoning = m_controller.agent()->reasoning();
+  status.tokens = m_controller.turns().tokens();
+  status.limit = m_controller.turns().limit();
+  status.sandboxActive = m_options.controller.sandbox->active();
+  status.sandboxType = m_options.controller.sandbox->type();
+  status.network = m_options.controller.sandbox->network();
+  status.busy = m_controller.turns().busy();
   status.queueing = agentRunning();
-  status.jobs = m_options.jobs ? m_options.jobs->running() : 0;
-  status.worktreeBranch = m_project.worktreeBranch;
-  status.planning = m_pAgent->planning();
-  status.usage = usageText(m_turns.usage());
+  status.jobs = m_options.controller.jobs ? m_options.controller.jobs->running() : 0;
+  status.worktreeBranch = m_controller.project().worktreeBranch;
+  status.planning = m_controller.agent()->planning();
+  status.usage = usageText(m_controller.turns().usage());
   if (streaming()) {
     const int frame = m_frame;
     status.filler = [frame](int n) { return Tui::codeStream(frame / STREAM_EVERY, n); };
@@ -170,11 +170,10 @@ QList<Line> App::liveLines() {
 
 // ---- agent events ----
 
-void App::onEvent(const AgentEvent& event) {
+void App::onAgentEvent(const AgentEvent& event, const std::optional<Entry>& entry) {
   if (m_closed) {
     return;
   }
-  const std::optional<Entry> entry = m_turns.apply(event);
   if (const auto* delta = std::get_if<Event::Delta>(&event)) {
     appendDelta(delta->kind, delta->text);
   } else if (entry || std::holds_alternative<Event::ResponseEnd>(event) || std::holds_alternative<Event::ToolPrepare>(event)) {
