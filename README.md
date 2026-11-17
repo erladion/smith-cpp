@@ -59,7 +59,7 @@ folder argument and the options marked "both".
 | `--model <name>` | both | The model. Default: the last one used on this server, else the endpoint's `model`, else the first the server lists. |
 | `--reasoning <level>` | both | How much the model thinks: `default`, `off`, `low`, `medium` or `high`. Default: the last one used. |
 | `--context-size <n>` | both | The context window in tokens, for a server that doesn't report it. |
-| `--temperature <n>` | both | The sampling temperature. Default: the server's. |
+| `--temperature <n>` | both | The sampling temperature, over any in the config's `params`. Default: the server's. |
 | `--max-steps <n>` | both | Model calls allowed per message. Default: `maxSteps` in the config, else 50. |
 | `--sandbox <type>` | both | `bwrap` (default), `container` or `off`. Smith won't start if the sandbox can't run. `off` has to be given on every run. |
 | `--network` | both | Let sandboxed commands use the network (blocked by default). |
@@ -142,6 +142,10 @@ optional; an unknown key or a wrong value stops Smith with a message saying wher
 | `endpoints.<name>.apiKeyEnv` | | The environment variable to read the key from, so it isn't stored in the file. Not together with `apiKey`. |
 | `endpoints.<name>.model` | | The model to use when you haven't picked one on this server. |
 | `endpoints.<name>.contextSize` | | The context window in tokens, for a server that doesn't report it. |
+| `endpoints.<name>.params` | | Fields sent with every request to this server, such as [sampling settings](#sampling-settings-and-loops). |
+| `endpoints.<name>.loopDetection` | | `loopDetection` for this server. |
+| `models.<name>` | | `params` and `loopDetection` for a model on any server. `<name>` is its name, or a pattern such as `"qwen3*"`. |
+| `loopDetection` | `false` | Stop a response that keeps [repeating itself](#sampling-settings-and-loops), and ask the model to move on. |
 | `maxSteps` | `50` | Model calls allowed per message you send. |
 | `subagents` | `true` | Whether the model can hand work to sub-agents (the `task` tool). |
 | `toolLog` | `true` | Whether tool calls are logged to `~/.local/share/smith/logs/<session>.jsonl`. |
@@ -166,6 +170,41 @@ optional; an unknown key or a wrong value stops Smith with a message saying wher
 Smith also remembers some choices between runs, in `~/.config/smith/preferences.json`: the last
 endpoint, the model per server, the reasoning level, the theme picked with `/theme`, and what you
 allowed per project.
+
+### Sampling settings and loops
+
+Smith sends the model, the messages and your `/reasoning` level; how the model samples is up to
+the server unless you say. A thinking model sampled with chat defaults, or too greedily, can
+go round in circles in its reasoning. Give it the settings from its model card with `params`:
+
+```json
+{
+  "models": {
+    "qwen3*": { "params": { "temperature": 0.6, "top_p": 0.95, "top_k": 20, "min_p": 0, "presence_penalty": 1.5 } }
+  },
+  "endpoints": {
+    "local": { "baseURL": "http://localhost:8080/v1", "params": { "presence_penalty": 1.0 } }
+  }
+}
+```
+
+- `params` go with every request, as they are. On a model's entry they follow it to any server;
+  on an endpoint they're for everything that server runs. A model's entry wins over its
+  endpoint's, an exact name over a pattern, and the first pattern that matches over later ones.
+  `chat_template_kwargs` and other objects are merged rather than replaced.
+- `temperature`, `top_p`, `presence_penalty` and `frequency_penalty` are part of the OpenAI API,
+  so any server takes them. `top_k`, `min_p` and `repetition_penalty` work with llama.cpp, vLLM
+  and SGLang; some servers ignore them, and a strict proxy may refuse the request, which then
+  says so.
+- What you choose for a run wins over `params`: `--temperature`, and `/reasoning` (which sets
+  `reasoning_effort` and `chat_template_kwargs.enable_thinking`). The fields Smith writes itself
+  (`model`, `messages`, `stream`, `tools`) can't be in `params`.
+
+With `"loopDetection": true` (at the top, on an endpoint or on a model), Smith watches what the
+model writes as it streams. When the same passage has come four times, it stops the response,
+says so, and asks again with a note to stop going over it and take the next step. If the next
+response loops too, the turn ends there. It is off by default: a response that really does repeat
+a passage, the same block of code four times say, would be cut short.
 
 ### Permissions
 

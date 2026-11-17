@@ -81,6 +81,7 @@ private Q_SLOTS:
   void configMaxSteps();
   void configRejectsInvalidFiles();
   void configWarnsAboutReadableKeys();
+  void configModelSettings();
 
   // choosing a model
   void prefersRememberedThenConfiguredThenFirst();
@@ -681,6 +682,44 @@ void TestTools::configWarnsAboutReadableKeys() {
   QVERIFY_MATCH(loadConfig(file).warnings.join('\n'), "chmod 600");
   chmod(file, 0600);
   QCOMPARE(loadConfig(file).warnings, QStringList());
+}
+
+void TestTools::configModelSettings() {
+  // By hand, so the models keep this order: the exact name is listed last but still wins.
+  const QString file = m_pDir->file("models.json");
+  write(file, R"({
+  "models": {
+    "qwen3*": { "params": { "top_k": 20, "chat_template_kwargs": { "a": 1 } }, "loopDetection": true },
+    "*": { "params": { "top_k": 40 } },
+    "Qwen3-Exact": { "params": { "min_p": 0 } }
+  },
+  "endpoints": {
+    "gpu": { "baseURL": "http://x/v1", "params": { "presence_penalty": 1.5, "top_k": 10, "chat_template_kwargs": { "b": 2 } } }
+  }
+})");
+  const Config config = loadConfig(file);
+  QVERIFY(!config.loopDetection);
+
+  // The model's entry over the endpoint's, objects merged.
+  ModelSettings settings = config.settingsFor("gpu", "qwen3-27b");
+  QCOMPARE(settings.params, QJsonObject({{"presence_penalty", 1.5}, {"top_k", 20}, {"chat_template_kwargs", QJsonObject{{"a", 1}, {"b", 2}}}}));
+  QCOMPARE(settings.loopDetection, std::optional<bool>(true));
+  settings = config.settingsFor("gpu", "qwen3-exact");
+  QCOMPARE(settings.params, QJsonObject({{"presence_penalty", 1.5}, {"top_k", 10}, {"chat_template_kwargs", QJsonObject{{"b", 2}}}, {"min_p", 0}}));
+  QCOMPARE(settings.loopDetection, std::optional<bool>(false));
+  // A server given by URL: only the models section.
+  QCOMPARE(config.settingsFor({}, "llama").params, QJsonObject({{"top_k", 40}}));
+
+  QCOMPARE(loadConfig(writeConfig(m_pDir->path(), "loops.json", {{"loopDetection", true}})).settingsFor({}, "m").loopDetection,
+           std::optional<bool>(true));
+  QVERIFY_THROWS_MATCH(loadConfig(writeConfig(m_pDir->path(), "reserved.json",
+                                              {{"endpoints", QJsonObject{{"a", QJsonObject{{"baseURL", "http://x/v1"}, {"params", QJsonObject{{"messages", 1}}}}}}}})),
+                       "Smith sets this field itself[\\s\\S]*endpoints\\.a\\.params\\.messages");
+  QVERIFY_THROWS_MATCH(loadConfig(writeConfig(m_pDir->path(), "notobject.json", {{"models", QJsonObject{{"m", QJsonObject{{"params", 3}}}}}})),
+                       "models\\.m\\.params");
+  QVERIFY_THROWS_MATCH(loadConfig(writeConfig(m_pDir->path(), "notbool.json", {{"loopDetection", "yes"}})), "expected boolean");
+  QVERIFY_THROWS_MATCH(loadConfig(writeConfig(m_pDir->path(), "typo.json", {{"models", QJsonObject{{"m", QJsonObject{{"parms", QJsonObject{}}}}}}})),
+                       "\"parms\"");
 }
 
 namespace {

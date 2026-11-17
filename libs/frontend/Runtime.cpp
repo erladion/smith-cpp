@@ -384,6 +384,9 @@ std::shared_ptr<Agent> Runtime::createAgent(const AgentHooks& hooks, const std::
   options.history = current ? Messages{} : m_resumed;
   options.cwd = project.cwd;
   options.temperature = m_temperature;
+  options.settingsFor = [config = std::make_shared<const Config>(m_config)](const QString& endpoint, const QString& model) {
+    return config->settingsFor(endpoint, model);
+  };
   options.maxSteps = m_maxSteps;
   options.sandbox = m_pSandbox;
   options.tools = project.tools;

@@ -5,6 +5,7 @@
 #include "TestUtil.h"
 
 #include "core/Agent.h"
+#include "core/Json.h"
 #include "core/Context.h"
 #include "core/Server.h"
 #include "core/tools/Tools.h"
@@ -59,6 +60,10 @@ private Q_SLOTS:
   void askUserWaitsForAnswer();
   void runLaterFilesAskAndAreReported();
   void protectRunLaterOff();
+
+  // The config's settings.
+  void configParamsGoWithRequests();
+  void loopingResponsesAreStopped();
 
   // Additions.
   void escInterruptsRunningCommand();
@@ -1014,6 +1019,81 @@ void TestAgent::noReminderForTheUsersStepsOrAnOldList() {
   old->agent->send("what does main.cpp do?", makeCancel());
   QCOMPARE(m_pFake->requests().size(), 1);
   QVERIFY(!hasNotice(old->events, "Reminded"));
+}
+
+void TestAgent::configParamsGoWithRequests() {
+  QStringList asked;
+  m_pFake->setScript({FakeServer::text("Hi.")});
+  auto h = make(ApprovalDecision::Allow, [&](AgentOptions& options, Harness&) {
+    options.reasoning = "off";
+    options.temperature = 0.3;
+    options.settingsFor = [&](const QString& endpoint, const QString& model) {
+      asked << endpoint + "/" + model;
+      ModelSettings settings;
+      settings.params = QJsonObject{{"top_k", 20}, {"temperature", 0.9}, {"chat_template_kwargs", QJsonObject{{"preserve", true}}}};
+      return settings;
+    };
+  });
+  h->agent->send("hi", makeCancel());
+  const QJsonObject request = m_pFake->requests().value(0);
+  QCOMPARE(request.value("top_k").toInt(), 20);
+  // What you chose for this run wins: --temperature, and /reasoning beside the config's template arguments.
+  QCOMPARE(request.value("temperature").toDouble(), 0.3);
+  QCOMPARE(request.value("chat_template_kwargs").toObject(), QJsonObject({{"preserve", true}, {"enable_thinking", false}}));
+  QCOMPARE(request.value("model").toString(), QString("fake"));
+  // A server given by URL has no endpoint name.
+  QVERIFY(asked.contains("/fake"));
+}
+
+void TestAgent::loopingResponsesAreStopped() {
+  const QString passage = "Wait, the build needs the flag. Let me check the CMake file again to see whether the flag is set, because if it "
+                          "isn't then the build will fail the same way it did before, and I should look at that first. ";
+  QList<QJsonObject> looping;
+  for (int i = 0; i < 12; i++) {
+    looping << QJsonObject{{"reasoning_content", passage}};
+  }
+  looping << QJsonObject{{"content", "never reached"}};
+  const FakeServer::Reply loop = FakeServer::stream(looping, "stop");
+  auto watching = [](AgentOptions& options, Harness&) {
+    options.settingsFor = [](const QString&, const QString&) {
+      ModelSettings settings;
+      settings.loopDetection = true;
+      return settings;
+    };
+  };
+
+  // Stopped, and asked once more with a note that goes with that request only.
+  m_pFake->setScript({loop, FakeServer::text("Done.")});
+  auto h = make(ApprovalDecision::Allow, watching);
+  h->agent->send("build it", makeCancel());
+  QCOMPARE(m_pFake->requests().size(), 2);
+  QVERIFY_MATCH(Json::stringify(lastMessage(m_pFake->requests()[1]).value("content")), "Smith stopped your last response");
+  QVERIFY(hasNotice(h->events, "repeating itself"));
+  QVERIFY(!textOf(h->events, BlockKind::Text).contains("never reached"));
+  QVERIFY(textOf(h->events, BlockKind::Reasoning).size() < passage.size() * 8);
+  const Messages history = h->agent->messages();
+  QCOMPARE(history.size(), 3);
+  QCOMPARE(messageText(history[1]), QString("build it"));
+  QCOMPARE(messageText(history[2]), QString("Done."));
+  QVERIFY(endsWithDone(h->events, DoneReason::Stop));
+
+  // Twice in a row: the turn ends.
+  m_pFake->clearRequests();
+  m_pFake->setScript({loop, loop, FakeServer::text("unused")});
+  auto again = make(ApprovalDecision::Allow, watching);
+  again->agent->send("build it", makeCancel());
+  QCOMPARE(m_pFake->requests().size(), 2);
+  QVERIFY(hasNotice(again->events, "round in circles again"));
+  QCOMPARE(again->agent->messages().size(), 2);
+  QVERIFY(endsWithDone(again->events, DoneReason::Stop));
+
+  // Off: the response is left alone.
+  m_pFake->clearRequests();
+  m_pFake->setScript({loop});
+  auto off = make();
+  off->agent->send("build it", makeCancel());
+  QCOMPARE(m_pFake->requests().size(), 1);
+  QCOMPARE(messageText(off->agent->messages().last()), QString("never reached"));
 }
 
 void TestAgent::checklistSurvivesResumeAndCompaction() {

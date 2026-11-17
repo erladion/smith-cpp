@@ -23,6 +23,10 @@ QJsonValue parse(const QString& text);
 // QJsonObject sorts its keys. Empty if the text isn't valid JSON or has no such object.
 QStringList jsonKeyOrder(const QString& text, const QStringList& path);
 
+// `base` with the fields of `over` on top. Where both have an object, they're
+// merged one level deep, so e.g. two sets of chat_template_kwargs combine.
+QJsonObject overlay(const QJsonObject& base, const QJsonObject& over);
+
 std::optional<QString> optString(const QJsonObject& object, const QString& key);
 std::optional<int> optInt(const QJsonObject& object, const QString& key);
 std::optional<double> optNumber(const QJsonObject& object, const QString& key);

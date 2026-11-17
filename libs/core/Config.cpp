@@ -165,6 +165,24 @@ private:
   QStringList m_problems;
 };
 
+// Fields Smith writes itself; the config can't replace them.
+const QStringList RESERVED_PARAMS = {"model", "messages", "stream", "stream_options", "tools", "parallel_tool_calls"};
+
+// "params" and "loopDetection", on an endpoint or a "models" entry.
+ModelSettings modelSettings(const QJsonObject& raw, const QString& path, Checker& check) {
+  ModelSettings settings;
+  if (const auto params = check.object(raw, "params", path)) {
+    for (const QString& key : params->keys()) {
+      if (RESERVED_PARAMS.contains(key)) {
+        check.problem(path + ".params." + key, "Smith sets this field itself; it can't be in params");
+      }
+    }
+    settings.params = *params;
+  }
+  settings.loopDetection = check.boolean(raw, "loopDetection", path);
+  return settings;
+}
+
 // "~/x" or a path relative to the home folder, as an absolute path.
 QString homePath(const QString& path) {
   const QString expanded = expandHome(path);
@@ -276,6 +294,38 @@ const Endpoint* Config::findEndpoint(const QString& name) const {
   return nullptr;
 }
 
+ModelSettings Config::settingsFor(const QString& endpoint, const QString& model) const {
+  ModelSettings out;
+  out.loopDetection = loopDetection;
+  auto apply = [&out](const ModelSettings& settings) {
+    out.params = Json::overlay(out.params, settings.params);
+    if (settings.loopDetection) {
+      out.loopDetection = settings.loopDetection;
+    }
+  };
+  if (const Endpoint* found = findEndpoint(endpoint)) {
+    apply(found->settings);
+  }
+  // An exact name first, then the first pattern that matches.
+  const ModelEntry* chosen = nullptr;
+  for (const ModelEntry& entry : models) {
+    if (entry.pattern.compare(model, Qt::CaseInsensitive) == 0) {
+      chosen = &entry;
+      break;
+    }
+  }
+  for (int i = 0; !chosen && i < models.size(); i++) {
+    const QRegularExpression pattern(QRegularExpression::wildcardToRegularExpression(models[i].pattern), QRegularExpression::CaseInsensitiveOption);
+    if (pattern.match(model).hasMatch()) {
+      chosen = &models[i];
+    }
+  }
+  if (chosen) {
+    apply(chosen->settings);
+  }
+  return out;
+}
+
 QString configPath() {
   return configDir() + "/config.json";
 }
@@ -313,7 +363,10 @@ Config loadConfig(const QString& file) {
   }
   const QJsonObject root = json.toObject();
   Checker check;
-  check.strict(root, {"default", "maxSteps", "subagents", "toolLog", "theme", "codeStream", "sandbox", "protectRunLater", "permissions", "endpoints"}, {});
+  check.strict(root,
+               {"default", "maxSteps", "subagents", "toolLog", "theme", "codeStream", "sandbox", "protectRunLater", "permissions", "loopDetection",
+                "models", "endpoints"},
+               {});
 
   config.defaultEndpoint = check.string(root, "default", {}).value_or(QString());
   if (const auto maxSteps = check.number(root, "maxSteps", {}, true, 1, 10000)) {
@@ -339,6 +392,26 @@ Config loadConfig(const QString& file) {
   if (const auto sandbox = check.object(root, "sandbox", {})) {
     config.sandbox = sandboxConfig(*sandbox, check);
   }
+  config.loopDetection = check.boolean(root, "loopDetection", {}).value_or(false);
+  if (const auto models = check.object(root, "models", {})) {
+    // In the file's order, so the first pattern that matches is the first written.
+    QStringList names = Json::jsonKeyOrder(text, {"models"});
+    for (const QString& name : models->keys()) {
+      if (!names.contains(name)) {
+        names << name;
+      }
+    }
+    for (const QString& name : names) {
+      const QString path = "models." + name;
+      if (!models->value(name).isObject()) {
+        check.problem(path, "Invalid input: expected object");
+        continue;
+      }
+      const QJsonObject raw = models->value(name).toObject();
+      check.strict(raw, {"params", "loopDetection"}, path);
+      config.models.append(ModelEntry{name, modelSettings(raw, path, check)});
+    }
+  }
 
   bool storesKeys = false;
   if (const auto endpoints = check.object(root, "endpoints", {})) {
@@ -360,7 +433,7 @@ Config loadConfig(const QString& file) {
         continue;
       }
       const QJsonObject raw = it.value().toObject();
-      check.strict(raw, {"baseURL", "apiKey", "apiKeyEnv", "model", "contextSize"}, path);
+      check.strict(raw, {"baseURL", "apiKey", "apiKeyEnv", "model", "contextSize", "params", "loopDetection"}, path);
       Endpoint endpoint;
       endpoint.name = it.key();
       const auto baseUrl = check.string(raw, "baseURL", path);
@@ -394,6 +467,7 @@ Config loadConfig(const QString& file) {
       if (const auto contextSize = check.number(raw, "contextSize", path, true, 1, 1e12)) {
         endpoint.contextSize = int(*contextSize);
       }
+      endpoint.settings = modelSettings(raw, path, check);
       config.endpoints.append(endpoint);
     }
   }

@@ -10,6 +10,7 @@
 #include "core/Themes.h"
 #include "core/Prompt.h"
 #include "core/Images.h"
+#include "core/LoopDetector.h"
 #include "core/Mentions.h"
 #include "core/FileList.h"
 #include "core/Permissions.h"
@@ -49,6 +50,10 @@ private Q_SLOTS:
   void recordsReplacesAndReloads();
   void listingsShowFirstMessage();
   void listingsCountCompactedMessages();
+
+  // loop detection
+  void loopDetectorLeavesOrdinaryTextAlone();
+  void loopDetectorSpotsRepetition();
 
   // connection errors
   void connectionErrorsShowCauseAndHint();
@@ -415,6 +420,44 @@ void TestUnits::listingsCountCompactedMessages() {
   // Compacting again changes nothing.
   replace({userMessage(SUMMARY_PREFIX + "All of it.")});
   QCOMPARE(listed().turns, 3);
+}
+
+namespace {
+
+// Fed the way a stream comes: a few characters at a time.
+bool loops(const QString& text) {
+  LoopDetector detector;
+  for (int at = 0; at < text.size(); at += 7) {
+    if (detector.push(text.mid(at, 7))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+} // namespace
+
+void TestUnits::loopDetectorLeavesOrdinaryTextAlone() {
+  QFile readme(QStringLiteral(SMITH_SOURCE_DIR) + "/README.md");
+  QVERIFY(readme.open(QIODevice::ReadOnly));
+  const QString text = QString::fromUtf8(readme.readAll());
+  QVERIFY(text.size() > 20000);
+  QVERIFY(!loops(text));
+  // Rows alike, but not the same.
+  QString table = "| Name | Size | Kind |\n|------|------|------|\n";
+  for (int i = 0; i < 200; i++) {
+    table += QString("| file%1.cpp | %2 kB | source |\n").arg(i).arg(i * 3 % 17);
+  }
+  QVERIFY(!loops(table));
+}
+
+void TestUnits::loopDetectorSpotsRepetition() {
+  QVERIFY(loops(QString("Wait, ").repeated(200)));
+  const QString passage = "Hmm, but the test failed before, so maybe the fixture isn't set up. Let me reconsider the order in which the "
+                          "fixtures run, because the database has to exist before the migration does, and then the seed data. ";
+  QVERIFY(loops("Let me look at the failing test first. " + passage.repeated(5)));
+  // Three times is still thinking it over.
+  QVERIFY(!loops(passage.repeated(3)));
 }
 
 void TestUnits::connectionErrorsShowCauseAndHint() {

@@ -4,6 +4,7 @@
 #include "core/Errors.h"
 #include "core/Http.h"
 #include "core/Json.h"
+#include "core/LoopDetector.h"
 #include "core/Reasoning.h"
 #include "core/Think.h"
 
@@ -142,22 +143,34 @@ QString Agent::summarize(const Messages& messages, int maxChars, const CancelPtr
   return summary;
 }
 
+ModelSettings Agent::modelSettings() const {
+  const ServerPtr target = server();
+  return m_options.settingsFor ? m_options.settingsFor(target ? target->name() : QString(), model()) : ModelSettings{};
+}
+
 QJsonObject Agent::requestBase(const QString& reasoningLevel) const {
-  QJsonObject body{{"model", model()}};
-  const QJsonObject params = reasoningParams(reasoningLevel);
-  for (auto it = params.begin(); it != params.end(); ++it) {
-    body[it.key()] = it.value();
-  }
+  // The config's fields first, then Smith's: a /reasoning or --temperature you chose wins.
+  QJsonObject body = Json::overlay(modelSettings().params, reasoningParams(reasoningLevel));
+  body["model"] = model();
   if (m_options.temperature) {
     body["temperature"] = *m_options.temperature;
   }
   return body;
 }
 
-Agent::StreamedResponse Agent::streamResponse(const CancelPtr& cancel) {
+Agent::StreamedResponse Agent::streamResponse(const CancelPtr& cancel, const QString& note) {
   QJsonObject body = requestBase(reasoning());
+  Messages history = this->messages();
+  if (!note.isEmpty()) {
+    // Beside the last message you sent, or after the tool results: two user messages in a row upset some chat templates.
+    if (messageRole(history.last()) == "user") {
+      history.last() = withNote(history.last(), note);
+    } else {
+      history.append(userMessage(note));
+    }
+  }
   QJsonArray messages;
-  for (const Message& message : this->messages()) {
+  for (const Message& message : history) {
     messages.append(message);
   }
   body["messages"] = messages;
@@ -172,83 +185,108 @@ Agent::StreamedResponse Agent::streamResponse(const CancelPtr& cancel) {
   StreamedResponse result;
   QList<ToolCall> calls;
   ThinkTagParser thinkTags;
+  // Stops this response alone when it loops; the turn's token still stops it too.
+  const auto request = std::make_shared<CancelToken>(cancel);
+  const bool watch = modelSettings().loopDetection.value_or(false);
+  LoopDetector reasoningLoop;
+  LoopDetector textLoop;
   // Timed from the first token, so the speed leaves out reading the prompt.
   QElapsedTimer generating;
   auto output = [&](BlockKind kind, const QString& text) {
+    if (result.looped) {
+      return;
+    }
     if (kind == BlockKind::Text) {
       result.text += text;
     } else {
       result.reasoning += text;
     }
     emitEvent(Event::Delta{kind, text});
+    if (watch && (kind == BlockKind::Text ? textLoop : reasoningLoop).push(text)) {
+      result.looped = true;
+      request->cancel();
+    }
   };
 
   const ServerPtr target = server();
-  const int skipped = Http::postStream(target->url("/chat/completions"), target->apiKey(), body, cancel, [&](const QJsonObject& chunk) {
-    const QJsonObject usage = chunk.value("usage").toObject();
-    if (!usage.isEmpty()) {
-      result.promptTokens = qint64(usage.value("prompt_tokens").toDouble());
-      result.completionTokens = qint64(usage.value("completion_tokens").toDouble());
-      result.totalTokens = result.promptTokens + result.completionTokens;
-    }
-    const QJsonArray choices = chunk.value("choices").toArray();
-    if (choices.isEmpty()) {
-      return;
-    }
-    const QJsonObject choice = choices.first().toObject();
-    const QJsonObject delta = choice.value("delta").toObject();
-    if (!generating.isValid() && !delta.isEmpty()) {
-      generating.start();
-    }
+  int skipped = 0;
+  try {
+    skipped = Http::postStream(target->url("/chat/completions"), target->apiKey(), body, request, [&](const QJsonObject& chunk) {
+      if (result.looped) {
+        return;
+      }
+      const QJsonObject usage = chunk.value("usage").toObject();
+      if (!usage.isEmpty()) {
+        result.promptTokens = qint64(usage.value("prompt_tokens").toDouble());
+        result.completionTokens = qint64(usage.value("completion_tokens").toDouble());
+        result.totalTokens = result.promptTokens + result.completionTokens;
+      }
+      const QJsonArray choices = chunk.value("choices").toArray();
+      if (choices.isEmpty()) {
+        return;
+      }
+      const QJsonObject choice = choices.first().toObject();
+      const QJsonObject delta = choice.value("delta").toObject();
+      if (!generating.isValid() && !delta.isEmpty()) {
+        generating.start();
+      }
 
-    QString reasoningText = delta.value("reasoning_content").toString();
-    if (reasoningText.isEmpty()) {
-      reasoningText = delta.value("reasoning").toString();
-    }
-    if (!reasoningText.isEmpty()) {
-      output(BlockKind::Reasoning, reasoningText);
-    }
-    // Servers that don't separate reasoning leave <think> tags in the content.
-    const QString content = delta.value("content").toString();
-    if (!content.isEmpty()) {
-      for (const Segment& segment : thinkTags.push(content)) {
-        output(segment.kind, segment.text);
+      QString reasoningText = delta.value("reasoning_content").toString();
+      if (reasoningText.isEmpty()) {
+        reasoningText = delta.value("reasoning").toString();
       }
-    }
-
-    // Tool calls arrive in fragments keyed by index: the first fragment
-    // carries the id and name, later ones append to the JSON arguments.
-    for (const QJsonValue& value : delta.value("tool_calls").toArray()) {
-      const QJsonObject fragment = value.toObject();
-      const int index = fragment.value("index").toInt(0);
-      while (calls.size() <= index) {
-        calls.append(ToolCall{});
+      if (!reasoningText.isEmpty()) {
+        output(BlockKind::Reasoning, reasoningText);
       }
-      ToolCall& slot = calls[index];
-      if (!fragment.value("id").toString().isEmpty()) {
-        slot.id = fragment.value("id").toString();
-      }
-      const QJsonObject function = fragment.value("function").toObject();
-      const QString name = function.value("name").toString();
-      if (!name.isEmpty()) {
-        if (slot.name.isEmpty()) {
-          emitEvent(Event::ToolPrepare{name});
+      // Servers that don't separate reasoning leave <think> tags in the content.
+      const QString content = delta.value("content").toString();
+      if (!content.isEmpty()) {
+        for (const Segment& segment : thinkTags.push(content)) {
+          output(segment.kind, segment.text);
         }
-        slot.name += name;
       }
-      const QJsonValue arguments = function.value("arguments");
-      if (arguments.isString()) {
-        slot.args += arguments.toString();
-      } else if (arguments.isObject()) {
-        // A non-streaming fallback may carry the arguments as an object.
-        slot.args += Json::stringify(arguments);
+
+      // Tool calls arrive in fragments keyed by index: the first fragment
+      // carries the id and name, later ones append to the JSON arguments.
+      for (const QJsonValue& value : delta.value("tool_calls").toArray()) {
+        const QJsonObject fragment = value.toObject();
+        const int index = fragment.value("index").toInt(0);
+        while (calls.size() <= index) {
+          calls.append(ToolCall{});
+        }
+        ToolCall& slot = calls[index];
+        if (!fragment.value("id").toString().isEmpty()) {
+          slot.id = fragment.value("id").toString();
+        }
+        const QJsonObject function = fragment.value("function").toObject();
+        const QString name = function.value("name").toString();
+        if (!name.isEmpty()) {
+          if (slot.name.isEmpty()) {
+            emitEvent(Event::ToolPrepare{name});
+          }
+          slot.name += name;
+        }
+        const QJsonValue arguments = function.value("arguments");
+        if (arguments.isString()) {
+          slot.args += arguments.toString();
+        } else if (arguments.isObject()) {
+          // A non-streaming fallback may carry the arguments as an object.
+          slot.args += Json::stringify(arguments);
+        }
       }
+      const QString finish = choice.value("finish_reason").toString();
+      if (!finish.isEmpty()) {
+        result.finishReason = finish;
+      }
+    });
+  } catch (const AbortError&) {
+    if (!result.looped || cancelled(cancel)) {
+      throw;
     }
-    const QString finish = choice.value("finish_reason").toString();
-    if (!finish.isEmpty()) {
-      result.finishReason = finish;
-    }
-  });
+  }
+  if (result.looped) {
+    return result;
+  }
   for (const Segment& segment : thinkTags.flush()) {
     output(segment.kind, segment.text);
   }

@@ -19,6 +19,7 @@ add_library(smith_core STATIC
   Instructions.cpp
   Jobs.cpp
   Json.cpp
+  LoopDetector.cpp
   Paths.cpp
   Permissions.cpp
   Preferences.cpp

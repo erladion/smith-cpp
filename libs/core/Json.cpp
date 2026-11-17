@@ -144,6 +144,23 @@ QStringList jsonKeyOrder(const QString& text, const QStringList& path) {
   return KeyScanner(text, path).run();
 }
 
+QJsonObject overlay(const QJsonObject& base, const QJsonObject& over) {
+  QJsonObject out = base;
+  for (auto it = over.begin(); it != over.end(); ++it) {
+    if (it.value().isObject() && out.value(it.key()).isObject()) {
+      QJsonObject merged = out.value(it.key()).toObject();
+      const QJsonObject inner = it.value().toObject();
+      for (auto field = inner.begin(); field != inner.end(); ++field) {
+        merged[field.key()] = field.value();
+      }
+      out[it.key()] = merged;
+    } else {
+      out[it.key()] = it.value();
+    }
+  }
+  return out;
+}
+
 std::optional<QString> optString(const QJsonObject& object, const QString& key) {
   const QJsonValue value = object.value(key);
   if (!value.isString()) {

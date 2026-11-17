@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/Cancel.h"
+#include "core/Config.h"
 #include "core/Events.h"
 #include "core/History.h"
 #include "core/Permissions.h"
@@ -79,6 +80,9 @@ struct AgentOptions {
   QString systemPrompt;
   // Sampling temperature; omitted from requests when unset so the server default applies.
   std::optional<double> temperature;
+  // The config's settings for a model on an endpoint (Config::settingsFor). Asked for each
+  // request, so they follow /model and /endpoint. Unset: no extra fields, no loop detection.
+  std::function<ModelSettings(const QString& endpoint, const QString& model)> settingsFor;
   // Cap on model calls per user message, so a confused model can't loop forever.
   int maxSteps = 50;
   // The server's context window in tokens. Enables compaction before it fills up.
@@ -191,6 +195,8 @@ private:
     qint64 completionTokens = 0;
     // From the first token streamed to the last.
     qint64 generationMs = 0;
+    // Stopped partway because it kept repeating itself; the rest is unusable.
+    bool looped = false;
   };
 
   struct Turn {
@@ -216,8 +222,10 @@ private:
   void append(const Message& message);
   void replaceHistory(const Messages& messages);
 
+  ModelSettings modelSettings() const;
   QJsonObject requestBase(const QString& reasoningLevel) const;
-  StreamedResponse streamResponse(const CancelPtr& cancel);
+  // `note`, when set, goes to the model with this request only.
+  StreamedResponse streamResponse(const CancelPtr& cancel, const QString& note = {});
   static Message assistantMessage(const StreamedResponse& response);
 
   ToolResult runTool(const ToolCall& call, const CancelPtr& cancel);

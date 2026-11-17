@@ -2,6 +2,7 @@
 
 #include "core/Sandbox.h"
 
+#include <QJsonObject>
 #include <QList>
 #include <QString>
 #include <QStringList>
@@ -25,12 +26,28 @@ struct SandboxConfig {
   ContainerSettings container;
 };
 
+// What goes with requests for a model: an endpoint's, or a "models" entry's.
+struct ModelSettings {
+  // Fields added to every request, such as sampling settings ("top_k", "presence_penalty").
+  QJsonObject params;
+  // Whether a response that keeps repeating itself is stopped; unset leaves it to the level above.
+  std::optional<bool> loopDetection;
+};
+
 struct Endpoint {
   QString name;
   QString baseUrl;
   QString apiKey;
   QString model;
   std::optional<int> contextSize;
+  ModelSettings settings;
+};
+
+// A "models" entry: settings for the models whose names match `pattern`
+// (an exact name, or a wildcard like "qwen3*"; case doesn't matter).
+struct ModelEntry {
+  QString pattern;
+  ModelSettings settings;
 };
 
 // "matrix" adds digital rain at startup and a katakana spinner; "plain" and
@@ -65,10 +82,17 @@ struct Config {
   // What runs without asking, and what is refused: a tool's name, or "bash:<start of a command>".
   QStringList allow;
   QStringList deny;
+  // Off unless the config turns it on, here, for an endpoint, or for a model.
+  bool loopDetection = false;
+  // In the file's order.
+  QList<ModelEntry> models;
   // Problems worth telling the user about that don't stop the agent.
   QStringList warnings;
 
   const Endpoint* findEndpoint(const QString& name) const;
+  // What applies to `model` on the endpoint named `endpoint` (empty for a server given by URL): the
+  // top level, then the endpoint, then the model's entry, each over the one before. loopDetection is always set.
+  ModelSettings settingsFor(const QString& endpoint, const QString& model) const;
 };
 
 QString configPath();

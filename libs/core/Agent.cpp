@@ -20,6 +20,10 @@ const QString PLAN_NOTE = "[Plan mode is on. Look into this with the tools that 
                           "refused until the user switches plan mode off.]";
 const QString PLAN_OVER_NOTE = "[Plan mode is off: you can change files and run commands again.]";
 
+// Goes with the request after a response that went round in circles.
+const QString LOOP_NOTE = "[Smith stopped your last response: it kept repeating the same passage. Don't go over it again. Decide, and take the "
+                          "next step: call a tool, or answer with what you have.]";
+
 } // namespace
 
 const QString TODO_REMINDER = "[Reminder] Your todo list still has unfinished steps:";
@@ -338,6 +342,8 @@ void Agent::loop(const CancelPtr& cancel) {
   const int maxSteps = m_options.maxSteps > 0 ? m_options.maxSteps : 50;
   bool retriedOverflow = false;
   bool reminded = false;
+  // After a response that looped, the note for the next request; a second loop in a row ends the turn.
+  QString loopNote;
   // A list the agent didn't touch this turn is from an earlier task: answering
   // something else shouldn't send it back to that one.
   const TodoList atStart = todos();
@@ -350,7 +356,7 @@ void Agent::loop(const CancelPtr& cancel) {
 
     StreamedResponse response;
     try {
-      response = streamResponse(cancel);
+      response = streamResponse(cancel, loopNote);
     } catch (const std::exception& error) {
       // The server rejected the prompt as too long: our estimate was off or
       // we didn't know the window size. Compact once and retry.
@@ -372,6 +378,18 @@ void Agent::loop(const CancelPtr& cancel) {
     }
     retriedOverflow = false;
     emitEvent(Event::ResponseEnd{});
+    if (response.looped) {
+      if (!loopNote.isEmpty()) {
+        emitEvent(Event::Notice{NoticeLevel::Warn, "The model went round in circles again, so this turn stops here. Sampling settings can help "
+                                                   "(\"params\" in the config, e.g. presence_penalty), and so can /reasoning low."});
+        emitEvent(Event::Done{DoneReason::Stop});
+        return;
+      }
+      loopNote = LOOP_NOTE;
+      emitEvent(Event::Notice{NoticeLevel::Warn, "The model was repeating itself, so Smith stopped that response and asked it to move on."});
+      continue;
+    }
+    loopNote.clear();
     append(assistantMessage(response));
     if (response.totalTokens) {
       QMutexLocker lock(&m_mutex);

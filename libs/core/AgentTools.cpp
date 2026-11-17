@@ -90,6 +90,7 @@ ToolResult Agent::runSubagent(const TaskInput& input, const CancelPtr& cancel) {
   child.reasoning = reasoning();
   child.cwd = m_options.cwd;
   child.temperature = m_options.temperature;
+  child.settingsFor = m_options.settingsFor;
   child.maxSteps = m_options.maxSteps;
   child.contextSize = contextLimit();
   child.sandbox = m_options.sandbox;
