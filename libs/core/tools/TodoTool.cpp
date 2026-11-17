@@ -16,7 +16,7 @@ QJsonObject todoSchema() {
           {"todos", Schema::array(Schema::object(
                                       {
                                           {"content", Schema::string("The step, as a short imperative sentence", 1)},
-                                          {"status", Schema::enumeration({"pending", "in_progress", "completed"})},
+                                          {"status", Schema::enumeration({"pending", "in_progress", "waiting", "completed"})},
                                       },
                                       {"content", "status"}),
                                   "The whole list, every time: steps left out are removed")},
@@ -31,6 +31,9 @@ TodoStatus statusFrom(const QString& name) {
   if (name == "completed") {
     return TodoStatus::Completed;
   }
+  if (name == "waiting") {
+    return TodoStatus::Waiting;
+  }
   return TodoStatus::Pending;
 }
 
@@ -44,6 +47,20 @@ TodoList todosFrom(const QJsonObject& input) {
 }
 
 } // namespace
+
+QString todoStatusName(TodoStatus status) {
+  switch (status) {
+  case TodoStatus::Pending:
+    return "pending";
+  case TodoStatus::InProgress:
+    return "in_progress";
+  case TodoStatus::Waiting:
+    return "waiting";
+  case TodoStatus::Completed:
+    return "completed";
+  }
+  return "pending";
+}
 
 QString todoProgress(const TodoList& todos) {
   int done = 0;
@@ -65,11 +82,24 @@ TodoList unfinished(const TodoList& todos) {
   return out;
 }
 
+TodoList actionable(const TodoList& todos) {
+  TodoList out;
+  for (const Todo& todo : todos) {
+    if (todo.status == TodoStatus::Pending || todo.status == TodoStatus::InProgress) {
+      out.append(todo);
+    }
+  }
+  return out;
+}
+
 QString formatTodos(const TodoList& todos) {
   QStringList lines;
   for (const Todo& todo : todos) {
-    const QString mark = todo.status == TodoStatus::Completed ? "[x]" : todo.status == TodoStatus::InProgress ? "[>]" : "[ ]";
-    lines << mark + " " + todo.content;
+    const QString mark = todo.status == TodoStatus::Completed    ? "[x]"
+                         : todo.status == TodoStatus::InProgress ? "[>]"
+                         : todo.status == TodoStatus::Waiting    ? "[?]"
+                                                                 : "[ ]";
+    lines << mark + " " + todo.content + (todo.status == TodoStatus::Waiting ? " (waiting on the user)" : "");
   }
   return lines.join('\n');
 }
@@ -79,7 +109,9 @@ ToolDef createTodoTool(std::function<void(const TodoList&)> onUpdate) {
   tool.name = TODO_TOOL;
   tool.description = "Keep a checklist for a task with several steps. Write it before you start (all pending, or the first in_progress), and write it "
                      "again whenever a step starts or finishes: mark a step completed as soon as it's done and the next one in_progress, one at a "
-                     "time. Send the whole list every time. Skip it for a task you can do in one or two steps.";
+                     "time. A step only the user can do (a manual test, a decision, something you have no access to) is waiting: mark it so "
+                     "and end your turn by telling them what you need. Send the whole list every time. Skip it for a task you can do in one "
+                     "or two steps.";
   tool.schema = todoSchema();
   tool.readOnly = true;
   tool.summarize = [](const QJsonObject& input) { return todoProgress(todosFrom(input)); };
@@ -89,8 +121,11 @@ ToolDef createTodoTool(std::function<void(const TodoList&)> onUpdate) {
     if (todos.isEmpty()) {
       return ToolResult{"The todo list is now empty."};
     }
-    const int left = unfinished(todos).size();
-    const QString next = left ? plural(left, "step") + " left. Carry on with the one in progress." : QString("Every step is done.");
+    const int left = actionable(todos).size();
+    const int waiting = unfinished(todos).size() - left;
+    const QString next = left      ? plural(left, "step") + " left. Carry on with the one in progress."
+                         : waiting ? QString("The rest is waiting on the user: tell them what you need, and stop there.")
+                                   : QString("Every step is done.");
     return ToolResult{QString("Todo list updated (%1):\n").arg(todoProgress(todos)) + formatTodos(todos) + "\n\n" + next};
   };
   return tool;

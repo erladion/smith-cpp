@@ -72,8 +72,9 @@ Rectangle {
                 Text {
                     textFormat: Text.PlainText
                     Layout.alignment: Qt.AlignTop
-                    text: item.modelData.status === "completed" ? "✔" : item.modelData.status === "in_progress" ? "▶" : "○"
-                    color: item.modelData.status === "completed" ? Theme.added : item.modelData.status === "in_progress" ? Theme.warn : Theme.textFaint
+                    text: ({completed: "✔", in_progress: "▶", waiting: "?"})[item.modelData.status] || "○"
+                    color: item.modelData.status === "completed" ? Theme.added
+                         : item.modelData.status === "in_progress" || item.modelData.status === "waiting" ? Theme.warn : Theme.textFaint
                     font.family: Theme.mono
                     font.pixelSize: Theme.smallSize
                 }

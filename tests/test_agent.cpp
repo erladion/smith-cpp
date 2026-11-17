@@ -53,6 +53,7 @@ private Q_SLOTS:
   void resumedHistoryIsRepaired();
   void everyToolCallIsLogged();
   void todoWriteAndReminder();
+  void noReminderForTheUsersStepsOrAnOldList();
   void checklistSurvivesResumeAndCompaction();
   void askUserOnlyWithAWayToAsk();
   void askUserWaitsForAnswer();
@@ -982,6 +983,37 @@ void TestAgent::todoWriteAndReminder() {
   }
   QCOMPARE(todoEvents, 2);
   QVERIFY(hasNotice(h->events, "Reminded the agent of 2 unfinished todos"));
+}
+
+void TestAgent::noReminderForTheUsersStepsOrAnOldList() {
+  // The rest is the user's to do: the agent stops there.
+  m_pFake->setScript({
+      FakeServer::stream(FakeServer::toolCallDeltas("todo_write", {{"todos", todoArray({{"Fix the build", "completed"}, {"Try it by hand", "waiting"}})}}),
+                         "tool_calls"),
+      FakeServer::text("Built. Could you try it?"),
+  });
+  auto h = make();
+  h->agent->send("fix the build", makeCancel());
+  QCOMPARE(m_pFake->requests().size(), 2);
+  QVERIFY_MATCH(lastMessage(m_pFake->requests()[1]).value("content").toString(),
+                "\\[\\?\\] Try it by hand \\(waiting on the user\\)\\n\\nThe rest is waiting on the user");
+  QVERIFY(!hasNotice(h->events, "Reminded"));
+  QCOMPARE(h->agent->todos().value(1).status, TodoStatus::Waiting);
+
+  // A list left from an earlier task isn't what this turn is about.
+  m_pFake->clearRequests();
+  auto old = make(ApprovalDecision::Allow, [](AgentOptions& options, Harness&) {
+    options.history = {
+        userMessage("plan it"),
+        assistantCall("t1", "todo_write", {{"todos", todoArray({{"Write tests", "completed"}, {"Ship it", "pending"}})}}),
+        toolMessage("t1", "Todo list updated"),
+        assistant("Planned."),
+    };
+  });
+  m_pFake->setScript({FakeServer::text("It parses the flags.")});
+  old->agent->send("what does main.cpp do?", makeCancel());
+  QCOMPARE(m_pFake->requests().size(), 1);
+  QVERIFY(!hasNotice(old->events, "Reminded"));
 }
 
 void TestAgent::checklistSurvivesResumeAndCompaction() {

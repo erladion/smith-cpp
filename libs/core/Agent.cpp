@@ -338,6 +338,9 @@ void Agent::loop(const CancelPtr& cancel) {
   const int maxSteps = m_options.maxSteps > 0 ? m_options.maxSteps : 50;
   bool retriedOverflow = false;
   bool reminded = false;
+  // A list the agent didn't touch this turn is from an earlier task: answering
+  // something else shouldn't send it back to that one.
+  const TodoList atStart = todos();
 
   for (int step = 0; step < maxSteps; step++) {
     if (step > 0) {
@@ -381,15 +384,16 @@ void Agent::loop(const CancelPtr& cancel) {
       if (!queuedMessages().isEmpty() && response.finishReason != "length") {
         continue;
       }
-      // Small models often stop halfway through a plan: point them back to it, once a turn.
+      // Small models often stop halfway through a plan: point them back to it,
+      // once a turn. Not for steps waiting on the user: stopping there is right.
       const TodoList current = todos();
-      const TodoList left = unfinished(current);
-      if (!left.isEmpty() && !reminded && response.finishReason != "length") {
+      const TodoList left = actionable(current);
+      if (!left.isEmpty() && current != atStart && !reminded && response.finishReason != "length") {
         reminded = true;
         emitEvent(Event::Notice{NoticeLevel::Info, QString("Reminded the agent of %1.").arg(plural(left.size(), "unfinished todo"))});
         append(userMessage(TODO_REMINDER + "\n" + formatTodos(current) +
-                           "\n\nContinue with them. If they're done or no longer needed, update the list with todo_write. If you need something "
-                           "from the user, ask them."));
+                           "\n\nContinue with them. If they're done or no longer needed, update the list with todo_write. If one needs the "
+                           "user (a manual test, a decision), mark it waiting and tell them what you need."));
         continue;
       }
       if (response.finishReason == "length") {

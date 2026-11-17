@@ -23,8 +23,7 @@ QVariantList Backend::todos() const {
     return out;
   }
   for (const Todo& todo : m_controller.agent()->todos()) {
-    const QString status = todo.status == TodoStatus::Completed ? "completed" : todo.status == TodoStatus::InProgress ? "in_progress" : "pending";
-    out.append(QVariantMap{{"content", todo.content}, {"status", status}});
+    out.append(QVariantMap{{"content", todo.content}, {"status", todoStatusName(todo.status)}});
   }
   return out;
 }

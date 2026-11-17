@@ -12,7 +12,8 @@ namespace Smith {
 
 struct ToolDef;
 
-enum class TodoStatus { Pending, InProgress, Completed };
+// Waiting: on the user, for something only they can do (a manual test, a decision).
+enum class TodoStatus { Pending, InProgress, Waiting, Completed };
 
 struct Todo {
   QString content;
@@ -25,9 +26,13 @@ using TodoList = QList<Todo>;
 
 inline const QString TODO_TOOL = QStringLiteral("todo_write");
 
+// The status as todo_write writes it: "pending", "in_progress", "waiting", "completed".
+QString todoStatusName(TodoStatus status);
 // "2/5 done", for summaries.
 QString todoProgress(const TodoList& todos);
 TodoList unfinished(const TodoList& todos);
+// The unfinished steps the agent can do itself: not waiting on the user.
+TodoList actionable(const TodoList& todos);
 // The list as plain text, for the model.
 QString formatTodos(const TodoList& todos);
 

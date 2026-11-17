@@ -21,18 +21,6 @@ QString levelName(NoticeLevel level) {
   return "info";
 }
 
-QString statusName(TodoStatus status) {
-  switch (status) {
-  case TodoStatus::Pending:
-    return "pending";
-  case TodoStatus::InProgress:
-    return "in_progress";
-  case TodoStatus::Completed:
-    return "completed";
-  }
-  return "pending";
-}
-
 } // namespace
 
 QVariantList diffRows(const Diff& diff) {
@@ -141,7 +129,7 @@ QVariant TranscriptModel::data(const QModelIndex& index, int role) const {
   case TodosRole: {
     QVariantList todos;
     for (const Todo& todo : entry.todos) {
-      todos.append(QVariantMap{{"content", todo.content}, {"status", statusName(todo.status)}});
+      todos.append(QVariantMap{{"content", todo.content}, {"status", todoStatusName(todo.status)}});
     }
     return todos;
   }

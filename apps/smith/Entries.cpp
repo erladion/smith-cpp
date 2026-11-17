@@ -139,6 +139,8 @@ QList<Line> todoLines(const TodoList& todos, int width) {
     } else if (todo.status == TodoStatus::InProgress) {
       mark = Span{"  ▶ ", fg(Color::Yellow)};
       style = Style{.bold = true};
+    } else if (todo.status == TodoStatus::Waiting) {
+      mark = Span{"  ? ", fg(Color::Yellow)};
     } else {
       mark = Span{"  ○ ", DIM};
     }
