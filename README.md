@@ -552,8 +552,9 @@ once more with AddressSanitizer and UBSan.
 ### Layout
 
 ```
-libs/core/                the agent, no UI. Agent.* is the loop: stream, run tools (read-only
-                          ones in parallel), feed results back; compaction
+libs/core/                the agent, no UI. Agent.* is the loop and its turns; AgentModel.cpp
+                          talks to the model and compacts; AgentTools.cpp runs tools (read-only
+                          ones in parallel) and sub-agents
   Http.*                  blocking HTTP and SSE streaming on QNetworkAccessManager, cancellable
   Server.*                one server: model listing, context-size detection
   Context.*               token estimates, trimming, summary prompt, overflow detection

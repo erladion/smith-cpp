@@ -1,6 +1,8 @@
 # The agent: the loop, tools, sandbox, sessions and the server client. No UI.
 add_library(smith_core STATIC
   Agent.cpp
+  AgentModel.cpp
+  AgentTools.cpp
   Config.cpp
   ContainerSandbox.cpp
   Context.cpp
