@@ -1,5 +1,6 @@
 #include "core/Session.h"
 
+#include "core/Agent.h"
 #include "core/Context.h"
 #include "core/Dirs.h"
 #include "core/Errors.h"
@@ -25,7 +26,33 @@ struct Log {
   QString endpoint;
   QString name;
   bool named = false;
+  // The messages you sent over the whole session, compacted away or not, and the first of them.
+  int sent = 0;
+  QString first;
 };
+
+// One you sent, not a reminder the agent added.
+bool isSent(const Message& message) {
+  return messageRole(message) == "user" && !messageText(message).startsWith(TODO_REMINDER);
+}
+
+int sentIn(const Messages& messages) {
+  return int(std::count_if(messages.begin(), messages.end(), isSent));
+}
+
+// Compaction folds your messages into a summary, which leaves them sent; any
+// other replace (undo, mostly) takes away the ones it drops.
+void replaced(Log& log, const Messages& next) {
+  const bool compacted = !next.isEmpty() && messageText(next.first()).startsWith(SUMMARY_PREFIX) &&
+                         (log.messages.isEmpty() || messageText(log.messages.first()) != messageText(next.first()));
+  if (!compacted) {
+    log.sent = std::max(0, log.sent - (sentIn(log.messages) - sentIn(next)));
+    if (log.sent == 0) {
+      log.first.clear();
+    }
+  }
+  log.messages = next;
+}
 
 Log readLog(const QString& file) {
   QFile handle(file);
@@ -55,12 +82,19 @@ Log readLog(const QString& file) {
       log.meta = line;
       hasMeta = true;
     } else if (type == "append") {
-      log.messages.append(line.value("message").toObject());
-    } else if (type == "replace") {
-      log.messages.clear();
-      for (const QJsonValue& message : line.value("messages").toArray()) {
-        log.messages.append(message.toObject());
+      const Message message = line.value("message").toObject();
+      if (isSent(message)) {
+        if (log.sent++ == 0) {
+          log.first = messageText(message);
+        }
       }
+      log.messages.append(message);
+    } else if (type == "replace") {
+      Messages next;
+      for (const QJsonValue& message : line.value("messages").toArray()) {
+        next.append(message.toObject());
+      }
+      replaced(log, next);
     } else if (type == "name") {
       log.name = line.value("name").toString();
       log.named = true;
@@ -248,12 +282,6 @@ QList<SessionInfo> listSessions(const QString& cwd, int limit) {
       if (!cwd.isEmpty() && sessionCwd != cwd) {
         continue;
       }
-      QStringList users;
-      for (const Message& message : log.messages) {
-        if (messageRole(message) == "user") {
-          users << messageText(message);
-        }
-      }
       SessionInfo info;
       info.id = log.meta.value("id").toString();
       info.cwd = sessionCwd;
@@ -262,8 +290,8 @@ QList<SessionInfo> listSessions(const QString& cwd, int limit) {
       info.created = log.meta.value("created").toString();
       info.updated = file.lastModified();
       info.file = file.filePath();
-      info.preview = preview(users.value(0));
-      info.turns = users.size();
+      info.preview = preview(log.first);
+      info.turns = log.sent;
       info.named = log.named;
       info.name = log.named ? log.name : defaultName(info.preview);
       infos.append(info);

@@ -34,7 +34,7 @@ struct SessionInfo {
   QString file;
   // First user message, for listings.
   QString preview;
-  // Number of messages you sent.
+  // Number of messages you sent, counting those compaction summarized.
   int turns = 0;
   // The session's name: set with /name, or else taken from the first message.
   QString name;

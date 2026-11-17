@@ -2,6 +2,7 @@
 
 #include "TestUtil.h"
 
+#include "core/Agent.h"
 #include "core/Context.h"
 #include "core/Dirs.h"
 #include "core/Errors.h"
@@ -47,6 +48,7 @@ private Q_SLOTS:
   void sessionsHaveNames();
   void recordsReplacesAndReloads();
   void listingsShowFirstMessage();
+  void listingsCountCompactedMessages();
 
   // connection errors
   void connectionErrorsShowCauseAndHint();
@@ -381,6 +383,38 @@ void TestUnits::listingsShowFirstMessage() {
   const QList<SessionInfo> limited = listSessions("/listing", 1);
   QCOMPARE(limited.size(), 1);
   QCOMPARE(limited.first().id, newer);
+}
+
+void TestUnits::listingsCountCompactedMessages() {
+  auto session = Session::create("/compacted", "m", {});
+  auto append = [&](const Message& message) { session->record(HistoryChange{HistoryChange::Type::Append, message, {}}); };
+  auto replace = [&](const Messages& messages) { session->record(HistoryChange{HistoryChange::Type::Replace, {}, messages}); };
+  auto reply = [](const QString& text) { return Message{{"role", "assistant"}, {"content", text}}; };
+  auto listed = [] { return listSessions("/compacted").value(0); };
+
+  append(userMessage("Fix the login bug"));
+  append(reply("Fixed."));
+  append(userMessage("And the tests"));
+  append(reply("Done."));
+  append(userMessage(TODO_REMINDER + " 1. run them"));
+  append(userMessage("Now the docs"));
+  QCOMPARE(listed().turns, 3);
+
+  // Compaction keeps only the latest message beside the summary; the others were still sent.
+  const Message summary = userMessage(SUMMARY_PREFIX + "Fixed login and tests.\n\n---\n\nNow the docs");
+  replace({summary});
+  append(reply("Docs done."));
+  append(userMessage("Ship it"));
+  QCOMPARE(listed().turns, 4);
+  QCOMPARE(listed().preview, QString("Fix the login bug"));
+  QCOMPARE(listed().name, QString("Fix the login bug"));
+
+  // Undo takes back the last one.
+  replace({summary, reply("Docs done.")});
+  QCOMPARE(listed().turns, 3);
+  // Compacting again changes nothing.
+  replace({userMessage(SUMMARY_PREFIX + "All of it.")});
+  QCOMPARE(listed().turns, 3);
 }
 
 void TestUnits::connectionErrorsShowCauseAndHint() {
