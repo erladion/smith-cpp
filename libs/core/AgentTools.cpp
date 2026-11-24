@@ -277,21 +277,12 @@ ToolResult Agent::runTool(const ToolCall& call, const CancelPtr& cancel) {
     request.canAllowAlways = !unsandboxed;
     request.similar = tool->name == BASH_TOOL ? commandPrefix(args.value("command").toString(), unsandboxed) : QString();
     request.remembered = m_pAlwaysAllowed->remembers();
-    ApprovalDecision decision = requestApproval(request, cancel);
-    // An answer that wasn't on offer allows only this call.
-    if ((decision == ApprovalDecision::AllowAlways && unsandboxed) || (decision == ApprovalDecision::AllowSimilar && request.similar.isEmpty())) {
-      decision = ApprovalDecision::Allow;
-    }
+    const ApprovalDecision decision = requestApproval(request, cancel);
     if (decision == ApprovalDecision::Deny || cancelled(cancel)) {
       approval = "denied";
       return fail("The user declined this tool call. Ask them how they want to proceed.", summary, "denied");
     }
     approval = decision == ApprovalDecision::AllowAlways ? "allowed always" : decision == ApprovalDecision::AllowSimilar ? "allowed for commands like it" : "allowed";
-    if (decision == ApprovalDecision::AllowAlways) {
-      m_pAlwaysAllowed->insert(tool->name);
-    } else if (decision == ApprovalDecision::AllowSimilar) {
-      m_pAlwaysAllowed->insert(tool->name + ":" + request.similar);
-    }
   }
 
   emitEvent(Event::ToolStart{call.id, tool->name, summary});
@@ -328,7 +319,19 @@ ApprovalDecision Agent::requestApproval(const ApprovalRequest& request, const Ca
   if (!m_options.approve) {
     return ApprovalDecision::Deny;
   }
-  return m_options.approve(request);
+  ApprovalDecision decision = m_options.approve(request);
+  // An answer that wasn't on offer allows only this call.
+  if ((decision == ApprovalDecision::AllowAlways && !request.canAllowAlways) ||
+      (decision == ApprovalDecision::AllowSimilar && request.similar.isEmpty())) {
+    decision = ApprovalDecision::Allow;
+  }
+  // Remembered before the lock goes, or a request waiting for it would ask again.
+  if (decision == ApprovalDecision::AllowAlways) {
+    m_pAlwaysAllowed->insert(request.tool);
+  } else if (decision == ApprovalDecision::AllowSimilar) {
+    m_pAlwaysAllowed->insert(request.tool + ":" + request.similar);
+  }
+  return decision;
 }
 
 Answer Agent::askUser(const Question& question, const CancelPtr& cancel) {
