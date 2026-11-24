@@ -2,6 +2,7 @@
 
 #include "core/Config.h"
 #include "core/Jobs.h"
+#include "core/Mentions.h"
 #include "core/Sandbox.h"
 #include "core/Themes.h"
 #include "frontend/FileIndex.h"
@@ -187,6 +188,8 @@ private:
   void onEvent(const AgentEvent& event);
   void runTurn(const QString& activity, std::function<void(const CancelPtr&)> work, std::function<void()> then = {}, bool timed = false);
   void sendMessage(const QString& text);
+  // What `text` attaches, with a notice saying so, or what couldn't be attached.
+  Attachments reportAttachments(const QString& text);
   void afterUserTurn(bool planning);
   void startOver(bool resumed, const std::optional<QDateTime>& lastUsed, const QList<Entry>& entries);
   // Makes `folder` the project with a fresh agent; notes to show, or nullopt (and an error shown) if it isn't a folder.

@@ -176,8 +176,9 @@ void Controller::submit(const QString& value) {
       notice(NoticeLevel::Warn, "Commands work once the agent is done. Your command is still in the input box.");
       Q_EMIT inputRestored(value);
     } else if (m_turns.agentRunning()) {
-      // Delivered at the agent's next step.
-      m_pAgent->queue(text);
+      // Delivered at the agent's next step, with what it attaches.
+      const Attachments refs = reportAttachments(text);
+      m_pAgent->queue(text, refs.images, refs.files);
     } else {
       Q_EMIT inputRestored(value);
     }
@@ -193,6 +194,17 @@ void Controller::submit(const QString& value) {
 
 void Controller::sendMessage(const QString& text) {
   print(Entry::simple(Entry::Kind::User, text));
+  const Attachments refs = reportAttachments(text);
+  const std::shared_ptr<Agent> agent = m_pAgent;
+  const QList<Image> images = refs.images;
+  const QList<AttachedFile> files = refs.files;
+  const bool planning = agent->planning();
+  runTurn(
+      planning ? "Planning…" : "Thinking…", [agent, text, images, files](const CancelPtr& cancel) { agent->send(text, cancel, images, files); },
+      [this, planning]() { afterUserTurn(planning); }, true);
+}
+
+Attachments Controller::reportAttachments(const QString& text) {
   // Files it mentions with @, and image files it names, go along with it.
   const Attachments refs = attachmentsIn(text, m_project.cwd);
   if (!refs.attached.isEmpty()) {
@@ -201,13 +213,7 @@ void Controller::sendMessage(const QString& text) {
   for (const QString& problem : refs.problems) {
     notice(NoticeLevel::Warn, problem);
   }
-  const std::shared_ptr<Agent> agent = m_pAgent;
-  const QList<Image> images = refs.images;
-  const QList<AttachedFile> files = refs.files;
-  const bool planning = agent->planning();
-  runTurn(
-      planning ? "Planning…" : "Thinking…", [agent, text, images, files](const CancelPtr& cancel) { agent->send(text, cancel, images, files); },
-      [this, planning]() { afterUserTurn(planning); }, true);
+  return refs;
 }
 
 void Controller::afterUserTurn(bool planning) {

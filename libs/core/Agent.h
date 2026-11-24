@@ -156,10 +156,10 @@ public:
   // Replaces the conversation with a saved one (switching sessions); not reported to onHistory.
   void loadConversation(const Messages& messages);
 
-  // Queues a message typed while the agent works; handed to the model at its next step.
-  void queue(const QString& text);
+  // Queues a message typed while the agent works, with what it attaches; handed to the model at its next step.
+  void queue(const QString& text, const QList<Image>& images = {}, const QList<AttachedFile>& files = {});
   QStringList queuedMessages() const;
-  // Removes and returns undelivered messages.
+  // Removes and returns undelivered messages. Their attachments are named in them, so sending them again brings those back.
   QStringList takeQueued();
 
   bool canUndo() const;
@@ -251,7 +251,12 @@ private:
   mutable QMutex m_mutex;
   Messages m_history;
   QList<Turn> m_turns;
-  QStringList m_queued;
+  struct Queued {
+    QString text;
+    QList<Image> images;
+    QList<AttachedFile> files;
+  };
+  QList<Queued> m_queued;
   std::optional<int> m_contextSize;
   ServerPtr m_pServer;
   QString m_model;

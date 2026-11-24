@@ -156,21 +156,28 @@ void Agent::loadConversation(const Messages& messages) {
   emitContext();
 }
 
-void Agent::queue(const QString& text) {
+void Agent::queue(const QString& text, const QList<Image>& images, const QList<AttachedFile>& files) {
   QMutexLocker lock(&m_mutex);
-  m_queued << text;
+  m_queued.append(Queued{text, images, files});
 }
 
 QStringList Agent::queuedMessages() const {
   QMutexLocker lock(&m_mutex);
-  return m_queued;
+  QStringList texts;
+  for (const Queued& queued : m_queued) {
+    texts << queued.text;
+  }
+  return texts;
 }
 
 QStringList Agent::takeQueued() {
   QMutexLocker lock(&m_mutex);
-  QStringList taken = m_queued;
+  QStringList texts;
+  for (const Queued& queued : m_queued) {
+    texts << queued.text;
+  }
   m_queued.clear();
-  return taken;
+  return texts;
 }
 
 bool Agent::canUndo() const {
@@ -493,14 +500,24 @@ void Agent::loop(const CancelPtr& cancel) {
 }
 
 void Agent::deliverQueued() {
-  const QStringList texts = takeQueued();
-  if (texts.isEmpty()) {
+  QList<Queued> queued;
+  {
+    QMutexLocker lock(&m_mutex);
+    queued.swap(m_queued);
+  }
+  if (queued.isEmpty()) {
     return;
   }
-  for (const QString& text : texts) {
-    emitEvent(Event::UserMessage{text});
+  QStringList texts;
+  QList<Image> images;
+  QList<AttachedFile> files;
+  for (const Queued& message : queued) {
+    emitEvent(Event::UserMessage{message.text});
+    texts << message.text;
+    images << message.images;
+    files << message.files;
   }
-  append(userMessage(texts.join("\n\n")));
+  append(userMessage(texts.join("\n\n"), images, files));
 }
 
 // ---- history bookkeeping ----

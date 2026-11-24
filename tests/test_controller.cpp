@@ -4,6 +4,7 @@
 #include "FakeServer.h"
 #include "TestUtil.h"
 
+#include "core/History.h"
 #include "core/Sandbox.h"
 #include "core/tools/Tools.h"
 #include "frontend/Controller.h"
@@ -154,6 +155,22 @@ void TestController::busyRefusesCommandsAndQueuesMessages() {
   m_pController->submit("and also this");
   QCOMPARE(m_pController->agent()->queuedMessages(), QStringList({"and also this"}));
   QTRY_VERIFY(idle());
+
+  // An image it names goes with it, as with a message sent when the agent is free.
+  QFile png(m_pDir->file("shot.png"));
+  QVERIFY(png.open(QIODevice::WriteOnly));
+  png.write(QByteArray("\x89PNG\r\n\x1a\n....", 12));
+  png.close();
+  m_pFake->clearRequests();
+  m_pFake->setScript({FakeServer::delayed(FakeServer::text("First."), 800), FakeServer::text("Second.")});
+  m_pController->submit("first");
+  m_pController->submit("and look at shot.png");
+  QVERIFY_MATCH(texts().last(), "^Attached shot\\.png");
+  QTRY_VERIFY(idle());
+  QCOMPARE(m_pFake->requests().size(), 2);
+  const QJsonObject delivered = m_pFake->requests()[1].value("messages").toArray().last().toObject();
+  QCOMPARE(messageText(delivered), QString("and look at shot.png"));
+  QVERIFY(hasImages(delivered));
 }
 
 void TestController::queuedTasksFollowInOrder() {
