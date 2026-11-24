@@ -9,6 +9,7 @@
 #include "frontend/Worktrees.h"
 
 #include <QCoreApplication>
+#include <QFile>
 
 using namespace Smith;
 using namespace TestUtil;
@@ -18,6 +19,7 @@ class TestWorktrees : public QObject {
 
 private Q_SLOTS:
   void readsGitDirsWithoutGit();
+  void findsTheBranchWhenHeadIsntPlain();
   void createsTaskWorktreeBesideRepo();
   void reusesTaskWorktreeAndBranch();
   void rejectsBadTaskNames();
@@ -81,6 +83,20 @@ void TestWorktrees::readsGitDirsWithoutGit() {
   QCOMPARE(currentBranch(shop.task.path), QString("smith/fix-login"));
   QCOMPARE(currentBranch(shop.main), QString("main"));
   QVERIFY(!gitDirs(shop.root.path()));
+}
+
+void TestWorktrees::findsTheBranchWhenHeadIsntPlain() {
+  Shop shop(false);
+  // An older layout: HEAD a symlink to the branch, so the file holds a commit.
+  const QString head = shop.main + "/.git/HEAD";
+  QVERIFY(QFile::remove(head));
+  QVERIFY(QFile::link("refs/heads/main", head));
+  QCOMPARE(currentBranch(shop.main), QString("main"));
+
+  QVERIFY(QFile::remove(head));
+  QVERIFY(QFile::copy(shop.main + "/.git/refs/heads/main", head));
+  QCOMPARE(git(shop.main, {"status", "--short", "--branch"}).section('\n', 0, 0), QString("## HEAD (no branch)"));
+  QCOMPARE(currentBranch(shop.main), QString());
 }
 
 void TestWorktrees::createsTaskWorktreeBesideRepo() {

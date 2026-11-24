@@ -34,6 +34,7 @@ struct GitDirs {
 // Read from the files git leaves, without running git; nullopt if `checkout` has no .git.
 std::optional<GitDirs> gitDirs(const QString& checkout);
 // The branch checked out in `checkout`; empty when detached or not a checkout.
+// Read from HEAD when it's a plain file naming a branch, otherwise asks git.
 QString currentBranch(const QString& checkout);
 
 // Task branches are TASK_BRANCH_PREFIX + the task's name.

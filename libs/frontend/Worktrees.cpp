@@ -211,7 +211,16 @@ QString currentBranch(const QString& checkout) {
     return {};
   }
   const QString head = readFirstLine(dirs->gitDir + "/HEAD");
-  return head.startsWith("ref: refs/heads/") ? head.mid(16) : QString();
+  if (head.startsWith("ref: refs/heads/") && head != "ref: refs/heads/.invalid") {
+    return head.mid(16);
+  }
+  // Detached, or HEAD isn't a plain file: a symlink, or reftable's placeholder. git knows.
+  try {
+    const GitResult result = git(checkout, {"symbolic-ref", "--short", "-q", "HEAD"});
+    return result.ok() ? result.out.trimmed() : QString();
+  } catch (const SmithError&) {
+    return {};
+  }
 }
 
 void checkTaskName(const QString& task) {

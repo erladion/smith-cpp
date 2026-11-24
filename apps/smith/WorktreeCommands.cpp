@@ -211,6 +211,11 @@ void WorktreeCommands::startLanding(const Worktree& worktree) {
           lines << "  " + commit;
         }
       }
+      if (landing->target.isEmpty()) {
+        lines << QString("Your checkout (%1) isn't on a branch, so this can only be committed on %2. To cherry-pick or merge, check out a "
+                         "branch there and land again.")
+                     .arg(tildify(landing->mainPath), landing->worktree.branch);
+      }
       m_app.print(Entry::notice(NoticeLevel::Info, lines.join('\n')));
       chooseLanding(landing);
     };

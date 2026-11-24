@@ -189,7 +189,7 @@ Popup {
                   ? "Lands on " + panel.target + " in " + (panel.landing.mainPath || "") + ". Your own uncommitted changes there are left alone; "
                     + "if they touch the same files, nothing happens and you're told."
                   : "Your checkout (" + (panel.landing.mainPath || "") + ") isn't on a branch, so this can only be committed on "
-                    + (panel.landing.branch || "") + "."
+                    + (panel.landing.branch || "") + ". To cherry-pick or merge, check out a branch there and land again."
             color: Theme.textFaint
             font.family: Theme.textFamily
             font.pixelSize: Theme.tinySize
