@@ -51,6 +51,28 @@ QString resolveInRoot(const QString& root, const QString& requested) {
   return target;
 }
 
+QString resolveForWrite(const QString& root, const QString& requested, const std::shared_ptr<Sandbox>& sandbox) {
+  const QString target = resolve(root, requested);
+  if (isInside(root, target)) {
+    return resolveInRoot(root, requested);
+  }
+  const bool sandboxed = sandbox && sandbox->active();
+  if (sandboxed && (isWithin("/tmp", target) || isWithin("/var/tmp", target))) {
+    if (const std::optional<SandboxPath> temp = sandbox->sandboxPath(target, root)) {
+      // A container's /tmp is its own; in bwrap, a link must not lead out of this run's.
+      if (temp->root.isEmpty()) {
+        return target;
+      }
+      const QString realRoot = realPath(temp->root).isEmpty() ? temp->root : realPath(temp->root);
+      if (isInside(realRoot, realPathAllowingMissing(temp->host))) {
+        return target;
+      }
+    }
+  }
+  throw SmithError(QString("Path is outside the working directory: %1%2")
+                       .arg(requested, sandboxed ? QString(". Files can be written there and in /tmp.") : QString()));
+}
+
 void assertWritable(const QString& root, const QString& target) {
   const QString rel = QDir(root).relativeFilePath(target);
   if (rel.section('/', 0, 0) == ".git") {

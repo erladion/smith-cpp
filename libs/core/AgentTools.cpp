@@ -1,5 +1,6 @@
 #include "core/Agent.h"
 
+#include "core/Dirs.h"
 #include "core/Errors.h"
 #include "core/Json.h"
 #include "core/RunLater.h"
@@ -382,12 +383,16 @@ ToolContext Agent::toolContext(const ToolDef& tool, const CancelPtr& cancel) {
   ctx.cwd = m_options.cwd;
   ctx.cancel = cancel;
   ctx.sandbox = m_options.sandbox;
-  ctx.beforeWrite = [checkpoint](const QString& file) {
-    if (checkpoint) {
+  // Scratch files in the sandbox's /tmp aren't the project's: /undo and the report leave them out.
+  ctx.beforeWrite = [this, checkpoint](const QString& file) {
+    if (checkpoint && isWithin(m_options.cwd, file)) {
       checkpoint->beforeWrite(file);
     }
   };
   ctx.afterWrite = [this, checkpoint](const QString& file, const QByteArray& content) {
+    if (!isWithin(m_options.cwd, file)) {
+      return;
+    }
     if (checkpoint) {
       checkpoint->afterWrite(file, content);
     }

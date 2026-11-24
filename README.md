@@ -450,6 +450,8 @@ By default every shell command, and the file tools, run under bubblewrap:
 - Your home folder is replaced by an empty one, apart from the project and the folders in
   `sandbox.home.show` and `sandbox.home.writable`. Credentials (`~/.ssh`, `~/.aws`, `~/.npmrc`,
   ...) and Smith's own settings stay hidden even then. `/tmp`, `/run` and `/mnt` are empty.
+- `/tmp` is the session's own, kept between commands. `write_file` and `edit_file` can write
+  scratch files there too; those aren't part of `/undo`.
 - The network is off until you turn it on (`--network`, `/network on`, or `sandbox.network`).
 - The project's `.git` folder is read-only, so the agent can look at history but not commit.
 - `sandbox.limits` caps memory, processes and CPU per command, through `systemd-run` (or

@@ -106,7 +106,7 @@ struct WritePlan {
 
 // Works out a write without doing it, so the approval prompt can show the diff.
 WritePlan planWrite(const QJsonObject& input, const ToolContext& ctx) {
-  const QString file = resolveInRoot(ctx.cwd, input.value("path").toString());
+  const QString file = resolveForWrite(ctx.cwd, input.value("path").toString(), ctx.sandbox);
   assertWritable(ctx.cwd, file);
   const std::optional<QByteArray> before = readIfExists(file, ctx);
   const QString content = input.value("content").toString();
@@ -144,7 +144,7 @@ struct EditPlan {
 EditPlan planEdit(const QJsonObject& input, const ToolContext& ctx) {
   const QString path = input.value("path").toString();
   const QList<Replacement> edits = replacements(input);
-  const QString file = resolveInRoot(ctx.cwd, path);
+  const QString file = resolveForWrite(ctx.cwd, path, ctx.sandbox);
   assertWritable(ctx.cwd, file);
   const QByteArray bytes = readThrough(file, ctx);
   if (bytes.contains('\0')) {
@@ -262,7 +262,7 @@ ToolDef writeFileTool() {
   tool.description = "Create a file or overwrite it completely. Prefer edit_file for changes to existing files.";
   tool.schema = Schema::object(
       {
-          {"path", Schema::string("File path, relative to the working directory")},
+          {"path", Schema::string("File path, relative to the working directory. In the sandbox, /tmp works too, for scratch files")},
           {"content", Schema::string("The full file contents")},
       },
       {"path", "content"});
@@ -296,7 +296,7 @@ ToolDef editFileTool() {
                      "put the rest in edits: they apply in order, each to the result of the one before, and either all of them apply or none.";
   tool.schema = Schema::object(
       {
-          {"path", Schema::string("File path, relative to the working directory")},
+          {"path", Schema::string("File path, relative to the working directory. In the sandbox, /tmp works too, for scratch files")},
           {"old_string", Schema::string("Exact text to replace", 1)},
           {"new_string", Schema::string("Replacement text")},
           {"replace_all", Schema::boolean("Replace every occurrence instead of exactly one")},

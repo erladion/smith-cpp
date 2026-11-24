@@ -38,6 +38,7 @@ private Q_SLOTS:
   void tmpIsPrivateAndKept();
   void fileToolsGoThroughSandbox();
   void fileToolsReadSessionTmp();
+  void fileToolsWriteSessionTmp();
   void timedOutCommandIsKilledWithChildren();
 
   // the home folder in the bwrap sandbox
@@ -292,6 +293,30 @@ void TestSandbox::fileToolsReadSessionTmp() {
   QVERIFY(reason(readFileTool(), {{"path", "/tmp/away/x"}}, ctx).has_value());
   // Without a sandbox, /tmp is the machine's own and stays off limits.
   QVERIFY_THROWS_MATCH(run(readFileTool(), {{"path", "/tmp/out/log.txt"}}, context(fake.project())), "off limits");
+}
+
+void TestSandbox::fileToolsWriteSessionTmp() {
+  REQUIRE_BWRAP();
+  FakeHome fake;
+  const auto sandbox = bwrap();
+  const ToolContext ctx = context(fake.project(), sandbox);
+  const QString name = QString("smith-scratch-%1.py").arg(QCoreApplication::applicationPid());
+
+  // Written in this run's /tmp, where commands find it, not the machine's.
+  run(writeFileTool(), {{"path", "/tmp/" + name}, {"content", "print('one')\n"}}, ctx);
+  run(editFileTool(), {{"path", "/tmp/" + name}, {"old_string", "one"}, {"new_string", "two"}}, ctx);
+  QCOMPARE(sh(sandbox, fake.project(), "cat /tmp/" + name).content, QString("print('two')"));
+  QVERIFY(!QFileInfo::exists("/tmp/" + name));
+
+  // A link in it still can't lead elsewhere, and other places stay closed.
+  run(bashTool(), {{"command", "ln -s /usr/share /tmp/away"}}, ctx);
+  QVERIFY_THROWS_MATCH(run(writeFileTool(), {{"path", "/tmp/away/x"}, {"content", "x"}}, ctx), "outside the working directory: /tmp/away/x\\. Files can be written there and in /tmp");
+  QVERIFY_THROWS_MATCH(run(writeFileTool(), {{"path", "/etc/smith-x"}, {"content", "x"}}, ctx), "outside the working directory");
+  // A folder of the machine's /tmp is this run's own in there, so that write stays in the sandbox.
+  run(writeFileTool(), {{"path", fake.outside.path() + "/x"}, {"content", "x"}}, ctx);
+  QVERIFY(!QFileInfo::exists(fake.outside.path() + "/x"));
+  // Without a sandbox, /tmp is the machine's own.
+  QVERIFY_THROWS_MATCH(run(writeFileTool(), {{"path", "/tmp/" + name}, {"content", "x"}}, context(fake.project())), "outside the working directory: [^\\n]*py$");
 }
 
 void TestSandbox::timedOutCommandIsKilledWithChildren() {

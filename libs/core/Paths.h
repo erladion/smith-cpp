@@ -13,6 +13,10 @@ class Sandbox;
 // symlinks that point out of the root. Throws SmithError.
 QString resolveInRoot(const QString& root, const QString& requested);
 
+// Resolves a path for write_file and edit_file: inside the working directory,
+// or in the sandbox's private /tmp, which its commands see too. Throws SmithError.
+QString resolveForWrite(const QString& root, const QString& requested, const std::shared_ptr<Sandbox>& sandbox);
+
 // Rejects writes into .git: git config and hooks run code outside any sandbox.
 void assertWritable(const QString& root, const QString& target);
 
