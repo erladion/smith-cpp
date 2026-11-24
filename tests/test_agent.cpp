@@ -64,6 +64,7 @@ private Q_SLOTS:
   // The config's settings.
   void configParamsGoWithRequests();
   void loopingResponsesAreStopped();
+  void repeatedToolCallsAreStopped();
 
   // Additions.
   void escInterruptsRunningCommand();
@@ -1094,6 +1095,67 @@ void TestAgent::loopingResponsesAreStopped() {
   off->agent->send("build it", makeCancel());
   QCOMPARE(m_pFake->requests().size(), 1);
   QCOMPARE(messageText(off->agent->messages().last()), QString("never reached"));
+}
+
+void TestAgent::repeatedToolCallsAreStopped() {
+  write(m_pDir->file("notes.txt"), "a\n");
+  auto read = [](const QString& id) { return FakeServer::stream({FakeServer::callDelta(0, id, "read_file", {{"path", "notes.txt"}})}, "tool_calls"); };
+  auto watching = [](AgentOptions& options, Harness&) {
+    options.settingsFor = [](const QString&, const QString&) {
+      ModelSettings settings;
+      settings.loopDetection = true;
+      return settings;
+    };
+  };
+
+  // The third time the same call comes back the same, the model is told; it can still go on.
+  m_pFake->setScript({read("r1"), read("r2"), read("r3"), FakeServer::text("Done.")});
+  auto h = make(ApprovalDecision::Allow, watching);
+  h->agent->send("check the notes", makeCancel());
+  QCOMPARE(m_pFake->requests().size(), 4);
+  QStringList results = toolResults(m_pFake->requests()[3]);
+  QCOMPARE(results.size(), 3);
+  QVERIFY_NO_MATCH(results[1], "Smith:");
+  QVERIFY_MATCH(results[2], "^1\\ta\\n\\n\\[Smith: this exact call has now given this exact result 3 times");
+  QVERIFY(hasNotice(h->events, "told it to try something else"));
+  QVERIFY(endsWithDone(h->events, DoneReason::Stop));
+  QCOMPARE(messageText(h->agent->messages().last()), QString("Done."));
+
+  // Once more after that, and the turn ends.
+  m_pFake->clearRequests();
+  m_pFake->setScript({read("r1"), read("r2"), read("r3"), read("r4"), FakeServer::text("unused")});
+  auto stuck = make(ApprovalDecision::Allow, watching);
+  stuck->agent->send("check the notes", makeCancel());
+  QCOMPARE(m_pFake->requests().size(), 4);
+  QVERIFY(hasNotice(stuck->events, "kept making the same calls"));
+  QVERIFY(endsWithDone(stuck->events, DoneReason::Stop));
+  QCOMPARE(stuck->agent->messages().last().value("role").toString(), QString("tool"));
+
+  // The same call with a different result each time (the file changed in between) isn't a repeat.
+  m_pFake->clearRequests();
+  auto edit = [](const QString& id, const QString& from, const QString& to) {
+    return FakeServer::stream({FakeServer::callDelta(0, id, "edit_file", {{"path", "notes.txt"}, {"old_string", from}, {"new_string", to}})},
+                              "tool_calls");
+  };
+  m_pFake->setScript({read("r1"), edit("e1", "a", "b"), read("r2"), edit("e2", "b", "c"), read("r3"), FakeServer::text("Done.")});
+  auto changing = make(ApprovalDecision::Allow, watching);
+  changing->agent->send("check the notes", makeCancel());
+  QCOMPARE(m_pFake->requests().size(), 6);
+  for (const QString& result : toolResults(m_pFake->requests()[5])) {
+    QVERIFY_NO_MATCH(result, "Smith:");
+  }
+  QVERIFY(!hasNotice(changing->events, "try something else"));
+
+  // Off: nothing is said.
+  write(m_pDir->file("notes.txt"), "a\n");
+  m_pFake->clearRequests();
+  m_pFake->setScript({read("r1"), read("r2"), read("r3"), read("r4"), FakeServer::text("Done.")});
+  auto off = make();
+  off->agent->send("check the notes", makeCancel());
+  QCOMPARE(m_pFake->requests().size(), 5);
+  for (const QString& result : toolResults(m_pFake->requests()[4])) {
+    QVERIFY_NO_MATCH(result, "Smith:");
+  }
 }
 
 void TestAgent::checklistSurvivesResumeAndCompaction() {

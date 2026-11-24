@@ -3,6 +3,9 @@
 #include "core/Context.h"
 #include "core/RunLater.h"
 
+#include <QCryptographicHash>
+#include <QHash>
+#include <QJsonDocument>
 #include <QMutexLocker>
 
 namespace Smith {
@@ -23,6 +26,21 @@ const QString PLAN_OVER_NOTE = "[Plan mode is off: you can change files and run 
 // Goes with the request after a response that went round in circles.
 const QString LOOP_NOTE = "[Smith stopped your last response: it kept repeating the same passage. Don't go over it again. Decide, and take the "
                           "next step: call a tool, or answer with what you have.]";
+
+// With loop detection: how often one call may give the same result in a turn before Smith steps in.
+constexpr int REPEAT_LIMIT = 3;
+
+// Goes with the result of a call that keeps coming back the same.
+const QString REPEAT_NOTE = "[Smith: this exact call has now given this exact result %1 times this turn. Running it again won't change "
+                            "anything. Don't repeat it: try something different, or answer with what you have and say what's in the way.]";
+
+// A call and what came of it: the same key means the same call came back the same.
+QString repeatKey(const QString& name, const QString& args, const ToolResult& result) {
+  const QJsonDocument parsed = QJsonDocument::fromJson(args.toUtf8());
+  const QByteArray call = parsed.isObject() ? parsed.toJson(QJsonDocument::Compact) : args.toUtf8();
+  const QByteArray outcome = (result.isError ? "error\n" : "ok\n") + result.content.toUtf8();
+  return name + '\n' + QString::fromLatin1(QCryptographicHash::hash(call + '\n' + outcome, QCryptographicHash::Sha1).toHex());
+}
 
 } // namespace
 
@@ -344,6 +362,10 @@ void Agent::loop(const CancelPtr& cancel) {
   bool reminded = false;
   // After a response that looped, the note for the next request; a second loop in a row ends the turn.
   QString loopNote;
+  // With loop detection: how often each call gave each result, until the history is compacted; and whether
+  // the model was already told it's repeating a call, after which one more such call ends the turn.
+  QHash<QString, int> repeats;
+  bool toldOfRepeat = false;
   // A list the agent didn't touch this turn is from an earlier task: answering
   // something else shouldn't send it back to that one.
   const TodoList atStart = todos();
@@ -352,7 +374,9 @@ void Agent::loop(const CancelPtr& cancel) {
     if (step > 0) {
       deliverQueued();
     }
-    maybeCompact(cancel);
+    if (maybeCompact(cancel)) {
+      repeats.clear();
+    }
 
     StreamedResponse response;
     try {
@@ -374,6 +398,7 @@ void Agent::loop(const CancelPtr& cancel) {
       if (!compact(cancel, "overflow")) {
         throw;
       }
+      repeats.clear();
       continue;
     }
     retriedOverflow = false;
@@ -426,13 +451,38 @@ void Agent::loop(const CancelPtr& cancel) {
     // Every tool call needs a matching tool message, even when the user
     // interrupts partway, or the next request will be rejected.
     const QList<ToolResult> results = runTools(response.toolCalls, cancel);
+    const bool watch = modelSettings().loopDetection.value_or(false) && !cancelled(cancel);
+    bool repeated = false;
+    bool stuck = false;
     for (int i = 0; i < response.toolCalls.size(); i++) {
+      const ToolCall& call = response.toolCalls[i];
       const ToolResult& result = results[i];
-      append(toolMessage(response.toolCalls[i].id, result.isError ? "Error: " + result.content : result.content));
+      QString content = result.isError ? "Error: " + result.content : result.content;
+      if (watch) {
+        const int seen = ++repeats[repeatKey(call.name, call.args, result)];
+        if (seen >= REPEAT_LIMIT) {
+          repeated = true;
+          stuck = stuck || toldOfRepeat;
+          content += "\n\n" + REPEAT_NOTE.arg(seen);
+        }
+      }
+      append(toolMessage(call.id, content));
     }
     if (cancelled(cancel)) {
       emitEvent(Event::Done{DoneReason::Interrupted});
       return;
+    }
+    if (stuck) {
+      emitEvent(Event::Notice{NoticeLevel::Warn, "The model kept making the same calls and getting the same results, so this turn stops here. "
+                                                 "Sampling settings can help (\"params\" in the config, e.g. presence_penalty), and so can "
+                                                 "/reasoning low."});
+      emitEvent(Event::Done{DoneReason::Stop});
+      return;
+    }
+    if (repeated) {
+      toldOfRepeat = true;
+      emitEvent(Event::Notice{NoticeLevel::Warn, "The model made the same call with the same result again, so Smith told it to try something "
+                                                 "else."});
     }
   }
 

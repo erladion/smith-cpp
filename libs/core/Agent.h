@@ -215,7 +215,8 @@ private:
 
   qint64 estimateContext() const;
   void emitContext() const;
-  void maybeCompact(const CancelPtr& cancel);
+  // Whether it compacted.
+  bool maybeCompact(const CancelPtr& cancel);
   bool compact(const CancelPtr& cancel, const QString& reason);
   QString summarize(const Messages& messages, int maxChars, const CancelPtr& cancel);
 

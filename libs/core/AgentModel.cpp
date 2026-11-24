@@ -48,11 +48,9 @@ void Agent::emitContext() const {
   emitEvent(Event::Context{estimateContext(), contextLimit()});
 }
 
-void Agent::maybeCompact(const CancelPtr& cancel) {
+bool Agent::maybeCompact(const CancelPtr& cancel) {
   const std::optional<int> limit = contextLimit();
-  if (limit && estimateContext() > *limit * COMPACT_AT) {
-    compact(cancel, "auto");
-  }
+  return limit && estimateContext() > *limit * COMPACT_AT && compact(cancel, "auto");
 }
 
 bool Agent::compact(const CancelPtr& cancel, const QString& reason) {

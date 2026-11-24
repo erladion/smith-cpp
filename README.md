@@ -145,7 +145,7 @@ optional; an unknown key or a wrong value stops Smith with a message saying wher
 | `endpoints.<name>.params` | | Fields sent with every request to this server, such as [sampling settings](#sampling-settings-and-loops). |
 | `endpoints.<name>.loopDetection` | | `loopDetection` for this server. |
 | `models.<name>` | | `params` and `loopDetection` for a model on any server. `<name>` is its name, or a pattern such as `"qwen3*"`. |
-| `loopDetection` | `false` | Stop a response that keeps [repeating itself](#sampling-settings-and-loops), and ask the model to move on. |
+| `loopDetection` | `false` | Stop a response, or a run of tool calls, that keeps [repeating itself](#sampling-settings-and-loops), and ask the model to move on. |
 | `maxSteps` | `50` | Model calls allowed per message you send. |
 | `subagents` | `true` | Whether the model can hand work to sub-agents (the `task` tool). |
 | `toolLog` | `true` | Whether tool calls are logged to `~/.local/share/smith/logs/<session>.jsonl`. |
@@ -203,8 +203,16 @@ go round in circles in its reasoning. Give it the settings from its model card w
 With `"loopDetection": true` (at the top, on an endpoint or on a model), Smith watches what the
 model writes as it streams. When the same passage has come four times, it stops the response,
 says so, and asks again with a note to stop going over it and take the next step. If the next
-response loops too, the turn ends there. It is off by default: a response that really does repeat
-a passage, the same block of code four times say, would be cut short.
+response loops too, the turn ends there.
+
+It also watches the tool calls. When the model makes the same call a third time in a turn and it
+gives the same result again, Smith adds a note to that result: running it again won't change
+anything, so try something else. If a call repeats like that once more, the turn ends. A call
+whose result has changed, such as a build after an edit, doesn't count, and the count starts over
+when the conversation is compacted.
+
+It is off by default: a response that really does repeat a passage, the same block of code four
+times say, would be cut short.
 
 ### Permissions
 
