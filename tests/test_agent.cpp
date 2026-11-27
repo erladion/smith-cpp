@@ -65,6 +65,7 @@ private Q_SLOTS:
   void configParamsGoWithRequests();
   void loopingResponsesAreStopped();
   void repeatedToolCallsAreStopped();
+  void compactAtComesFromTheConfig();
 
   // Additions.
   void escInterruptsRunningCommand();
@@ -1156,6 +1157,43 @@ void TestAgent::repeatedToolCallsAreStopped() {
   for (const QString& result : toolResults(m_pFake->requests()[4])) {
     QVERIFY_NO_MATCH(result, "Smith:");
   }
+}
+
+void TestAgent::compactAtComesFromTheConfig() {
+  // About half the window.
+  Messages history;
+  for (int i = 0; i < 6; i++) {
+    history << userMessage(QString("question %1 ").arg(i) + QString(1500, 'x'));
+    history << assistant(QString("answer %1 ").arg(i) + QString(1500, 'y'));
+  }
+  auto withCompactAt = [&](std::optional<double> compactAt) {
+    return [&history, compactAt](AgentOptions& options, Harness&) {
+      options.history = history;
+      options.contextSize = 10000;
+      options.settingsFor = [compactAt](const QString&, const QString&) {
+        ModelSettings settings;
+        settings.compactAt = compactAt;
+        return settings;
+      };
+    };
+  };
+
+  // Smith's own threshold: not yet.
+  m_pFake->setScript({FakeServer::text("Done.")});
+  auto standard = make(ApprovalDecision::Allow, withCompactAt(std::nullopt));
+  standard->agent->send("latest question", makeCancel());
+  QCOMPARE(m_pFake->requests().size(), 1);
+  QVERIFY(!hasNotice(standard->events, "Summarized"));
+
+  // A lower one: summarized first, and left below it, so it doesn't come back at the next step.
+  m_pFake->clearRequests();
+  m_pFake->setScript({FakeServer::plain("Summary: six questions."), FakeServer::text("Done.")});
+  auto early = make(ApprovalDecision::Allow, withCompactAt(0.3));
+  early->agent->send("latest question", makeCancel());
+  QCOMPARE(m_pFake->requests().size(), 2);
+  QVERIFY(!m_pFake->requests()[0].contains("stream"));
+  QVERIFY(hasNotice(early->events, "Summarized"));
+  QVERIFY(estimateTokens(early->agent->messages()) < 3000);
 }
 
 void TestAgent::checklistSurvivesResumeAndCompaction() {

@@ -689,12 +689,12 @@ void TestTools::configModelSettings() {
   const QString file = m_pDir->file("models.json");
   write(file, R"({
   "models": {
-    "qwen3*": { "params": { "top_k": 20, "chat_template_kwargs": { "a": 1 } }, "loopDetection": true },
+    "qwen3*": { "params": { "top_k": 20, "chat_template_kwargs": { "a": 1 } }, "loopDetection": true, "compactAt": 0.5 },
     "*": { "params": { "top_k": 40 } },
     "Qwen3-Exact": { "params": { "min_p": 0 } }
   },
   "endpoints": {
-    "gpu": { "baseURL": "http://x/v1", "params": { "presence_penalty": 1.5, "top_k": 10, "chat_template_kwargs": { "b": 2 } } }
+    "gpu": { "baseURL": "http://x/v1", "params": { "presence_penalty": 1.5, "top_k": 10, "chat_template_kwargs": { "b": 2 } }, "compactAt": 0.6 }
   }
 })");
   const Config config = loadConfig(file);
@@ -704,6 +704,9 @@ void TestTools::configModelSettings() {
   ModelSettings settings = config.settingsFor("gpu", "qwen3-27b");
   QCOMPARE(settings.params, QJsonObject({{"presence_penalty", 1.5}, {"top_k", 20}, {"chat_template_kwargs", QJsonObject{{"a", 1}, {"b", 2}}}}));
   QCOMPARE(settings.loopDetection, std::optional<bool>(true));
+  QCOMPARE(settings.compactAt, std::optional<double>(0.5));
+  QCOMPARE(config.settingsFor("gpu", "llama").compactAt, std::optional<double>(0.6));
+  QCOMPARE(config.settingsFor({}, "llama").compactAt, std::nullopt);
   settings = config.settingsFor("gpu", "qwen3-exact");
   QCOMPARE(settings.params, QJsonObject({{"presence_penalty", 1.5}, {"top_k", 10}, {"chat_template_kwargs", QJsonObject{{"b", 2}}}, {"min_p", 0}}));
   QCOMPARE(settings.loopDetection, std::optional<bool>(false));
@@ -718,6 +721,9 @@ void TestTools::configModelSettings() {
   QVERIFY_THROWS_MATCH(loadConfig(writeConfig(m_pDir->path(), "notobject.json", {{"models", QJsonObject{{"m", QJsonObject{{"params", 3}}}}}})),
                        "models\\.m\\.params");
   QVERIFY_THROWS_MATCH(loadConfig(writeConfig(m_pDir->path(), "notbool.json", {{"loopDetection", "yes"}})), "expected boolean");
+  QCOMPARE(loadConfig(writeConfig(m_pDir->path(), "compact.json", {{"compactAt", 0.4}})).settingsFor({}, "m").compactAt, std::optional<double>(0.4));
+  QVERIFY_THROWS_MATCH(loadConfig(writeConfig(m_pDir->path(), "compactpct.json", {{"models", QJsonObject{{"m", QJsonObject{{"compactAt", 50}}}}}})),
+                       "models\\.m\\.compactAt");
   QVERIFY_THROWS_MATCH(loadConfig(writeConfig(m_pDir->path(), "typo.json", {{"models", QJsonObject{{"m", QJsonObject{{"parms", QJsonObject{}}}}}}})),
                        "\"parms\"");
 }

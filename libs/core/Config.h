@@ -32,6 +32,8 @@ struct ModelSettings {
   QJsonObject params;
   // Whether a response that keeps repeating itself is stopped; unset leaves it to the level above.
   std::optional<bool> loopDetection;
+  // How full the context window gets (0.1 to 0.95) before the conversation is compacted; unset leaves it to the level above.
+  std::optional<double> compactAt;
 };
 
 struct Endpoint {
@@ -84,6 +86,8 @@ struct Config {
   QStringList deny;
   // Off unless the config turns it on, here, for an endpoint, or for a model.
   bool loopDetection = false;
+  // Unset: Smith's own default.
+  std::optional<double> compactAt;
   // In the file's order.
   QList<ModelEntry> models;
   // Problems worth telling the user about that don't stop the agent.

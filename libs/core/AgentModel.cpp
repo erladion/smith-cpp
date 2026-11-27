@@ -24,11 +24,12 @@ namespace Smith {
 
 namespace {
 
-// Compact when the context is this full, and aim to get below the second figure.
+// Compact when the context is this full, unless the config says otherwise ("compactAt").
 constexpr double COMPACT_AT = 0.75;
-constexpr double TRIM_TARGET = 0.6;
-// Share of the window kept verbatim (most recent messages) when summarizing.
-constexpr double TAIL_SHARE = 0.25;
+// Clearing old tool output is enough when it gets below this share of that.
+constexpr double TRIM_TARGET = 0.8;
+// Share of it kept verbatim (most recent messages) when summarizing.
+constexpr double TAIL_SHARE = 1.0 / 3;
 
 QString formatNumber(qint64 n) {
   return QLocale(QLocale::English).toString(n);
@@ -48,9 +49,13 @@ void Agent::emitContext() const {
   emitEvent(Event::Context{estimateContext(), contextLimit()});
 }
 
+double Agent::compactAt() const {
+  return modelSettings().compactAt.value_or(COMPACT_AT);
+}
+
 bool Agent::maybeCompact(const CancelPtr& cancel) {
   const std::optional<int> limit = contextLimit();
-  return limit && estimateContext() > *limit * COMPACT_AT && compact(cancel, "auto");
+  return limit && estimateContext() > *limit * compactAt() && compact(cancel, "auto");
 }
 
 bool Agent::compact(const CancelPtr& cancel, const QString& reason) {
@@ -59,9 +64,11 @@ bool Agent::compact(const CancelPtr& cancel, const QString& reason) {
   const qint64 limit = contextLimit().value_or(std::max<qint64>(4096, qint64(before * 0.9)));
   const Messages history = this->messages();
   const qint64 fixedCost = estimateTokens(history.first()) + estimateTokens(m_apiTools);
+  // Below the point compaction starts again, or it would come back at the next step.
+  const double threshold = compactAt();
 
   const TrimResult trimmed = trimOldToolResults(history.mid(1));
-  if (reason == "auto" && trimmed.count > 0 && fixedCost + estimateTokens(trimmed.messages) < limit * TRIM_TARGET) {
+  if (reason == "auto" && trimmed.count > 0 && fixedCost + estimateTokens(trimmed.messages) < limit * threshold * TRIM_TARGET) {
     replaceHistory(trimmed.messages);
     emitEvent(Event::Notice{NoticeLevel::Info, QString("Cleared %1 old tool outputs to free context (~%2 → ~%3 tokens).")
                                                         .arg(QString::number(trimmed.count), formatNumber(before), formatNumber(estimateContext()))});
@@ -70,7 +77,7 @@ bool Agent::compact(const CancelPtr& cancel, const QString& reason) {
   }
 
   const Messages& messages = trimmed.messages;
-  const int tailStart = chooseTail(messages, qint64(limit * TAIL_SHARE));
+  const int tailStart = chooseTail(messages, qint64(limit * threshold * TAIL_SHARE));
   const Messages head = messages.mid(0, tailStart);
   const Messages tail = messages.mid(tailStart);
   if (head.isEmpty()) {

@@ -168,7 +168,7 @@ private:
 // Fields Smith writes itself; the config can't replace them.
 const QStringList RESERVED_PARAMS = {"model", "messages", "stream", "stream_options", "tools", "parallel_tool_calls"};
 
-// "params" and "loopDetection", on an endpoint or a "models" entry.
+// "params", "loopDetection" and "compactAt", on an endpoint or a "models" entry.
 ModelSettings modelSettings(const QJsonObject& raw, const QString& path, Checker& check) {
   ModelSettings settings;
   if (const auto params = check.object(raw, "params", path)) {
@@ -180,6 +180,7 @@ ModelSettings modelSettings(const QJsonObject& raw, const QString& path, Checker
     settings.params = *params;
   }
   settings.loopDetection = check.boolean(raw, "loopDetection", path);
+  settings.compactAt = check.number(raw, "compactAt", path, false, 0.1, 0.95);
   return settings;
 }
 
@@ -297,10 +298,14 @@ const Endpoint* Config::findEndpoint(const QString& name) const {
 ModelSettings Config::settingsFor(const QString& endpoint, const QString& model) const {
   ModelSettings out;
   out.loopDetection = loopDetection;
+  out.compactAt = compactAt;
   auto apply = [&out](const ModelSettings& settings) {
     out.params = Json::overlay(out.params, settings.params);
     if (settings.loopDetection) {
       out.loopDetection = settings.loopDetection;
+    }
+    if (settings.compactAt) {
+      out.compactAt = settings.compactAt;
     }
   };
   if (const Endpoint* found = findEndpoint(endpoint)) {
@@ -365,7 +370,7 @@ Config loadConfig(const QString& file) {
   Checker check;
   check.strict(root,
                {"default", "maxSteps", "subagents", "toolLog", "theme", "codeStream", "sandbox", "protectRunLater", "permissions", "loopDetection",
-                "models", "endpoints"},
+                "compactAt", "models", "endpoints"},
                {});
 
   config.defaultEndpoint = check.string(root, "default", {}).value_or(QString());
@@ -393,6 +398,7 @@ Config loadConfig(const QString& file) {
     config.sandbox = sandboxConfig(*sandbox, check);
   }
   config.loopDetection = check.boolean(root, "loopDetection", {}).value_or(false);
+  config.compactAt = check.number(root, "compactAt", {}, false, 0.1, 0.95);
   if (const auto models = check.object(root, "models", {})) {
     // In the file's order, so the first pattern that matches is the first written.
     QStringList names = Json::jsonKeyOrder(text, {"models"});
@@ -408,7 +414,7 @@ Config loadConfig(const QString& file) {
         continue;
       }
       const QJsonObject raw = models->value(name).toObject();
-      check.strict(raw, {"params", "loopDetection"}, path);
+      check.strict(raw, {"params", "loopDetection", "compactAt"}, path);
       config.models.append(ModelEntry{name, modelSettings(raw, path, check)});
     }
   }
@@ -433,7 +439,7 @@ Config loadConfig(const QString& file) {
         continue;
       }
       const QJsonObject raw = it.value().toObject();
-      check.strict(raw, {"baseURL", "apiKey", "apiKeyEnv", "model", "contextSize", "params", "loopDetection"}, path);
+      check.strict(raw, {"baseURL", "apiKey", "apiKeyEnv", "model", "contextSize", "params", "loopDetection", "compactAt"}, path);
       Endpoint endpoint;
       endpoint.name = it.key();
       const auto baseUrl = check.string(raw, "baseURL", path);

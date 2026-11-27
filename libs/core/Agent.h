@@ -215,6 +215,8 @@ private:
 
   qint64 estimateContext() const;
   void emitContext() const;
+  // How full the context gets before it's compacted, for the model in use.
+  double compactAt() const;
   // Whether it compacted.
   bool maybeCompact(const CancelPtr& cancel);
   bool compact(const CancelPtr& cancel, const QString& reason);

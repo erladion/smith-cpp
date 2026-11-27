@@ -144,8 +144,10 @@ optional; an unknown key or a wrong value stops Smith with a message saying wher
 | `endpoints.<name>.contextSize` | | The context window in tokens, for a server that doesn't report it. |
 | `endpoints.<name>.params` | | Fields sent with every request to this server, such as [sampling settings](#sampling-settings-and-loops). |
 | `endpoints.<name>.loopDetection` | | `loopDetection` for this server. |
-| `models.<name>` | | `params` and `loopDetection` for a model on any server. `<name>` is its name, or a pattern such as `"qwen3*"`. |
+| `endpoints.<name>.compactAt` | | `compactAt` for this server. |
+| `models.<name>` | | `params`, `loopDetection` and `compactAt` for a model on any server. `<name>` is its name, or a pattern such as `"qwen3*"`. |
 | `loopDetection` | `false` | Stop a response, or a run of tool calls, that keeps [repeating itself](#sampling-settings-and-loops), and ask the model to move on. |
+| `compactAt` | `0.75` | How full the context window gets, from `0.1` to `0.95`, before Smith [compacts the conversation](#compacting-sooner). |
 | `maxSteps` | `50` | Model calls allowed per message you send. |
 | `subagents` | `true` | Whether the model can hand work to sub-agents (the `task` tool). |
 | `toolLog` | `true` | Whether tool calls are logged to `~/.local/share/smith/logs/<session>.jsonl`. |
@@ -213,6 +215,23 @@ when the conversation is compacted.
 
 It is off by default: a response that really does repeat a passage, the same block of code four
 times say, would be cut short.
+
+### Compacting sooner
+
+Smith compacts the conversation when it fills 75% of the context window: it clears old tool
+output, or summarizes the older messages and keeps the latest. Small models often lose track well
+before their window is full: they forget what they already settled and go over it again. For them,
+compact sooner with `compactAt`, at the top, on an endpoint or on a model:
+
+```json
+"models": {
+  "*qwen3*": { "compactAt": 0.5 }
+}
+```
+
+After compacting, the conversation is brought well below that point, so it doesn't happen again at
+the next step. Lower means a shorter conversation for the model to keep track of, and summaries more
+often, each of which leaves some detail out.
 
 ### Permissions
 
@@ -528,8 +547,8 @@ commands can't be undone; Smith says which.
   background and check on them later. `/jobs` shows them. While the network is off, each command
   has a network of its own, so a background server can't be reached from other commands.
 - **The context.** When the conversation nears the model's context window, Smith summarizes the
-  older part and carries on. `/compact` does it on demand. If the server doesn't report its
-  context size, give it with `--context-size` or `contextSize`.
+  older part and carries on (`compactAt` sets how near). `/compact` does it on demand. If the
+  server doesn't report its context size, give it with `--context-size` or `contextSize`.
 - **Scripts.** `smith -p "explain src/main.cpp"` runs one prompt and prints the answer. Add `-y`
   to let it change things without asking.
 - **Sessions** are saved as you go, in `~/.local/share/smith/sessions/`, readable only by you.
