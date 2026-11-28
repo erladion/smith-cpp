@@ -33,7 +33,8 @@ struct Log {
 
 // One you sent, not a reminder the agent added.
 bool isSent(const Message& message) {
-  return messageRole(message) == "user" && !messageText(message).startsWith(TODO_REMINDER);
+  const QString text = messageText(message);
+  return messageRole(message) == "user" && !text.startsWith(TODO_REMINDER) && !text.startsWith(SHOWN_IMAGES);
 }
 
 int sentIn(const Messages& messages) {

@@ -2,10 +2,12 @@
 #include "compat/Utf8.h"
 
 #include "core/Errors.h"
+#include "core/Images.h"
 #include "core/Json.h"
 #include "core/Paths.h"
 #include "core/Sandbox.h"
 
+#include <QFileInfo>
 #include <QMutex>
 
 namespace Smith {
@@ -187,13 +189,33 @@ EditPlan planEdit(const QJsonObject& input, const ToolContext& ctx) {
   return EditPlan{file, encode(updated, read.encoding), replaced, diffLines(read.text, updated)};
 }
 
+// An image read_file opened: shown to the model, where it can see images.
+ToolResult imageResult(const QString& path, const QByteArray& bytes, const QString& type, const ToolContext& ctx) {
+  const QString kind = QString("%1 image, %2").arg(type.mid(6).toUpper(), sizeText(bytes.size()));
+  if (!ctx.showImages) {
+    return ToolResult{QString("%1 is an image (%2), and this model can't see images: the server refused them earlier. Check it another way, "
+                              "such as comparing it with a command.")
+                          .arg(path, kind)};
+  }
+  if (bytes.size() > MAX_IMAGE_BYTES) {
+    return ToolResult::error(QString("%1 is an image (%2); images over %3 can't be shown. Make a smaller copy, scaled down or cut to the part "
+                                     "that matters, and read that.")
+                                 .arg(path, kind, sizeText(MAX_IMAGE_BYTES)));
+  }
+  ToolResult result{QString("%1 is an image (%2). It's shown to you in the message after the tool results.").arg(path, kind)};
+  result.images.append(Image{QFileInfo(path).fileName(), type, bytes, path});
+  return result;
+}
+
 } // namespace
 
 ToolDef readFileTool() {
   ToolDef tool;
   tool.name = "read_file";
   tool.description = QString("Read a text file. Returns lines prefixed with their 1-based line numbers. Reads up to %1 lines by default; use offset "
-                             "and limit for larger files. Files outside the working directory can be read too (the user is asked first).")
+                             "and limit for larger files. Files outside the working directory can be read too (the user is asked first). Images (PNG, JPEG, GIF, WebP) are "
+                             "shown to you as pictures, if the model can see them: look at them rather than measuring them with a script, "
+                             "unless you need exact numbers.")
                          .arg(DEFAULT_LINE_LIMIT);
   tool.schema = Schema::object(
       {
@@ -224,6 +246,9 @@ ToolDef readFileTool() {
     const int limit = input.value("limit").toInt(DEFAULT_LINE_LIMIT);
     const QString file = resolveForRead(ctx.cwd, path, ctx.sandbox).path;
     const QByteArray bytes = readThrough(file, ctx);
+    if (const QString type = imageType(bytes); !type.isEmpty()) {
+      return imageResult(path, bytes, type, ctx);
+    }
     if (bytes.contains('\0')) {
       return ToolResult::error(QString("%1 looks like a binary file.").arg(path));
     }

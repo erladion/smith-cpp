@@ -69,6 +69,8 @@ struct SessionChanges {
 
 // Starts the message that reminds the model of unfinished todos when it stops early.
 extern const QString TODO_REMINDER;
+// Starts the message with the images read_file opened, when nothing you typed went with them.
+extern const QString SHOWN_IMAGES;
 
 struct AgentOptions {
   ServerPtr server;
@@ -209,7 +211,10 @@ private:
   void interruptible(const CancelPtr& cancel, const std::function<void()>& work);
   void loop(const CancelPtr& cancel);
   void dropUnansweredImages(int index);
-  void deliverQueued();
+  // The images read_file opened that the server refused: out, and the model told it can't see them.
+  void dropShownImages(int index);
+  // What was typed meanwhile, and the images tools opened, as one message; whether that has images.
+  bool deliverQueued(const QList<Image>& shown = {});
   QList<ToolResult> runTools(const QList<ToolCall>& calls, const CancelPtr& cancel);
   ToolResult runSubagent(const TaskInput& input, const CancelPtr& cancel);
 
@@ -269,6 +274,8 @@ private:
   bool m_planning = false;
   // The last message went out in plan mode, so the next one says it's over.
   bool m_planned = false;
+  // The server refused images read_file opened; tried again when the model changes.
+  bool m_imagesRefused = false;
   // For sessionChanges: each file as it was before the agent first changed it, and the tools whose changes can't be seen.
   QMap<QString, std::optional<QByteArray>> m_originals;
   QStringList m_untracked;

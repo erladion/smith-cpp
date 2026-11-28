@@ -29,6 +29,8 @@ QList<Entry> historyToEntries(const Messages& messages, const ToolList& tools) {
         }
       } else if (text.startsWith(TODO_REMINDER)) {
         entries.append(Entry::notice(NoticeLevel::Info, "Reminded the agent of its unfinished todos."));
+      } else if (text.startsWith(SHOWN_IMAGES)) {
+        // The read_file calls that opened them are there already.
       } else {
         entries.append(Entry::simple(Entry::Kind::User, text));
       }

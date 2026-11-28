@@ -11,13 +11,6 @@
 
 namespace Smith {
 
-namespace {
-
-// Servers and models differ; this is under what the hosted ones take, and a screenshot is far smaller.
-constexpr qint64 MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-constexpr int MAX_IMAGES = 8;
-
-// What kind of image the bytes are, going by how they start; empty if none of these.
 QString imageType(const QByteArray& data) {
   if (data.startsWith("\x89PNG\r\n\x1a\n")) {
     return "image/png";
@@ -37,8 +30,6 @@ QString imageType(const QByteArray& data) {
 QString sizeText(qint64 bytes) {
   return bytes < 1024 * 1024 ? QString("%1 kB").arg(std::max<qint64>(1, bytes / 1024)) : QString("%1 MB").arg(bytes / (1024.0 * 1024.0), 0, 'f', 1);
 }
-
-} // namespace
 
 ImageRefs imagesIn(const QString& text, const QString& cwd) {
   // Quoted, or a run of non-spaces in which a backslash keeps the next character.

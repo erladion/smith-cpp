@@ -323,7 +323,7 @@ These are the tools the model gets:
 
 | Tool | What it does | Asks? |
 |---|---|---|
-| `read_file` | Read a file, or part of one. | Only outside the project. |
+| `read_file` | Read a file, or part of one. An image is shown to the model as a picture. | Only outside the project. |
 | `list_files`, `glob`, `grep` | Find files and search their contents. | Only outside the project. |
 | `edit_file` | Replace text in a file, with one or several edits in a call (all or nothing). | Yes, with a diff. |
 | `write_file` | Create or overwrite a file. | Yes, with a diff. |
@@ -538,8 +538,14 @@ commands can't be undone; Smith says which.
   attached.
 - **Images.** Name an image file in your message (a path, quoted or not, as a terminal pastes a
   dropped file) and it is sent along: PNG, JPEG, GIF or WebP, up to 5 MB each, from anywhere on
-  disk; `@shot.png` works too. Each picture is labelled with its file, so the model doesn't try to open it. If the
-  server refuses the request, the pictures are taken out of the conversation again.
+  disk; `@shot.png` works too. Each picture is labelled with its file, so the model doesn't try to
+  open it. If the server refuses the request, the pictures are taken out of the conversation again.
+- **Images the model opens.** When the model reads an image with `read_file`, a render or a
+  screenshot it made, it sees the picture, so it can judge how something looks without writing a
+  script to measure pixels. A tool result can only be text, so the pictures go in a message after
+  the results, together with anything you typed meanwhile. If the server refuses them, the model
+  most likely can't see images: Smith takes them out, tells the model, and asks again; later reads
+  say so instead, until you switch models.
 - **Sub-agents.** The model can hand investigations, or with `can_write` whole pieces of work, to
   sub-agents, several at once. Their changes ask through the main agent, show in the transcript,
   and are undone with the turn.

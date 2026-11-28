@@ -30,6 +30,7 @@ private Q_SLOTS:
   // file tools
   void writeThenReadNumberedLines();
   void readFileRefusesBinary();
+  void readFileShowsImages();
   void editFileRequiresUniqueMatch();
   void writesStayInsideEvenThroughSymlink();
   void writesReplaceWholeFiles();
@@ -123,13 +124,48 @@ void TestTools::writeThenReadNumberedLines() {
 
 void TestTools::readFileRefusesBinary() {
   // A NUL early on, with text after it: Qt 5 would decode only up to the NUL and miss it.
-  QFile file(m_pDir->file("image.png"));
+  QFile file(m_pDir->file("app.bin"));
   QVERIFY(file.open(QIODevice::WriteOnly));
-  file.write(QByteArray("\x89PNG\r\n\x1a\n\0\0\0\rIHDR then more bytes", 30));
+  file.write(QByteArray("\x7f" "ELF\x02\x01\x01\0\0\0 then more bytes", 26));
   file.close();
-  const ToolResult res = call(readFileTool(), {{"path", "image.png"}});
+  const ToolResult res = call(readFileTool(), {{"path", "app.bin"}});
   QVERIFY(res.isError);
-  QVERIFY_MATCH(res.content, "image\\.png looks like a binary file");
+  QVERIFY_MATCH(res.content, "app\\.bin looks like a binary file");
+}
+
+void TestTools::readFileShowsImages() {
+  const QByteArray png("\x89PNG\r\n\x1a\n\0\0\0\rIHDR then more bytes", 30);
+  QFile file(m_pDir->file("shots/after.png"));
+  QVERIFY(QDir().mkpath(m_pDir->file("shots")));
+  QVERIFY(file.open(QIODevice::WriteOnly));
+  file.write(png);
+  file.close();
+
+  // The picture goes with the result, named as the model asked for it.
+  const ToolResult res = call(readFileTool(), {{"path", "shots/after.png"}});
+  QVERIFY(!res.isError);
+  QVERIFY_MATCH(res.content, "^shots/after\\.png is an image \\(PNG image, 1 kB\\)\\. It's shown to you in the message after the tool results");
+  QCOMPARE(res.images.size(), 1);
+  QCOMPARE(res.images[0].type, QString("image/png"));
+  QCOMPARE(res.images[0].data, png);
+  QCOMPARE(res.images[0].path, QString("shots/after.png"));
+
+  // Once the server has refused pictures: said, not sent.
+  ToolContext ctx = context(m_pDir->path());
+  ctx.showImages = false;
+  const ToolResult refused = run(readFileTool(), {{"path", "shots/after.png"}}, ctx);
+  QVERIFY(refused.images.isEmpty());
+  QVERIFY_MATCH(refused.content, "this model can't see images");
+
+  // Too big to send.
+  QFile big(m_pDir->file("big.png"));
+  QVERIFY(big.open(QIODevice::WriteOnly));
+  big.write(png + QByteArray(6 * 1024 * 1024, 'x'));
+  big.close();
+  const ToolResult tooBig = call(readFileTool(), {{"path", "big.png"}});
+  QVERIFY(tooBig.isError);
+  QVERIFY(tooBig.images.isEmpty());
+  QVERIFY_MATCH(tooBig.content, "images over 5\\.0 MB can't be shown");
 }
 
 void TestTools::editFileRequiresUniqueMatch() {

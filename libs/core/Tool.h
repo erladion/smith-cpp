@@ -2,6 +2,7 @@
 
 #include "core/Cancel.h"
 #include "core/Diff.h"
+#include "core/History.h"
 
 #include <QJsonArray>
 #include <QJsonObject>
@@ -27,6 +28,8 @@ struct ToolContext {
   // File tools call these around each write, so the turn can be undone.
   std::function<void(const QString& file)> beforeWrite;
   std::function<void(const QString& file, const QByteArray& content)> afterWrite;
+  // Whether images read_file opens go to the model: not once the server has refused them.
+  bool showImages = true;
 
   // The sandbox, or a "none" sandbox when there is no sandbox.
   std::shared_ptr<Sandbox> sandboxOrNone() const;
@@ -38,6 +41,8 @@ struct ToolResult {
   bool isError = false;
   // For file changes: the diff, shown to the user instead of `content`.
   std::optional<Diff> diff;
+  // Pictures for the model. A tool result can only be text, so they go in a message after the results.
+  QList<Image> images;
 
   static ToolResult error(const QString& content) { return ToolResult{content, true, std::nullopt}; }
 };

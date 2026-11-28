@@ -804,6 +804,8 @@ void TestUi::resumedSessionShowsChecklists() {
           Message{{"role", "assistant"}, {"content", QJsonValue::Null}, {"tool_calls", calls}},
           toolMessage("t1", "Todo list updated"),
           userMessage(TODO_REMINDER + "\n[ ] Ship it"),
+          // The pictures read_file opened: not something the user said.
+          userMessage(SHOWN_IMAGES, {Image{"a.png", "image/png", QByteArray("\x89PNG"), "a.png"}}),
       },
       {});
   QList<Entry::Kind> kinds;

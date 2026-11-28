@@ -386,6 +386,10 @@ ToolContext Agent::toolContext(const ToolDef& tool, const CancelPtr& cancel) {
   ctx.cwd = m_options.cwd;
   ctx.cancel = cancel;
   ctx.sandbox = m_options.sandbox;
+  {
+    QMutexLocker lock(&m_mutex);
+    ctx.showImages = !m_imagesRefused;
+  }
   // Scratch files in the sandbox's /tmp aren't the project's: /undo and the report leave them out.
   ctx.beforeWrite = [this, checkpoint](const QString& file) {
     if (checkpoint && isWithin(m_options.cwd, file)) {

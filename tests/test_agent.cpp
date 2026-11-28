@@ -46,6 +46,7 @@ private Q_SLOTS:
   void subagentAsksThroughMainAgent();
   void subagentCanBeSentToWork();
   void imagesGoWithTheMessage();
+  void imagesReadFileOpensAreShown();
   void planModeRefusesChangesAndSaysSo();
   void usageIsReportedPerCall();
   void sessionChangesCompareWithBefore();
@@ -728,6 +729,64 @@ void TestAgent::imagesGoWithTheMessage() {
     told = told || (notice && notice->text.contains("pictures were taken out"));
   }
   QVERIFY(told);
+}
+
+void TestAgent::imagesReadFileOpensAreShown() {
+  QFile png(m_pDir->file("render.png"));
+  QVERIFY(png.open(QIODevice::WriteOnly));
+  png.write(QByteArray("\x89PNG\r\n\x1a\n....", 12));
+  png.close();
+  auto look = [](const QString& id) { return FakeServer::stream({FakeServer::callDelta(0, id, "read_file", {{"path", "render.png"}})}, "tool_calls"); };
+
+  // The result says where the picture is; the picture comes in a message after it.
+  m_pFake->setScript({look("r1"), FakeServer::text("The label overlaps the road.")});
+  auto h = make();
+  h->agent->send("does the render look right?", makeCancel());
+  QCOMPARE(m_pFake->requests().size(), 2);
+  const QJsonArray sent = messagesOf(m_pFake->requests()[1]);
+  QCOMPARE(sent[sent.size() - 2].toObject().value("role").toString(), QString("tool"));
+  QVERIFY_MATCH(sent[sent.size() - 2].toObject().value("content").toString(), "^render\\.png is an image \\(PNG image, 1 kB\\)");
+  const QJsonObject shown = sent.last().toObject();
+  QVERIFY(hasImages(shown));
+  QVERIFY(messageText(shown).startsWith(SHOWN_IMAGES));
+
+  // Typed meanwhile: one message with the picture, not two user messages in a row.
+  m_pFake->clearRequests();
+  m_pFake->setScript({look("r1"), FakeServer::text("Yes, the legend too.")});
+  Agent* agentRef = nullptr;
+  auto typed = make(ApprovalDecision::Allow, [&agentRef](AgentOptions& options, Harness& harness) {
+    options.onEvent = [&harness, &agentRef](const AgentEvent& event) {
+      {
+        QMutexLocker lock(&harness.mutex);
+        harness.events.append(event);
+      }
+      if (std::holds_alternative<Event::ToolStart>(event) && agentRef) {
+        agentRef->queue("and check the legend");
+      }
+    };
+  });
+  agentRef = typed->agent.get();
+  typed->agent->send("does the render look right?", makeCancel());
+  const QJsonArray merged = messagesOf(m_pFake->requests()[1]);
+  QCOMPARE(merged[merged.size() - 2].toObject().value("role").toString(), QString("tool"));
+  QCOMPARE(messageText(merged.last().toObject()), QString("and check the legend"));
+  QVERIFY(hasImages(merged.last().toObject()));
+
+  // A server that refuses them: once more without, the model told, and later reads say so.
+  m_pFake->clearRequests();
+  m_pFake->setScript({look("r1"), FakeServer::failure(400, QJsonObject{{"message", "image input is not supported"}}), look("r2"),
+                      FakeServer::text("I'll compare them with a command.")});
+  auto refused = make();
+  refused->agent->send("does the render look right?", makeCancel());
+  QCOMPARE(m_pFake->requests().size(), 4);
+  const QJsonObject retried = lastMessage(m_pFake->requests()[2]);
+  QVERIFY(!hasImages(retried));
+  QVERIFY_MATCH(Json::stringify(retried.value("content")), "most likely can't see images");
+  QVERIFY(hasNotice(refused->events, "refused the request with the images"));
+  const QStringList results = toolResults(m_pFake->requests()[3]);
+  QVERIFY_MATCH(results.last(), "this model can't see images");
+  QVERIFY(!hasImages(lastMessage(m_pFake->requests()[3])));
+  QVERIFY(endsWithDone(refused->events, DoneReason::Stop));
 }
 
 void TestAgent::planModeRefusesChangesAndSaysSo() {

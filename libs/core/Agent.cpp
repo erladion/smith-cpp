@@ -1,6 +1,7 @@
 #include "core/Agent.h"
 
 #include "core/Context.h"
+#include "core/Images.h"
 #include "core/RunLater.h"
 
 #include <QCryptographicHash>
@@ -45,6 +46,14 @@ QString repeatKey(const QString& name, const QString& args, const ToolResult& re
 } // namespace
 
 const QString TODO_REMINDER = "[Reminder] Your todo list still has unfinished steps:";
+const QString SHOWN_IMAGES = "[The images read_file opened: a tool result can only be text, so they're here.]";
+
+namespace {
+
+const QString IMAGES_REFUSED = "[Smith: the server refused the request with the images read_file opened, so this model most likely can't see "
+                               "images. They were taken out. Check images another way, such as comparing them with a command.]";
+
+} // namespace
 
 Agent::Agent(AgentOptions options) : m_options(std::move(options)) {
   m_history = Messages{Message{{"role", "system"}, {"content", m_options.systemPrompt}}} + repairHistory(m_options.history);
@@ -99,6 +108,7 @@ void Agent::setModel(const QString& model, std::optional<int> contextSize, const
     }
     m_model = model;
     m_contextSize = contextSize;
+    m_imagesRefused = false;
     // Token counts from the old model's tokenizer no longer apply.
     m_measured.reset();
   }
@@ -373,13 +383,17 @@ void Agent::loop(const CancelPtr& cancel) {
   // the model was already told it's repeating a call, after which one more such call ends the turn.
   QHash<QString, int> repeats;
   bool toldOfRepeat = false;
+  // Images tools opened, for the message before the next request; and whether that request has them.
+  QList<Image> toShow;
+  bool showing = false;
   // A list the agent didn't touch this turn is from an earlier task: answering
   // something else shouldn't send it back to that one.
   const TodoList atStart = todos();
 
   for (int step = 0; step < maxSteps; step++) {
     if (step > 0) {
-      deliverQueued();
+      showing = deliverQueued(toShow);
+      toShow.clear();
     }
     if (maybeCompact(cancel)) {
       repeats.clear();
@@ -392,6 +406,13 @@ void Agent::loop(const CancelPtr& cancel) {
       // The server rejected the prompt as too long: our estimate was off or
       // we didn't know the window size. Compact once and retry.
       const std::optional<Overflow> overflow = cancelled(cancel) ? std::nullopt : contextOverflow(error);
+      // Refused with the images tools opened: most likely the model can't see images. Once more without them.
+      if (!overflow && showing && !cancelled(cancel)) {
+        showing = false;
+        emitEvent(Event::ResponseEnd{});
+        dropShownImages(int(messages().size()) - 1);
+        continue;
+      }
       if (!overflow || retriedOverflow) {
         throw;
       }
@@ -409,6 +430,7 @@ void Agent::loop(const CancelPtr& cancel) {
       continue;
     }
     retriedOverflow = false;
+    showing = false;
     emitEvent(Event::ResponseEnd{});
     if (response.looped) {
       if (!loopNote.isEmpty()) {
@@ -465,6 +487,13 @@ void Agent::loop(const CancelPtr& cancel) {
       const ToolCall& call = response.toolCalls[i];
       const ToolResult& result = results[i];
       QString content = result.isError ? "Error: " + result.content : result.content;
+      for (const Image& image : result.images) {
+        if (toShow.size() < MAX_IMAGES) {
+          toShow << image;
+        } else {
+          content += QString("\n\n[%1 isn't shown: up to %2 images go in one message. Read it again on its own.]").arg(image.path).arg(MAX_IMAGES);
+        }
+      }
       if (watch) {
         const int seen = ++repeats[repeatKey(call.name, call.args, result)];
         if (seen >= REPEAT_LIMIT) {
@@ -499,15 +528,16 @@ void Agent::loop(const CancelPtr& cancel) {
   emitEvent(Event::Done{DoneReason::MaxSteps});
 }
 
-void Agent::deliverQueued() {
+bool Agent::deliverQueued(const QList<Image>& shown) {
   QList<Queued> queued;
   {
     QMutexLocker lock(&m_mutex);
     queued.swap(m_queued);
   }
-  if (queued.isEmpty()) {
-    return;
+  if (queued.isEmpty() && shown.isEmpty()) {
+    return false;
   }
+  // One message: some chat templates reject two user messages in a row.
   QStringList texts;
   QList<Image> images;
   QList<AttachedFile> files;
@@ -517,7 +547,26 @@ void Agent::deliverQueued() {
     images << message.images;
     files << message.files;
   }
-  append(userMessage(texts.join("\n\n"), images, files));
+  images << shown;
+  append(userMessage(texts.isEmpty() ? SHOWN_IMAGES : texts.join("\n\n"), images, files));
+  return !shown.isEmpty();
+}
+
+void Agent::dropShownImages(int index) {
+  const Messages history = messages();
+  if (index < 1 || index >= history.size() || !hasImages(history[index])) {
+    return;
+  }
+  Messages kept = history.mid(1, index - 1);
+  kept.append(withNote(withoutImages(history[index]), IMAGES_REFUSED));
+  kept.append(history.mid(index + 1));
+  replaceHistory(kept);
+  {
+    QMutexLocker lock(&m_mutex);
+    m_imagesRefused = true;
+  }
+  emitEvent(Event::Notice{NoticeLevel::Warn, "The server refused the request with the images read_file opened, so Smith took them out and told "
+                                             "the model it most likely can't see images. Switching models lets it try again."});
 }
 
 // ---- history bookkeeping ----
